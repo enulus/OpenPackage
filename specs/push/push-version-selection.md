@@ -1,9 +1,10 @@
-## Push version selection (stable-only)
+## Push version selection (stable + unversioned)
 
 ### Terminology
 
 - **Stable version**: A semver-valid version with no prerelease segment, e.g. `1.2.3`.
 - **Prerelease version**: A semver-valid version with a prerelease segment, e.g. `1.2.3-dev.abc123`.
+- **Unversioned package**: A package whose `package.yml` omits `version`; stored under `.../unversioned/` locally. Only one may exist per package and it can be pushed only if the remote has **no versioned releases**.
 - **Local registry**: The on-disk package store used by `opkg` (managed via `packageManager`).
 
 This document defines the rules `opkg push` uses to decide **which local version** is eligible to be pushed to the remote registry.
@@ -29,8 +30,7 @@ Given `<pkg>@<version>`:
 
 3. **Safety check**
    - After loading, the resulting `pkg.metadata.version` must still be stable.
-   - If it is not (should only occur in pathological cases):
-     - The push is rejected as if a prerelease was requested.
+   - If it is not (pathological), the push is rejected as a prerelease.
 
 **Result**
 
@@ -42,11 +42,12 @@ Given `<pkg>@<version>`:
 
 ## Implicit version: `opkg push <pkg>`
 
-When no version is explicitly supplied, `opkg push` must:
+When no version is explicitly supplied, `opkg push`:
 
-- Consider **all local versions** of `<pkg>`.
-- Select the **latest stable version** only.
-- Treat the absence of stable versions as a **non-error** (informational) outcome.
+- Considers **all local versions** of `<pkg>`.
+- Prefers the **latest stable** version.
+- If no stable exists but an **unversioned** entry exists, uses the unversioned entry (still subject to the remote “no versioned releases exist” rule).
+- Treats absence of both stable and unversioned as a **non-error** (informational) outcome.
 
 ### Algorithm
 
@@ -61,9 +62,11 @@ Let `versions = listPackageVersions(pkg)` (all local versions, as directory name
      - Otherwise, returns the highest stable version using `semver.rsort`.
 
 2. If `latestStable === null`:
-   - There is **no stable version** to push.
-   - The CLI prints a “no stable versions found” message and a hint to use `opkg pack`.
-   - The command exits with a **success** result (no error propagated to the global handler).
+   - If an **unversioned** entry exists locally:
+     - Use the unversioned package as the candidate.
+     - Before upload, the CLI rejects if the remote already has any versioned releases.
+   - Otherwise:
+     - Print the “no stable versions” message and exit with success.
 
 3. If `latestStable` is present:
    - That version becomes the candidate `versionToPush`.
@@ -71,18 +74,20 @@ Let `versions = listPackageVersions(pkg)` (all local versions, as directory name
 
 **Notes**
 
-- Prerelease-only packages (e.g. `1.0.0-dev.abc`, `1.0.0-dev.def`) result in `latestStable === null`.
+- Prerelease-only packages (e.g. `1.0.0-dev.abc`, `1.0.0-dev.def`) result in `latestStable === null`; if an unversioned entry exists, it is chosen, otherwise informational exit.
 - Mixed stable and prerelease sets (e.g. `1.0.0`, `1.1.0-dev.abc`, `1.2.0`) always choose the numerically highest stable (`1.2.0`).
 
 ---
 
-## Stable-only guarantees (versioning view)
+## Stable/unversioned guarantees (versioning view)
 
 From the version-selection point of view:
 
-- `push` **never** picks a prerelease version as `versionToPush`.
+- `push` **never** picks a prerelease version.
 - Explicit prerelease inputs are rejected up front.
-- Implicit selection ignores all prerelease versions when computing candidates.
-- Existing helper functions (`filterStableVersions`, `getLatestStableVersion`) centralize the definition of “stable”.
+- Implicit selection:
+  - Prefers latest stable.
+  - Uses unversioned only when no stable exists and the remote has **no versioned releases**.
+  - Ignores prereleases for candidacy.
 
 

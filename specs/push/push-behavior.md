@@ -3,7 +3,10 @@
 ### Overview
 
 The `opkg push` command uploads a local package version from the **local registry** to the **remote registry**.
-It is **strictly limited to stable versions** (no prerelease versions like `1.2.3-dev.abc`).
+It allows:
+- **Stable versions** (`x.y.z`).
+- **Unversioned packages** (when `package.yml` omits `version`), but **only if the remote has no versioned releases** for that package.
+It still rejects prerelease versions like `1.2.3-dev.abc`.
 
 This document focuses on user-facing behavior:
 - CLI shapes and arguments.
@@ -57,24 +60,25 @@ Examples:
 
 ## Implicit version behavior: `opkg push <pkg>`
 
-When no version is specified, the command **only considers stable versions**.
+When no version is specified, the command prefers **stable versions** and can fall back to an **unversioned** package if no stable exists.
 
 High-level flow:
 
 1. Discover all versions of `<pkg>` from the local registry.
 2. Compute the latest **stable** version.
-3. If no stable versions exist:
+3. If no stable versions exist but an **unversioned** entry exists:
+   - Use the unversioned package as the candidate, but reject if the remote already has any versioned release.
+4. If neither stable nor unversioned exists:
    - Inform the user and exit **gracefully** (non-error).
-4. If a stable version exists:
-   - Prompt the user to confirm pushing that version.
+5. If a candidate exists:
+   - Prompt the user to confirm pushing that candidate.
 
 **Details**
 
-- If no stable versions are found:
-  - The CLI prints:
-    - `❌ No stable versions found for package '<pkg>'`
-    - `💡 Stable versions can be created using "opkg pack <package>".`
-  - The command exits with a **success** result (no global error message).
+- If no stable versions are found but an unversioned entry exists:
+  - The CLI notes it will push the unversioned package and will reject if the remote already has versioned releases.
+- If no stable versions and no unversioned entry:
+  - The CLI prints the existing “no stable versions” message and exits successfully.
 - If a stable version (e.g. `1.2.3`) is found:
   - The CLI prompts:
     - `Push latest stable version '1.2.3'?` (default: yes).

@@ -97,12 +97,16 @@ The following behavior is preserved from the broader CLI error-handling design, 
   - User runs `opkg push <pkg>` without specifying a version.
   - No **stable** versions of `<pkg>` exist in the local registry.
 - Behavior:
-  - The CLI prints:
-    - `❌ No stable versions found for package '<pkg>'`
-    - `💡 Stable versions can be created using "opkg pack <package>".`
-  - The command returns a **success** result (no error string), so the global error handler:
-    - Does **not** print an additional plain `No stable versions found` line.
-  - This is treated as an informational exit: the user simply needs to create a stable version first.
+  - If an **unversioned** entry exists:
+    - The CLI attempts to push the unversioned package.
+    - If the remote already has any versioned releases, the CLI rejects with a clear message to set a semver version and push again.
+  - If no unversioned entry exists:
+    - The CLI prints:
+      - `❌ No stable versions found for package '<pkg>'`
+      - `💡 Stable versions can be created using "opkg pack <package>".`
+    - The command returns a **success** result (no error string), so the global error handler:
+      - Does **not** print an additional plain `No stable versions found` line.
+    - This is treated as an informational exit: the user needs to create a stable (or unversioned) package first.
 
 ---
 
