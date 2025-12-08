@@ -68,7 +68,7 @@ export const CONFLICT_RESOLUTION = {
   OVERWRITTEN: 'overwritten'
 } as const;
 
-export const UNVERSIONED = 'unversioned' as const;
+export const UNVERSIONED = '0.0.0' as const;
 
 export type FilePattern = typeof FILE_PATTERNS[keyof typeof FILE_PATTERNS];
 export type UniversalSubdir = typeof UNIVERSAL_SUBDIRS[keyof typeof UNIVERSAL_SUBDIRS];

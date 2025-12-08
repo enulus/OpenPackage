@@ -379,7 +379,6 @@ function extractVersionsFromRemoteResponse(response: PullPackageResponse): strin
 
 function extractVersionString(candidate: unknown): string | null {
   if (typeof candidate === 'string') {
-    if (candidate === UNVERSIONED) return UNVERSIONED;
     return semver.valid(candidate) ? candidate : null;
   }
 
@@ -389,7 +388,6 @@ function extractVersionString(candidate: unknown): string | null {
       return UNVERSIONED;
     }
     if (typeof value === 'string') {
-      if (value === UNVERSIONED) return UNVERSIONED;
       if (semver.valid(value)) {
         return value;
       }
@@ -401,7 +399,6 @@ function extractVersionString(candidate: unknown): string | null {
 
 function normalizeAndSortVersions(versions: string[]): string[] {
   const normalized = new Set<string>();
-  let hasUnversioned = false;
   for (const version of versions) {
     if (typeof version !== 'string') {
       continue;
@@ -410,34 +407,25 @@ function normalizeAndSortVersions(versions: string[]): string[] {
     if (!trimmed) {
       continue;
     }
-    if (trimmed === UNVERSIONED) {
-      hasUnversioned = true;
-      continue;
-    }
     if (!semver.valid(trimmed)) {
       continue;
     }
     normalized.add(trimmed);
   }
   const sorted = Array.from(normalized).sort(semver.rcompare);
-  return hasUnversioned ? [...sorted, UNVERSIONED] : sorted;
+  return sorted;
 }
 
 function mergeAndSortVersions(left: string[], right: string[]): string[] {
   const merged = new Set<string>();
-  let hasUnversioned = false;
 
   for (const version of [...left, ...right]) {
-    if (version === UNVERSIONED) {
-      hasUnversioned = true;
-      continue;
-    }
     if (semver.valid(version)) {
       merged.add(version);
     }
   }
 
   const sorted = Array.from(merged).sort(semver.rcompare);
-  return hasUnversioned ? [...sorted, UNVERSIONED] : sorted;
+  return sorted;
 }
 

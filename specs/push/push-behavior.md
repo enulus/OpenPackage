@@ -5,7 +5,7 @@
 The `opkg push` command uploads a local package version from the **local registry** to the **remote registry**.
 It allows:
 - **Stable versions** (`x.y.z`).
-- **Unversioned packages** (when `package.yml` omits `version`), but **only if the remote has no versioned releases** for that package.
+- **Unversioned packages** (when `package.yml` omits `version`, represented as `0.0.0`).
 It still rejects prerelease versions like `1.2.3-dev.abc`.
 
 This document focuses on user-facing behavior:
@@ -60,14 +60,14 @@ Examples:
 
 ## Implicit version behavior: `opkg push <pkg>`
 
-When no version is specified, the command prefers **stable versions** and can fall back to an **unversioned** package if no stable exists.
+When no version is specified, the command prefers **stable versions** and can fall back to a **`0.0.0`** package if no stable exists.
 
 High-level flow:
 
 1. Discover all versions of `<pkg>` from the local registry.
 2. Compute the latest **stable** version.
-3. If no stable versions exist but an **unversioned** entry exists:
-   - Use the unversioned package as the candidate, but reject if the remote already has any versioned release.
+3. If no stable versions exist but a **`0.0.0`** entry exists:
+   - Use the `0.0.0` package as the candidate.
 4. If neither stable nor unversioned exists:
    - Inform the user and exit **gracefully** (non-error).
 5. If a candidate exists:
@@ -75,8 +75,8 @@ High-level flow:
 
 **Details**
 
-- If no stable versions are found but an unversioned entry exists:
-  - The CLI notes it will push the unversioned package and will reject if the remote already has versioned releases.
+- If no stable versions are found but a `0.0.0` entry exists:
+  - The CLI notes it will push the `0.0.0` package.
 - If no stable versions and no unversioned entry:
   - The CLI prints the existing “no stable versions” message and exits successfully.
 - If a stable version (e.g. `1.2.3`) is found:

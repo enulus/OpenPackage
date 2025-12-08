@@ -16,13 +16,14 @@ The goal is to implement **“latest in range from local+remote”** determinist
 - **Constraint**:
   - A string understood by `version-ranges` (exact, caret, tilde, wildcard, comparison).
   - Examples: `1.2.3`, `^1.2.0`, `~2.0.1`, `>=3.0.0 <4.0.0`, `*`, `latest`.
+- When a dependency entry in `package.yml` omits `version`, the effective constraint is treated as `*` (wildcard).
 - **Local versions**:
   - Semver versions discoverable via `listPackageVersions(name)` from the **local registry**.
-  - May include an `unversioned` entry when the package has no `version` in `package.yml`.
+  - May include a `0.0.0` entry when the package has no `version` in `package.yml`.
   - Includes both **stable** and **WIP/pre-release** semver versions, e.g. `1.2.3`, `1.2.3-000fz8.a3k`.
 - **Remote versions**:
   - Semver versions discoverable via remote metadata APIs (e.g. via `fetchRemotePackageMetadata` / registry metadata).
-  - May include an `unversioned` entry when the remote package has no versioned releases yet.
+  - May include a `0.0.0` entry when the remote package has no versioned releases yet.
   - Only includes **stable** semver versions.
 
 ---
@@ -69,10 +70,8 @@ The goal is to implement **“latest in range from local+remote”** determinist
   - Versions are deduped by their **full semver string** (`1.2.3-000fz8.a3k` vs `1.2.3` are distinct).
 
 - **Ordering**:
-  - For selection, versions are sorted in **descending semver order**:
-    - Use `semver.compare(b, a)` semantics.
-    - **Pre-releases and WIPs** are ordered according to standard semver rules.
-  - `unversioned` (if present) is placed **after all semver versions** and is only considered when no semver candidate satisfies the constraint.
+  - Use standard semver descending order for selection (`semver.compare(b, a)` semantics).
+  - `0.0.0` participates as a normal semver version (it will naturally sort below any higher version).
 
 ---
 
@@ -105,14 +104,12 @@ Given `available: string[]` and a parsed constraint:
 
 - **If constraint is `wildcard` / `latest`** (default behavior):
   - Use `semver.maxSatisfying(available, '*', { includePrerelease: true })` to find the **highest semver version**.
-  - **Select the single highest semver version**, stable or WIP/pre-release.
-  - If no semver versions exist but `unversioned` is present, select **`unversioned`**.
+  - **Select the single highest semver version**, stable or WIP/pre-release (if only `0.0.0` exists, it is selected).
   - If the selected version is a pre-release/WIP, the CLI should make that explicit in its output.
 
 - **If constraint is `caret`, `tilde`, or `comparison`** (default behavior):
   - Use `semver.maxSatisfying(available, range, { includePrerelease: true })` to find the **highest satisfying version**.
-  - **Select that version** (stable or pre-release/WIP).
-  - If no semver version satisfies the constraint and `unversioned` exists, resolution **fails** (unversioned does not satisfy ranged constraints).
+  - **Select that version** (stable or pre-release/WIP). `0.0.0` satisfies ranges according to standard semver rules.
   - No additional "downgrade WIP to stable" heuristic is applied; WIP/pre-release versions are first-class semver versions for resolution purposes.
 
 - **With `--stable` flag**:

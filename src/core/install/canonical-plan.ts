@@ -132,14 +132,8 @@ function locateDependencyInArray(
     return null;
   }
 
-  if (!entry.version || !entry.version.trim()) {
-    throw new Error(
-      `Dependency '${packageName}' in .openpackage/package.yml must declare a version range. Edit the file and try again.`
-    );
-  }
-
   return {
-    range: entry.version.trim(),
+    range: entry.version && entry.version.trim() ? entry.version.trim() : '*',
     target,
     files: entry.files && entry.files.length > 0 ? [...entry.files] : undefined
   };

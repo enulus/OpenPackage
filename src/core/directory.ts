@@ -125,21 +125,8 @@ export async function listPackageVersions(packageName: string): Promise<string[]
   }
   
   const versions = await listDirectories(packagePath);
-  const semverVersions: string[] = [];
-  let hasUnversioned = false;
-
-  for (const version of versions) {
-    if (version === UNVERSIONED) {
-      hasUnversioned = true;
-      continue;
-    }
-    if (semver.valid(version)) {
-      semverVersions.push(version);
-    }
-  }
-
-  const sorted = semverVersions.sort((a, b) => semver.compare(b, a)); // Latest first
-  return hasUnversioned ? [...sorted, UNVERSIONED] : sorted;
+  const semverVersions = versions.filter(version => semver.valid(version));
+  return semverVersions.sort((a, b) => semver.compare(b, a)); // Latest first
 }
 
 /**
@@ -150,8 +137,7 @@ export async function getLatestPackageVersion(packageName: string): Promise<stri
   if (versions.length === 0) {
     return null;
   }
-  const firstVersioned = versions.find(v => v !== UNVERSIONED);
-  return firstVersioned ?? (versions.includes(UNVERSIONED) ? UNVERSIONED : null);
+  return versions[0];
 }
 
 /**

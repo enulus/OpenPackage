@@ -18,7 +18,7 @@ import { createHttpClient, type HttpClient } from '../../utils/http-client.js';
 import { logger } from '../../utils/logger.js';
 import { parsePackageInput } from '../../utils/package-name.js';
 import { parsePackageYml } from '../../utils/package-yml.js';
-import { formatVersionLabel, getLatestStableVersion, isUnversionedVersion } from '../../utils/package-versioning.js';
+import { formatVersionLabel, getLatestStableVersion } from '../../utils/package-versioning.js';
 import { getLocalPackageDir } from '../../utils/paths.js';
 import { promptConfirmation } from '../../utils/prompts.js';
 import { Spinner } from '../../utils/spinner.js';
@@ -41,7 +41,6 @@ class PushError extends Error {
       | 'INVALID_VERSION'
       | 'PRERELEASE_DISALLOWED'
       | 'NO_VERSIONS'
-      | 'UNVERSIONED_BLOCKED'
   ) {
     super(message);
     this.name = 'PushError';
@@ -84,13 +83,11 @@ export async function runPushPipeline(
     packageNameToPush = await ensureScopedPackageName(cwd, packageNameToPush, authOptions);
 
     const { pkg, versionToPush } = await resolvePushResolution(packageNameToPush, parsedVersion);
-    const uploadVersion = normalizeUploadVersion(versionToPush);
-    attemptedVersion = uploadVersion;
+    attemptedVersion = versionToPush;
 
-    validateUploadVersion(uploadVersion);
+    validateUploadVersion(versionToPush);
 
     const httpClient = await createHttpClient(authOptions);
-    await ensureUnversionedAllowedIfNeeded(httpClient, packageNameToPush, versionToPush);
 
     const registryUrl = authManager.getRegistryUrl();
     const profile = authManager.getCurrentProfile(authOptions);
@@ -99,7 +96,7 @@ export async function runPushPipeline(
     logPushSummary(packageNameToPush, versionLabel, profile, pkg);
 
     const tarballInfo = await createPackageTarball(pkg);
-    const response = await uploadPackage(httpClient, packageNameToPush, uploadVersion, tarballInfo);
+    const response = await uploadPackage(httpClient, packageNameToPush, versionToPush, tarballInfo);
 
     printPushSuccess(response, tarballInfo);
 
@@ -178,7 +175,8 @@ async function resolveImplicitPush(
 
   if (allVersions.includes(UNVERSIONED)) {
     const pkg = await packageManager.loadPackage(packageName, UNVERSIONED);
-    return { pkg, versionToPush: undefined, source: 'unversioned' };
+    const effectiveVersion = pkg.metadata.version ?? UNVERSIONED;
+    return { pkg, versionToPush: effectiveVersion, source: 'unversioned' };
   }
 
   throw new PushError(
@@ -187,28 +185,12 @@ async function resolveImplicitPush(
   );
 }
 
-function normalizeUploadVersion(versionToPush?: string): string | undefined {
-  return isUnversionedVersion(versionToPush) ? undefined : versionToPush;
-}
-
 function validateUploadVersion(uploadVersion?: string): void {
   if (!uploadVersion) {
     return;
   }
 
   assertStableSemver(uploadVersion);
-}
-
-async function ensureUnversionedAllowedIfNeeded(
-  httpClient: HttpClient,
-  packageName: string,
-  versionToPush?: string
-): Promise<void> {
-  if (!isUnversionedVersion(versionToPush)) {
-    return;
-  }
-
-  await ensureUnversionedAllowed(httpClient, packageName);
 }
 
 function assertStableSemver(version: string): void {
@@ -227,37 +209,6 @@ function logVersionMismatch(packageName: string, requested: string, manifestVers
       manifestVersion,
       requested
     });
-  }
-}
-
-async function ensureUnversionedAllowed(httpClient: HttpClient, packageName: string): Promise<void> {
-  try {
-    const remotePackage: any = await httpClient.get(`/packages/by-name/${encodeURIComponent(packageName)}`);
-    const remoteVersions: string[] = Array.isArray(remotePackage?.versions) ? remotePackage.versions : [];
-    const hasVersionedRemote =
-      remoteVersions.some((entry: any) => {
-        if (typeof entry === 'string') return semver.valid(entry);
-        return entry && typeof entry.version === 'string' && semver.valid(entry.version);
-      }) ||
-      (remotePackage?.latestPackageVersion &&
-        remotePackage.latestPackageVersion.version &&
-        semver.valid(remotePackage.latestPackageVersion.version));
-
-    if (hasVersionedRemote) {
-      throw new PushError(
-        'Unversioned pushes are disabled because the package already has versioned releases.',
-        'UNVERSIONED_BLOCKED'
-      );
-    }
-  } catch (error: any) {
-    const apiError = error?.apiError;
-    if (apiError?.statusCode === 404) {
-      return;
-    }
-    if (error instanceof PushError) {
-      throw error;
-    }
-    throw error;
   }
 }
 
@@ -385,11 +336,6 @@ function handlePushError(
     if (error.code === 'NO_VERSIONS') {
       console.error(`❌ ${error.message}`);
       return { success: false, error: 'Version not found' };
-    }
-    if (error.code === 'UNVERSIONED_BLOCKED') {
-      console.error('❌ Unversioned pushes are disabled because the package already has versioned releases.');
-      console.log('💡 Add a semver version to package.yml (e.g., version: 1.0.0) and push again.');
-      return { success: false, error: 'Unversioned disabled after versioned release' };
     }
 
     console.error(`❌ ${error.message}`);

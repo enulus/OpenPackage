@@ -1,6 +1,4 @@
 import * as semver from 'semver';
-import { UNVERSIONED } from '../constants/index.js';
-import { parseWipVersion } from './version-generator.js';
 
 /**
  * Version range types supported by the system
@@ -333,9 +331,7 @@ export function selectVersionWithWipPolicy(
   options?: VersionSelectionOptions
 ): VersionSelectionResult {
   const parsedRange = parseVersionRange(range);
-  const hasUnversioned = availableVersions.includes(UNVERSIONED);
-  const semverCandidates = availableVersions.filter(version => version !== UNVERSIONED);
-  const deduped = dedupeValidVersions(semverCandidates);
+  const deduped = dedupeValidVersions(availableVersions);
   const availableStable = sortVersionsDesc(deduped.filter(version => !isPrereleaseVersion(version)));
   const availablePrerelease = sortVersionsDesc(deduped.filter(version => isPrereleaseVersion(version)));
   const satisfyingStable: string[] = [];
@@ -352,19 +348,6 @@ export function selectVersionWithWipPolicy(
   };
 
   const finish = (): VersionSelectionResult => {
-    if (!result.version && parsedRange.type === 'wildcard' && hasUnversioned) {
-      result.version = UNVERSIONED;
-      result.reason = 'wildcard';
-      result.isPrerelease = false;
-      if (!result.satisfyingStable.includes(UNVERSIONED)) {
-        result.satisfyingStable.push(UNVERSIONED);
-      }
-    }
-
-    if (hasUnversioned && !result.availableStable.includes(UNVERSIONED)) {
-      result.availableStable = [...result.availableStable, UNVERSIONED];
-    }
-
     return result;
   };
 

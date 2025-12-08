@@ -12,7 +12,7 @@ import { registryManager } from './registry.js';
 import { selectInstallVersionUnified, RemoteVersionLookupError } from './install/version-selection.js';
 import { InstallResolutionMode, type PackageRemoteResolutionOutcome } from './install/types.js';
 import { extractRemoteErrorReason } from '../utils/error-reasons.js';
-import { PACKAGE_PATHS, UNVERSIONED } from '../constants/index.js';
+import { PACKAGE_PATHS } from '../constants/index.js';
 import { formatVersionLabel } from '../utils/package-versioning.js';
 
 /**
@@ -160,10 +160,6 @@ export async function resolveDependencies(
 
     return versions.filter(versionCandidate => {
       return constraintRanges.every(range => {
-        if (versionCandidate === UNVERSIONED) {
-          return false; // When explicit semver constraints exist, unversioned cannot satisfy them
-        }
-
         try {
           return semver.satisfies(versionCandidate, range, { includePrerelease: true });
         } catch (error) {
@@ -177,7 +173,6 @@ export async function resolveDependencies(
   };
 
   const localVersions = await listPackageVersions(packageName);
-  const hasUnversionedLocal = localVersions.includes(UNVERSIONED);
   const explicitPrereleaseIntent = allRanges.some(range => hasExplicitPrereleaseIntent(range));
 
   let selectionResult;
@@ -234,14 +229,9 @@ export async function resolveDependencies(
   }
 
   const filteredAvailable = filterAvailableVersions(selectionResult.sources.availableVersions);
-  const hasUnversionedAvailable = hasUnversionedLocal || selectionResult.sources.availableVersions.includes(UNVERSIONED);
 
   if (!selectionResult.selectedVersion) {
-    if (!hasConstraints && hasUnversionedAvailable) {
-      resolvedVersion = UNVERSIONED;
-      versionRange = undefined;
-      resolutionSource = hasUnversionedLocal ? 'local' : 'remote';
-    } else if (filteredAvailable.length > 0) {
+    if (filteredAvailable.length > 0) {
       throw new VersionConflictError(packageName, {
         ranges: allRanges,
         availableVersions: selectionResult.sources.availableVersions
@@ -254,22 +244,14 @@ export async function resolveDependencies(
     resolvedVersion = selectionResult.selectedVersion;
   }
 
-  if (resolvedVersion !== UNVERSIONED) {
-    versionRange = combinedRangeLabel;
-    resolutionSource =
-      selectionResult.resolutionSource ?? (resolutionMode === 'remote-primary' ? 'remote' : 'local');
-    logger.debug(
-      `Resolved constraints [${allRanges.join(', ')}] to '${resolvedVersion}' for package '${packageName}'`
-    );
-    if (!hasConstraints) {
-      versionRange = undefined;
-    }
-  } else {
+  versionRange = combinedRangeLabel;
+  resolutionSource =
+    selectionResult.resolutionSource ?? (resolutionMode === 'remote-primary' ? 'remote' : 'local');
+  logger.debug(
+    `Resolved constraints [${allRanges.join(', ')}] to '${resolvedVersion}' for package '${packageName}'`
+  );
+  if (!hasConstraints) {
     versionRange = undefined;
-    resolutionSource = 'local';
-    logger.debug(
-    `Resolved constraints [${allRanges.join(', ')}] to '${UNVERSIONED}' for package '${packageName}'`
-    );
   }
 
   // 3. Attempt to repair dependency from local registry

@@ -4,7 +4,7 @@
 
 - **Stable version**: A semver-valid version with no prerelease segment, e.g. `1.2.3`.
 - **Prerelease version**: A semver-valid version with a prerelease segment, e.g. `1.2.3-dev.abc123`.
-- **Unversioned package**: A package whose `package.yml` omits `version`; stored under `.../unversioned/` locally. Only one may exist per package and it can be pushed only if the remote has **no versioned releases**.
+- **Unversioned package**: A package whose `package.yml` omits `version`; represented and stored as semver `0.0.0` locally (one per package) and can be pushed like any other stable version.
 - **Local registry**: The on-disk package store used by `opkg` (managed via `packageManager`).
 
 This document defines the rules `opkg push` uses to decide **which local version** is eligible to be pushed to the remote registry.
@@ -46,8 +46,8 @@ When no version is explicitly supplied, `opkg push`:
 
 - Considers **all local versions** of `<pkg>`.
 - Prefers the **latest stable** version.
-- If no stable exists but an **unversioned** entry exists, uses the unversioned entry (still subject to the remote “no versioned releases exist” rule).
-- Treats absence of both stable and unversioned as a **non-error** (informational) outcome.
+- If no stable exists but a `0.0.0` entry exists, uses that entry.
+- Treats absence of both stable and `0.0.0` as a **non-error** (informational) outcome.
 
 ### Algorithm
 
@@ -62,13 +62,10 @@ Let `versions = listPackageVersions(pkg)` (all local versions, as directory name
      - Otherwise, returns the highest stable version using `semver.rsort`.
 
 2. If `latestStable === null`:
-   - If an **unversioned** entry exists locally:
-     - Use the unversioned package as the candidate.
-     - Before upload, the CLI rejects if the remote already has any versioned releases.
-   - Otherwise:
+   - No semver-stable versions exist (including `0.0.0`), so:
      - Print the “no stable versions” message and exit with success.
 
-3. If `latestStable` is present:
+3. If `latestStable` is present (including the case where it is `0.0.0`):
    - That version becomes the candidate `versionToPush`.
    - The user is asked to confirm before pushing (see behavior spec).
 
@@ -86,8 +83,8 @@ From the version-selection point of view:
 - `push` **never** picks a prerelease version.
 - Explicit prerelease inputs are rejected up front.
 - Implicit selection:
-  - Prefers latest stable.
-  - Uses unversioned only when no stable exists and the remote has **no versioned releases**.
+- Prefers latest stable (with `0.0.0` treated as a normal stable version).
+- `0.0.0` pushes are treated the same as other stable versions.
   - Ignores prereleases for candidacy.
 
 
