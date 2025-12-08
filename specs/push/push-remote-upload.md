@@ -41,6 +41,9 @@ Assuming a valid stable package `pkg` and `versionToPush` have been selected:
 4. **Tarball creation**
 
    - `createTarballFromPackage(pkg)` builds a tarball from the package files.
+   - For **single-file pushes** (file-path input targeting `@scope/f`):
+     - The tarball is narrowed to only the target file and `.openpackage/package.yml`.
+     - File count will typically be 2.
    - The CLI prints:
      - `✓ Creating tarball...`
      - `✓ Created tarball (<file-count> files, <formatted-size>)`

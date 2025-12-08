@@ -1,7 +1,7 @@
-import { join } from 'path';
+import { join, resolve } from 'path';
 import * as semver from 'semver';
 
-import { FILE_PATTERNS, DIR_PATTERNS, UNVERSIONED } from '../../constants/index.js';
+import { FILE_PATTERNS, DIR_PATTERNS, UNVERSIONED, PACKAGE_PATHS } from '../../constants/index.js';
 import type { CommandResult, PushOptions } from '../../types/index.js';
 import type { PushPackageResponse } from '../../types/api.js';
 import { authManager } from '../auth.js';
@@ -12,19 +12,21 @@ import { renameRegistryPackage } from '../registry/registry-rename.js';
 import { ensureRegistryDirectories, listPackageVersions } from '../directory.js';
 import { packageManager } from '../package.js';
 import type { PackageContext } from '../package-context.js';
-import { exists } from '../../utils/fs.js';
 import { formatFileSize } from '../../utils/formatters.js';
+import { exists, isFile } from '../../utils/fs.js';
 import { createHttpClient, type HttpClient } from '../../utils/http-client.js';
 import { logger } from '../../utils/logger.js';
 import { parsePackageInput } from '../../utils/package-name.js';
 import { parsePackageYml } from '../../utils/package-yml.js';
 import { formatVersionLabel, getLatestStableVersion } from '../../utils/package-versioning.js';
 import { getLocalPackageDir } from '../../utils/paths.js';
+import { normalizePathForProcessing } from '../../utils/path-normalization.js';
 import { promptConfirmation } from '../../utils/prompts.js';
 import { Spinner } from '../../utils/spinner.js';
 import { showApiKeySignupMessage } from '../../utils/messages.js';
 import { createFormDataForUpload, createTarballFromPackage } from '../../utils/tarball.js';
 import { PackageNotFoundError, UserCancellationError } from '../../utils/errors.js';
+import { resolveSingleFileInput } from './push-single-file.js';
 
 type PushResolutionSource = 'explicit' | 'latest-stable' | 'unversioned';
 
@@ -65,10 +67,38 @@ export async function runPushPipeline(
 ): Promise<CommandResult<PushPipelineResult>> {
   const cwd = process.cwd();
   const authOptions = { profile: options.profile, apiKey: options.apiKey };
-  const { name: parsedName, version: parsedVersion } = parsePackageInput(packageInput);
+
+  const singleFileContext = await resolveSingleFileInput(cwd, packageInput);
+  if (singleFileContext?.kind === 'missing') {
+    return { success: false, error: 'Single-file package not found in local registry' };
+  }
+
+  const effectiveInput = singleFileContext?.kind === 'ok'
+    ? singleFileContext.packageName
+    : packageInput;
+
+  let parsedName: string;
+  let parsedVersion: string | undefined;
+  try {
+    const parsed = parsePackageInput(effectiveInput);
+    parsedName = parsed.name;
+    parsedVersion = parsed.version;
+  } catch (error) {
+    const looksLikePath = packageInput.includes('/') || packageInput.includes('\\') || packageInput.startsWith('.');
+
+    if (looksLikePath) {
+      console.error("❌ File not found. Run 'opkg save <file>' first.");
+      return { success: false, error: 'File not found' };
+    }
+
+    throw error;
+  }
 
   let packageNameToPush = parsedName;
   let attemptedVersion: string | undefined;
+  const targetRegistryPath = singleFileContext?.kind === 'ok'
+    ? singleFileContext.registryPath
+    : undefined;
 
   try {
     logger.info(`Pushing package '${packageInput}' to remote registry`, { options });
@@ -85,6 +115,16 @@ export async function runPushPipeline(
     const { pkg, versionToPush } = await resolvePushResolution(packageNameToPush, parsedVersion);
     attemptedVersion = versionToPush;
 
+    if (singleFileContext) {
+      const hasTargetFile = pkg.files?.some((file: { path: string }) =>
+        normalizePathForProcessing(file.path) === targetRegistryPath
+      );
+      if (!hasTargetFile) {
+        console.error('❌ File not found in local registry');
+        return { success: false, error: 'File not found in local registry' };
+      }
+    }
+
     validateUploadVersion(versionToPush);
 
     const httpClient = await createHttpClient(authOptions);
@@ -95,7 +135,9 @@ export async function runPushPipeline(
 
     logPushSummary(packageNameToPush, versionLabel, profile, pkg);
 
-    const tarballInfo = await createPackageTarball(pkg);
+    const tarballInfo = await createPackageTarball(
+      singleFileContext ? buildSingleFileTarballPackage(pkg, targetRegistryPath!) : pkg
+    );
     const response = await uploadPackage(httpClient, packageNameToPush, versionToPush, tarballInfo);
 
     printPushSuccess(response, tarballInfo);
@@ -373,18 +415,62 @@ function handlePushError(
     }
 
     if (apiError?.statusCode === 422) {
-      console.error(`❌ Package validation failed: ${error.message}`);
+      const apiMessage = apiError.message || error.message || 'Validation failed';
+      console.error(`❌ Package validation failed: ${apiMessage}`);
+
       if (apiError.details) {
+        const detailsArray = Array.isArray(apiError.details) ? apiError.details : [apiError.details];
         console.log('Validation errors:');
-        if (Array.isArray(apiError.details)) {
-          apiError.details.forEach((detail: any) => {
-            console.log(`  • ${detail.message || detail}`);
-          });
-        } else {
-          console.log(`  • ${apiError.details}`);
-        }
+        detailsArray.forEach((detail: any) => {
+          if (typeof detail === 'string') {
+            console.log(`  • ${detail}`);
+            return;
+          }
+          if (detail?.message) {
+            console.log(`  • ${detail.message}`);
+            return;
+          }
+          if (detail?.constraints && typeof detail.constraints === 'object') {
+            console.log(`  • ${Object.values(detail.constraints).join(', ')}`);
+            return;
+          }
+          console.log(`  • ${JSON.stringify(detail)}`);
+        });
+      } else if (apiError) {
+        console.log('Validation error detail (raw):');
+        console.log(`  • ${JSON.stringify(apiError)}`);
       }
-      return { success: false, error: 'Validation failed' };
+
+      return { success: false, error: apiMessage };
+    }
+
+    if (apiError) {
+      const apiMessage = apiError.message || error.message || 'Request failed';
+      console.error(`❌ Request failed (${apiError.statusCode ?? 'unknown status'}): ${apiMessage}`);
+      if (apiError.error) {
+        console.log(`  • code: ${apiError.error}`);
+      }
+      if (apiError.details) {
+        const detailsArray = Array.isArray(apiError.details) ? apiError.details : [apiError.details];
+        detailsArray.forEach((detail: any) => {
+          if (typeof detail === 'string') {
+            console.log(`  • ${detail}`);
+            return;
+          }
+          if (detail?.message) {
+            console.log(`  • ${detail.message}`);
+            return;
+          }
+          if (detail?.constraints && typeof detail.constraints === 'object') {
+            console.log(`  • ${Object.values(detail.constraints).join(', ')}`);
+            return;
+          }
+          console.log(`  • ${JSON.stringify(detail)}`);
+        });
+      } else {
+        console.log(`  • raw: ${JSON.stringify(apiError)}`);
+      }
+      return { success: false, error: apiMessage };
     }
 
     if (error.message.includes('timeout')) {
@@ -400,4 +486,32 @@ function handlePushError(
   return { success: false, error: 'Unknown error occurred' };
 }
 
+function buildSingleFileTarballPackage(
+  pkg: any,
+  targetRegistryPath: string
+): any {
+  const normalizedTarget = normalizePathForProcessing(targetRegistryPath)
+  const manifestPath = normalizePathForProcessing(PACKAGE_PATHS.MANIFEST_RELATIVE)
+
+  // Require the target file
+  const target = pkg.files.find((file: { path: string }) =>
+    normalizePathForProcessing(file.path) === normalizedTarget
+  )
+  if (!target) {
+    throw new Error('File not found in local registry')
+  }
+
+  // Require manifest
+  const manifest = pkg.files.find((file: { path: string }) =>
+    normalizePathForProcessing(file.path) === manifestPath
+  )
+  if (!manifest) {
+    throw new Error('package.yml not found in local registry')
+  }
+
+  return {
+    metadata: pkg.metadata,
+    files: [target, manifest],
+  }
+}
 

@@ -204,7 +204,7 @@ export class HttpClient {
       error: errorData.error || 'API_ERROR',
       message: errorData.message || `HTTP ${response.status} ${response.statusText}`,
       statusCode: response.status,
-      details: errorData.details
+      details: errorData.details ?? errorData.message ?? errorData.error,
     };
     
     logger.debug('API request failed', { 
@@ -229,9 +229,23 @@ export class HttpClient {
       case 409:
         errorMessage = errorData.message || 'Conflict - resource already exists.';
         break;
-      case 422:
-        errorMessage = errorData.message || 'Validation failed.';
+      case 422: {
+        if (errorData.details) {
+          const asArray = Array.isArray(errorData.details) ? errorData.details : [errorData.details];
+          const parts = asArray.map((detail: any) => {
+            if (typeof detail === 'string') return detail;
+            if (detail?.message) return detail.message;
+            if (detail?.constraints && typeof detail.constraints === 'object') {
+              return Object.values(detail.constraints).join(', ');
+            }
+            return JSON.stringify(detail);
+          });
+          errorMessage = parts.join('; ');
+        } else {
+          errorMessage = errorData.message || 'Validation failed.';
+        }
         break;
+      }
       case 429:
         errorMessage = 'Rate limit exceeded. Please try again later.';
         break;

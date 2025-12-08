@@ -22,6 +22,11 @@ This document describes how `push` handles scoping and how it keeps the local re
 3. After scoping:
    - **All further logic** (version resolution, checks, push) operates on the **scoped name**.
 
+### Single-file path inputs
+- When the push argument is a **file path**, the CLI resolves the single-file package `f` in the local registry:
+  - If multiple scoped `f` packages exist (e.g. `@user/f`, `@team/f`), the user is prompted to select one.
+  - The selected scoped name is used for version selection, tarball creation, and upload.
+
 ---
 
 ## Invariants

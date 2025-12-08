@@ -23,11 +23,13 @@ This document focuses on user-facing behavior:
 - **Package syntax**:
   - `<name>` – package name, optionally unscoped.
   - `<name>@<version>` – optional explicit version.
+  - `<path/to/file>` – if the argument is a file path, push is treated as a **single-file push** targeting the local `f` package (see below).
 
 Examples:
 - `opkg push my-pack`
 - `opkg push @scope/my-pack`
 - `opkg push my-pack@1.2.3`
+- `opkg push ./notes/readme.md` (single-file push to `@scope/f`, tarball contains only that file + `.openpackage/package.yml`)
 
 ---
 
@@ -94,6 +96,26 @@ High-level flow:
   - If **stable versions exist**: pick the latest stable, prompt for confirmation, and push if confirmed.
 
 ---
+
+## Single-file push behavior (`f` package)
+
+When the argument is a **file path** (and the file exists), `push` enters single-file mode:
+
+1. The CLI resolves the local single-file package `f`:
+   - Looks for `f` across scoped variants in the local registry (e.g. `@user/f`, `@team/f`).
+   - If multiple matches exist, prompts to select which scoped `f` to use.
+   - If none exist, fails with guidance to run `opkg save <file>` first.
+2. Version selection follows the normal rules (typically `0.0.0` for `f` unless a semver is present).
+3. Tarball contents are **narrowed** to exactly:
+   - The target file (registry path for that file).
+   - `.openpackage/package.yml`.
+   Other files in the local `f` cache are excluded from the tarball.
+4. Upload uses the standard `/packages/push` endpoint; the backend merges the single-file payload into the existing `@scope/f` version (overwrite wins for the uploaded file, other files are preserved).
+
+Notes:
+- If the target file is missing from the local `f` package, the CLI fails fast with “File not found in local registry.”
+- Manifest is required; if `.openpackage/package.yml` is missing locally, the CLI errors.
+
 
 ## Stable-only guarantees (behavioral view)
 
