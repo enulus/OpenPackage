@@ -166,6 +166,7 @@ export interface PullOptions {
   profile?: string;
   apiKey?: string;
   recursive?: boolean;
+  paths?: string[];
 }
 
 export interface SaveOptions {

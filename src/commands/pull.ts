@@ -4,7 +4,7 @@ import { packageManager } from '../core/package.js';
 import { hasPackageVersion } from '../core/directory.js';
 import { logger } from '../utils/logger.js';
 import { withErrorHandling, UserCancellationError } from '../utils/errors.js';
-import { parsePackageInput } from '../utils/package-name.js';
+import { parsePackageInstallSpec } from '../utils/package-name.js';
 import { promptOverwriteConfirmation } from '../utils/prompts.js';
 import { formatFileSize } from '../utils/formatters.js';
 import { fetchRemotePackageMetadata, pullPackageFromRemote, pullDownloadsBatchFromRemote, RemotePullFailure } from '../core/remote-pull.js';
@@ -14,6 +14,32 @@ import { Spinner } from '../utils/spinner.js';
 import { planRemoteDownloadsForPackage } from '../core/install/remote-flow.js';
 import { recordBatchOutcome } from '../core/install/remote-reporting.js';
 import { formatVersionLabel } from '../utils/package-versioning.js';
+import { normalizeRegistryPath } from '../utils/registry-entry-filter.js';
+import type { PackageVersionState } from '../core/package.js';
+
+function parsePathsOption(value: string): string[] {
+  if (!value) {
+    return [];
+  }
+  return normalizePullPaths(value.split(','));
+}
+
+function normalizePullPaths(rawPaths: string[]): string[] {
+  const normalized = rawPaths
+    .filter(path => typeof path === 'string')
+    .map(path => path.trim())
+    .filter(path => path.length > 0)
+    .map(path => path.startsWith('/') ? path.slice(1) : path)
+    .map(path => normalizeRegistryPath(path))
+    .filter(path => path.length > 0);
+
+  return Array.from(new Set(normalized));
+}
+
+interface PartialPullConfig {
+  requestPaths: string[];
+  localState?: PackageVersionState;
+}
 
 /**
  * Fetch package metadata with spinner and error handling
@@ -97,9 +123,23 @@ async function performRecursivePull(
   response: PullPackageResponse,
   context: RemotePullContext,
   registryUrl: string,
-  profile: string
+  profile: string,
+  partialConfig?: PartialPullConfig
 ): Promise<{ packageName: string; version: string; files: number; size: number; checksum: string; registry: string; profile: string; isPrivate: boolean; downloadUrl: string; message: string }> {
-  const { downloadKeys, warnings: planWarnings } = await planRemoteDownloadsForPackage({ success: true, context, response }, { forceRemote: true, dryRun: false });
+  const partialRoot =
+    partialConfig && partialConfig.requestPaths.length > 0
+      ? {
+          name: parsedName,
+          version: versionToPull,
+          partial: true,
+          localState: partialConfig.localState
+        }
+      : undefined;
+
+  const { downloadKeys, warnings: planWarnings } = await planRemoteDownloadsForPackage(
+    { success: true, context, response },
+    { partialRoot }
+  );
 
   if (planWarnings.length > 0) {
     planWarnings.forEach(warning => console.log(`⚠️  ${warning}`));
@@ -134,7 +174,12 @@ async function performRecursivePull(
       filter: (dependencyName, dependencyVersion) => {
         const downloadKey = `${dependencyName}@${dependencyVersion}`;
         return downloadKeys.has(downloadKey);
-      }
+      },
+      paths: partialConfig?.requestPaths,
+      primaryName: parsedName,
+      primaryVersion: versionToPull,
+      partialLocalState: partialConfig?.localState,
+      skipIfFull: true
     });
     downloadSpinner.stop();
 
@@ -178,7 +223,8 @@ async function performSinglePull(
   context: RemotePullContext,
   pullOptions: { profile?: string; apiKey?: string; recursive: boolean },
   registryUrl: string,
-  profile: string
+  profile: string,
+  partialConfig?: PartialPullConfig
 ): Promise<{ packageName: string; version: string; files: number; size: number; checksum: string; registry: string; profile: string; isPrivate: boolean; downloadUrl: string; message: string }> {
   const downloadSpinner = new Spinner('Downloading package tarball...');
   downloadSpinner.start();
@@ -187,7 +233,9 @@ async function performSinglePull(
     const pullResult = await pullPackageFromRemote(parsedName, parsedVersion, {
       ...pullOptions,
       preFetchedResponse: response,
-      httpClient: context.httpClient
+      httpClient: context.httpClient,
+      paths: partialConfig?.requestPaths,
+      partialLocalState: partialConfig?.localState
     });
     downloadSpinner.stop();
 
@@ -253,7 +301,14 @@ async function pullPackageCommand(
   packageInput: string,
   options: PullOptions
 ): Promise<CommandResult> {
-  const { name: parsedName, version: parsedVersion } = parsePackageInput(packageInput);
+  const parsedSpec = parsePackageInstallSpec(packageInput);
+  const parsedName = parsedSpec.name;
+  const parsedVersion = parsedSpec.version;
+  const specPath = parsedSpec.registryPath;
+  const requestedPaths = normalizePullPaths([
+    ...(options.paths ?? []),
+    ...(specPath ? [specPath] : [])
+  ]);
   logger.info(`Pulling package '${parsedName}' from remote registry`, { options });
 
   try {
@@ -261,6 +316,7 @@ async function pullPackageCommand(
       profile: options.profile,
       apiKey: options.apiKey,
       recursive: !!options.recursive,
+      paths: requestedPaths
     };
 
     console.log(`✓ Pulling package '${parsedName}' from remote registry...`);
@@ -282,15 +338,58 @@ async function pullPackageCommand(
     // Display package information
     displayPackageInfo(response, parsedVersion, versionToPull, profile);
 
+    if (requestedPaths.length > 0) {
+      console.log(`✓ Partial pull requested for paths: ${requestedPaths.join(', ')}`);
+      if (options.recursive) {
+        console.log('ℹ️  Dependencies will be pulled fully; paths apply only to the primary package.');
+      }
+      console.log('');
+    }
+
+    let partialConfig: PartialPullConfig | undefined;
+
+    if (requestedPaths.length > 0) {
+      const localState = await packageManager.getPackageVersionState(parsedName, versionToPull);
+
+      if (localState.exists && !localState.isPartial) {
+        console.log(`⚠️  ${parsedName}@${versionToPull} already exists locally (full). Skipping partial pull.`);
+        return {
+          success: true,
+          data: {
+            packageName: parsedName,
+            version: versionToPull,
+            files: 0,
+            size: response.version.tarballSize,
+            checksum: '',
+            registry: registryUrl,
+            profile,
+            isPrivate: response.package.isPrivate,
+            downloadUrl: '',
+            message: 'Local full version already present; partial pull skipped'
+          }
+        };
+      }
+
+      if (localState.isPartial) {
+        console.log('ℹ️  Existing partial version found locally; merging with remote content (remote wins on conflicts).');
+        console.log('');
+      }
+
+      partialConfig = {
+        requestPaths: requestedPaths,
+        localState
+      };
+    }
+
     // Handle version checks and overwrite confirmation (only for non-recursive pulls)
-    if (!options.recursive && versionToPull) {
+    if (!options.recursive && versionToPull && requestedPaths.length === 0) {
       await handleVersionChecks(parsedName, versionToPull);
     }
 
     // Perform the actual pull operation
     const result = options.recursive
-      ? await performRecursivePull(parsedName, versionToPull, response, context, registryUrl, profile)
-      : await performSinglePull(parsedName, parsedVersion, response, context, pullOptions, registryUrl, profile);
+      ? await performRecursivePull(parsedName, versionToPull, response, context, registryUrl, profile, partialConfig)
+      : await performSinglePull(parsedName, parsedVersion, response, context, pullOptions, registryUrl, profile, partialConfig);
 
     // Display results
     displayPullResults(result, response);
@@ -317,6 +416,7 @@ export function setupPullCommand(program: Command): void {
     .option('--profile <profile>', 'profile to use for authentication')
     .option('--api-key <key>', 'API key for authentication (overrides profile)')
     .option('--recursive', 'include dependency metadata (no additional downloads)')
+    .option('--paths <list>', 'comma-separated registry paths for partial pull', parsePathsOption)
     .action(withErrorHandling(async (packageName: string, options: PullOptions) => {
       const result = await pullPackageCommand(packageName, options);
       if (!result.success) {

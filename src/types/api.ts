@@ -19,6 +19,13 @@ export interface ApiPackageVersion {
   updatedAt: string;
 }
 
+export interface PullPackageRequestOptions {
+  version?: string;
+  recursive?: boolean;
+  paths?: string[];
+  includeManifest?: boolean;
+}
+
 export interface PushPackageResponse {
   message: string;
   package: ApiPackage;

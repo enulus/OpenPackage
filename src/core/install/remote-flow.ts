@@ -7,7 +7,8 @@ import {
   aggregateRecursiveDownloads,
   parseDownloadIdentifier
 } from '../remote-pull.js';
-import { hasPackageVersion } from '../directory.js';
+import { packageManager } from '../package.js';
+import type { PackageVersionState } from '../package.js';
 import { getVersionInfoFromDependencyTree } from '../../utils/install-helpers.js';
 import { promptOverwriteConfirmation } from '../../utils/prompts.js';
 import { Spinner } from '../../utils/spinner.js';
@@ -16,6 +17,7 @@ import { computeMissingDownloadKeys, createDownloadKey } from './download-keys.j
 import { extractRemoteErrorReason } from '../../utils/error-reasons.js';
 import { recordBatchOutcome } from './remote-reporting.js';
 import { mapReasonLabelToOutcome } from './install-errors.js';
+import { formatVersionLabel } from '../../utils/package-versioning.js';
 
 function extractReasonFromFailure(failure: RemotePullFailure): string {
   switch (failure.reason) {
@@ -245,23 +247,57 @@ export async function pullMissingDependenciesIfNeeded(
   return { pulledAny: metadataResults.length > 0, warnings };
 }
 
+type PartialRootPlan = {
+  name: string;
+  version: string;
+  partial: boolean;
+  localState?: PackageVersionState;
+};
+
+type PlanRemoteDownloadsOptions = {
+  forceRemote?: boolean;
+  dryRun?: boolean;
+  partialRoot?: PartialRootPlan;
+};
+
 /**
  * Plan which downloads to pull for a package based on remote metadata
  */
 export async function planRemoteDownloadsForPackage(
   metadata: RemotePackageMetadataSuccess,
-  opts: { forceRemote: boolean; dryRun: boolean }
+  opts: PlanRemoteDownloadsOptions = {}
 ): Promise<{ downloadKeys: Set<string>; warnings: string[] }> {
-  const { forceRemote, dryRun } = opts;
+  const { forceRemote = true, dryRun = false, partialRoot } = opts;
   const aggregatedDownloads = aggregateRecursiveDownloads([metadata.response]);
   const downloadKeys = new Set<string>();
   const warnings: string[] = [];
+  const partialRootState: PackageVersionState | undefined = partialRoot
+    ? partialRoot.localState ?? await packageManager.getPackageVersionState(partialRoot.name, partialRoot.version)
+    : undefined;
 
   for (const download of aggregatedDownloads) {
     try {
       const { packageName: downloadName, version: downloadVersion } = parseDownloadIdentifier(download.name);
       const key = createDownloadKey(downloadName, downloadVersion);
-      const existsLocally = await hasPackageVersion(downloadName, downloadVersion);
+      const isRootPackage =
+        partialRoot &&
+        downloadName === partialRoot.name &&
+        formatVersionLabel(downloadVersion) === formatVersionLabel(partialRoot.version);
+      const isPartialRoot = Boolean(isRootPackage && partialRoot.partial);
+      const localState = isRootPackage && partialRootState
+        ? partialRootState
+        : await packageManager.getPackageVersionState(downloadName, downloadVersion);
+      const existsLocally = localState.exists;
+
+      if (isPartialRoot) {
+        if (existsLocally && !localState.isPartial) {
+          const skipMessage = `${key} already exists locally as a full package; skipping partial pull`;
+          warnings.push(skipMessage);
+          continue;
+        }
+        downloadKeys.add(key);
+        continue;
+      }
 
       if (forceRemote) {
         let shouldDownload = true;
