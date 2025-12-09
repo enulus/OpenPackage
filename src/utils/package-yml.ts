@@ -21,6 +21,7 @@ export async function parsePackageYml(packageYmlPath: string): Promise<PackageYm
   try {
     const content = await readTextFile(packageYmlPath);
     const parsed = yaml.load(content) as PackageYml;
+    const isPartial = (parsed as any).partial === true;
     
     // Validate required fields
     if (!parsed.name) {
@@ -38,6 +39,12 @@ export async function parsePackageYml(packageYmlPath: string): Promise<PackageYm
       parsed.exclude = excludeFilters;
     } else {
       delete (parsed as any).exclude;
+    }
+
+    if (isPartial) {
+      (parsed as any).partial = true;
+    } else {
+      delete (parsed as any).partial;
     }
     
     return parsed;

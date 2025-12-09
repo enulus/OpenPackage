@@ -151,7 +151,6 @@ function logPartialPullRequest(requestedPaths: string[], isRecursive: boolean | 
   if (isRecursive) {
     console.log('✓ Dependencies will be pulled fully; paths apply only to the primary package.');
   }
-  console.log('');
 }
 
 async function resolvePartialConfig(
@@ -171,8 +170,7 @@ async function resolvePartialConfig(
   }
 
   if (localState.isPartial) {
-    console.log('✓ Existing partial version found locally; merging with remote content (remote wins on conflicts).');
-    console.log('');
+    console.log('✓ Existing partial version found locally; merging with remote content.');
   }
 
   return {

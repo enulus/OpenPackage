@@ -6,6 +6,7 @@ import { logger } from '../utils/logger.js';
 import { withErrorHandling } from '../utils/errors.js';
 import { displayPackageTable, PackageTableEntry } from '../utils/formatters.js';
 import { arePackageNamesEquivalent } from '../utils/package-name.js';
+import { isUnversionedVersion } from '../utils/package-versioning.js';
 
 /**
  * List packages command implementation
@@ -22,6 +23,9 @@ async function listPackagesCommand(options: ListOptions): Promise<CommandResult>
     // When package name is specified, show all versions automatically
     const showAllVersions = options.packageName ? true : options.all;
     const entries = await registryManager.listPackages(filter, showAllVersions);
+    const formatVersionDisplay = (version?: string) => (
+      isUnversionedVersion(version) ? 'Unversioned' : (version ?? 'Unversioned')
+    );
     
     // If a specific package name was provided, filter for exact matches only
     let filteredEntries = entries;
@@ -29,6 +33,10 @@ async function listPackagesCommand(options: ListOptions): Promise<CommandResult>
       const target =options.packageName;
       filteredEntries = entries.filter(entry => arePackageNamesEquivalent(entry.name, target));
     }
+    const displayEntries = filteredEntries.map(entry => ({
+      ...entry,
+      version: formatVersionDisplay(entry.version)
+    }));
     
     if (filteredEntries.length === 0) {
       if (options.packageName) {
@@ -43,10 +51,10 @@ async function listPackagesCommand(options: ListOptions): Promise<CommandResult>
     
     // Display results
     if (options.format === 'json') {
-      console.log(JSON.stringify(filteredEntries, null, 2));
+      console.log(JSON.stringify(displayEntries, null, 2));
     } else {
       // Table format using shared formatter
-      const tableEntries: PackageTableEntry[] = filteredEntries.map(entry => ({
+      const tableEntries: PackageTableEntry[] = displayEntries.map(entry => ({
         name: entry.name,
         version: entry.version,
         description: entry.description
@@ -64,7 +72,7 @@ async function listPackagesCommand(options: ListOptions): Promise<CommandResult>
     
     return {
       success: true,
-      data: filteredEntries
+      data: displayEntries
     };
   } catch (error) {
     logger.error('Failed to list packages', { error });

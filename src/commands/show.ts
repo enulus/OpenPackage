@@ -8,7 +8,7 @@ import { withErrorHandling, PackageNotFoundError } from '../utils/errors.js';
 import { describeVersionRange, isExactVersion } from '../utils/version-ranges.js';
 import { parsePackageInput } from '../utils/package-name.js';
 import { packageManager } from '../core/package.js';
-import { formatVersionLabel } from '../utils/package-versioning.js';
+import { formatVersionLabel, isUnversionedVersion } from '../utils/package-versioning.js';
 
 /**
  * Show package details command implementation (supports package@version)
@@ -27,11 +27,19 @@ async function showPackageCommand(packageInput: string): Promise<CommandResult> 
     const pkg = await packageManager.loadPackage(name, version);
     const metadata = pkg.metadata;
     const files = pkg.files;
+    const resolvedVersion = metadata.version ?? version;
+    const unversioned = isUnversionedVersion(resolvedVersion);
+
+    // Detect partial packages from manifest flag or local state (covers cases where manifest was not written)
+    const versionState = await packageManager.getPackageVersionState(name, resolvedVersion);
+    const isPartial = Boolean((metadata as any).partial) || versionState.isPartial;
     
     // Display package details
     console.log(`✓ Package: ${metadata.name}`);
     
-    console.log(`✓ Version: ${metadata.version}`);
+    if (!unversioned) {
+      console.log(`✓ Version: ${metadata.version}`);
+    }
     if (metadata.description) {
       console.log(`✓ Description: ${metadata.description}`);
     }
@@ -53,6 +61,10 @@ async function showPackageCommand(packageInput: string): Promise<CommandResult> 
     }
     console.log(`✓ Private: ${metadata.private ? 'Yes' : 'No'}`);
 
+    if (isPartial) {
+      console.log('✓ Partial: Yes');
+    }
+    
     // Dependencies section
     if (metadata.packages && metadata.packages.length > 0) {
       console.log(`✓ Imported Packages (${metadata.packages.length}):`);

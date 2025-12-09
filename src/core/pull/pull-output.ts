@@ -43,10 +43,6 @@ export function displayPullResults(
   if (result.checksum) {
     console.log(`  • Checksum: ${result.checksum.substring(0, 16)}...`);
   }
-  console.log('');
-  console.log('✓ Next steps:');
-  console.log(`  opkg show ${result.packageName}         # View package details`);
-  console.log(`  opkg install ${result.packageName}     # Install package to current project`);
 }
 
 

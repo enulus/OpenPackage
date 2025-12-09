@@ -73,6 +73,7 @@ export interface PackageYml {
   name: string;
   version?: string;
   private?: boolean;
+  partial?: boolean;
 
   /**
    * Optional glob-like include filters applied relative to the package root.
