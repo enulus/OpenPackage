@@ -9,6 +9,7 @@ import {
 } from '../core/device-auth.js';
 import { profileManager } from '../core/profiles.js';
 import { logger } from '../utils/logger.js';
+import { getCurrentUsername } from '../core/api-keys.js';
 
 type LoginOptions = {
 	profile?: string;
@@ -46,21 +47,17 @@ export function setupLoginCommand(program: Command): void {
 
 					await persistTokens(profileName, tokens);
 
-					const username = extractUsernameFromAccessToken(tokens.accessToken);
+					const username = tokens.username ?? (await resolveUsername(profileName));
 					if (username) {
-						try {
-							await profileManager.setProfileDefaultScope(profileName, `@${username}`);
-							console.log(`✓ Default scope set to @${username} for profile "${profileName}".`);
-						} catch (scopeError) {
-							logger.debug('Failed to set default scope after login', { scopeError });
-						}
+						await profileManager.setProfileDefaultScope(profileName, `@${username}`);
+						console.log(`✓ Default scope set to @${username} for profile "${profileName}".`);
 					} else {
-						logger.debug('Could not derive username from access token; default scope not set');
+						logger.debug('Could not derive username from API key; default scope not set');
 					}
 
 					console.log('');
 					console.log('✓ Login successful.');
-					console.log(`✓ Tokens stored for profile "${profileName}".`);
+					console.log(`✓ API key stored for profile "${profileName}".`);
 				} catch (error: any) {
 					logger.debug('Device login failed', { error });
 					throw error;
@@ -69,23 +66,11 @@ export function setupLoginCommand(program: Command): void {
 		);
 }
 
-function extractUsernameFromAccessToken(accessToken: string): string | undefined {
-	if (!accessToken) {
-		return undefined;
-	}
-
-	const parts = accessToken.split('.');
-	if (parts.length < 2) {
-		return undefined;
-	}
-
+async function resolveUsername(profileName: string): Promise<string | undefined> {
 	try {
-		const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-		if (payload && typeof payload.username === 'string' && payload.username.trim() !== '') {
-			return payload.username;
-		}
-		return undefined;
-	} catch {
+		return await getCurrentUsername({ profile: profileName });
+	} catch (error) {
+		logger.debug('Unable to resolve username from API key', { error });
 		return undefined;
 	}
 }

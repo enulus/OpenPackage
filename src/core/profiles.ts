@@ -167,6 +167,24 @@ class ProfileManager {
     }
   }
 
+	/**
+	 * Remove stored credentials for a profile without deleting the profile entry.
+	 */
+	async clearProfileCredentials(profileName: string): Promise<void> {
+		try {
+			const credentialsData = await readIniFile(this.credentialsPath);
+			if (!hasIniSection(credentialsData, profileName)) {
+				return;
+			}
+			removeIniSection(credentialsData, profileName);
+			await writeIniFile(this.credentialsPath, credentialsData);
+			logger.info(`Credentials for profile '${profileName}' removed`);
+		} catch (error) {
+			logger.error(`Failed to clear credentials for profile: ${profileName}`, { error });
+			throw new ConfigError(`Failed to clear credentials for profile: ${error}`);
+		}
+	}
+
   /**
    * Delete a profile and its credentials
    */

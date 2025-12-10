@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
 import { logger } from '../utils/logger.js';
 import { createHttpClient } from '../utils/http-client.js';
-import { createTokenStore } from './token-store.js';
+import { profileManager } from './profiles.js';
 
 export type DeviceAuthorizationStart = {
 	deviceCode: string;
@@ -13,9 +13,11 @@ export type DeviceAuthorizationStart = {
 };
 
 export type DeviceTokenResult = {
-	accessToken: string;
-	refreshToken: string;
-	expiresIn: number;
+	apiKey: string;
+	keyPrefix?: string;
+	expiresAt?: string;
+	userId: string;
+	username?: string;
 };
 
 const POLL_SLOWDOWN_SECONDS = 5;
@@ -57,10 +59,11 @@ export async function pollForDeviceToken(params: {
 	while (Date.now() < expiresAt) {
 		try {
 			const tokenResponse = await client.post<{
-				access_token: string;
-				refresh_token: string;
-				token_type: 'bearer';
-				expires_in: number;
+				apiKey: string;
+				keyPrefix?: string;
+				expiresAt?: string;
+				userId: string;
+				username?: string;
 			}>(
 				'/auth/device/token',
 				{ deviceCode: params.deviceCode },
@@ -68,9 +71,11 @@ export async function pollForDeviceToken(params: {
 			);
 
 			return {
-				accessToken: tokenResponse.access_token,
-				refreshToken: tokenResponse.refresh_token,
-				expiresIn: tokenResponse.expires_in,
+				apiKey: tokenResponse.apiKey,
+				keyPrefix: tokenResponse.keyPrefix,
+				expiresAt: tokenResponse.expiresAt,
+				userId: tokenResponse.userId,
+				username: tokenResponse.username,
 			};
 		} catch (error: any) {
 			const apiError = error?.apiError?.error as string | undefined;
@@ -98,16 +103,7 @@ export async function persistTokens(
 	profileName: string,
 	tokens: DeviceTokenResult
 ): Promise<void> {
-	const expiresAt = new Date(Date.now() + tokens.expiresIn * 1000).toISOString();
-
-	const tokenStore = await createTokenStore();
-	await tokenStore.set(profileName, {
-		refreshToken: tokens.refreshToken,
-		accessToken: tokens.accessToken,
-		expiresAt,
-		tokenType: 'bearer',
-		receivedAt: new Date().toISOString(),
-	});
+	await profileManager.setProfileCredentials(profileName, { api_key: tokens.apiKey });
 }
 
 export function openBrowser(url: string): void {

@@ -3,8 +3,6 @@ import { profileManager } from './profiles.js';
 import { logger } from '../utils/logger.js';
 import { ConfigError } from '../utils/errors.js';
 import { getVersion } from '../utils/package.js';
-import { createHttpClient } from '../utils/http-client.js';
-import { createTokenStore, TokenStore } from './token-store.js';
 
 /**
  * Authentication management for OpenPackage CLI
@@ -13,300 +11,149 @@ import { createTokenStore, TokenStore } from './token-store.js';
 
 
 class AuthManager {
-  private static readonly EXP_FALLBACK_MS = 14 * 60 * 1000; // 14 minutes
-  private tokenStorePromise?: Promise<TokenStore>;
+	/**
+	 * Get API key following credential precedence:
+	 * 1. Command line options (--api-key)
+	 * 2. Profile credentials file (explicit profile, env var, or default)
+	 *
+	 * If an explicit profile is requested via options.profile but doesn't exist
+	 * or has no credentials, an error is thrown instead of falling back to default.
+	 */
+	async getApiKey(options: AuthOptions = {}): Promise<string | null> {
+		try {
+			if (options.apiKey !== undefined) {
+				if (!options.apiKey || options.apiKey.trim() === '') {
+					throw new ConfigError(
+						'API key provided via --api-key is empty. Please provide a valid API key.',
+					)
+				}
+				logger.debug('Using API key from command line options')
+				return options.apiKey
+			}
 
-  /**
-   * Get API key following credential precedence:
-   * 1. Command line options (--api-key)
-   * 2. Profile credentials file (explicit profile, env var, or default)
-   * 
-   * If an explicit profile is requested via options.profile but doesn't exist
-   * or has no credentials, an error is thrown instead of falling back to default.
-   */
-  async getApiKey(options: AuthOptions = {}): Promise<string | null> {
-    try {
-      // 1. Command line API key override
-      // Check if apiKey was explicitly provided (not undefined)
-      if (options.apiKey !== undefined) {
-        if (!options.apiKey || options.apiKey.trim() === '') {
-          throw new ConfigError(
-            'API key provided via --api-key is empty. Please provide a valid API key.'
-          );
-        }
-        logger.debug('Using API key from command line options');
-        return options.apiKey;
-      }
+			const profileName = options.profile || process.env.OPENPACKAGEPROFILE || 'default'
+			const isExplicitProfile = !!options.profile
+			logger.debug(`Using profile: ${profileName}${isExplicitProfile ? ' (explicit)' : ''}`)
 
-      // 2. Profile-based authentication
-      const profileName = options.profile || process.env.OPENPACKAGEPROFILE || 'default';
-      const isExplicitProfile = !!options.profile; // Profile was explicitly requested
-      logger.debug(`Using profile: ${profileName}${isExplicitProfile ? ' (explicit)' : ''}`);
+			const profile = await profileManager.getProfile(profileName)
+			if (profile?.credentials?.api_key) {
+				logger.debug(`Using API key from profile: ${profileName}`)
+				return profile.credentials.api_key
+			}
 
-      const profile = await profileManager.getProfile(profileName);
-      if (profile?.credentials?.api_key) {
-        logger.debug(`Using API key from profile: ${profileName}`);
-        return profile.credentials.api_key;
-      }
+			if (isExplicitProfile) {
+				if (!profile) {
+					throw new ConfigError(
+						`Profile '${profileName}' not found. Please configure it with "opkg configure --profile ${profileName}"`,
+					)
+				}
+				if (!profile.credentials?.api_key) {
+					throw new ConfigError(
+						`Profile '${profileName}' has no API key configured. Please configure it with "opkg configure --profile ${profileName}"`,
+					)
+				}
+			}
 
-      // 3. If explicit profile was requested but doesn't exist or has no credentials, error
-      if (isExplicitProfile) {
-        if (!profile) {
-          throw new ConfigError(
-            `Profile '${profileName}' not found. Please configure it with "opkg configure --profile ${profileName}"`
-          );
-        }
-        if (!profile.credentials?.api_key) {
-          throw new ConfigError(
-            `Profile '${profileName}' has no API key configured. Please configure it with "opkg configure --profile ${profileName}"`
-          );
-        }
-      }
+			if (profileName !== 'default') {
+				const defaultProfile = await profileManager.getProfile('default')
+				if (defaultProfile?.credentials?.api_key) {
+					logger.debug('Using API key from default profile')
+					return defaultProfile.credentials.api_key
+				}
+			}
 
-      // 4. Try default profile if not already tried (only for non-explicit profiles)
-      if (profileName !== 'default') {
-        const defaultProfile = await profileManager.getProfile('default');
-        if (defaultProfile?.credentials?.api_key) {
-          logger.debug('Using API key from default profile');
-          return defaultProfile.credentials.api_key;
-        }
-      }
+			logger.warn('No API key found in any credential source')
+			return null
+		} catch (error) {
+			logger.error('Failed to get API key', { error })
+			if (error instanceof ConfigError) {
+				throw error
+			}
+			throw new ConfigError(`Failed to get API key: ${error}`)
+		}
+	}
 
-      logger.warn('No API key found in any credential source');
-      return null;
-    } catch (error) {
-      logger.error('Failed to get API key', { error });
-      if (error instanceof ConfigError) {
-        throw error; // Re-throw ConfigError as-is
-      }
-      throw new ConfigError(`Failed to get API key: ${error}`);
-    }
-  }
+	getRegistryUrl(): string {
+		const registryUrl = 'http://localhost:3000/v1'
+		logger.debug(`Using registry URL: ${registryUrl}`)
+		return registryUrl
+	}
 
-  /**
-   * Get registry URL
-   */
-  getRegistryUrl(): string {
-    // const registryUrl = "https://backend.openpackage.dev/v1";
-    const registryUrl = "http://localhost:3000/v1";
-    logger.debug(`Using registry URL: ${registryUrl}`);
-    return registryUrl;
-  }
+	async validateAuth(options: AuthOptions = {}): Promise<{ registryUrl: string }> {
+		const registryUrl = this.getRegistryUrl()
+		const apiKey = await this.getApiKey(options)
+		if (!apiKey) {
+			throw new ConfigError(
+				'No authentication found. Run "opkg login" to configure a profile API key.',
+			)
+		}
+		return { registryUrl }
+	}
 
-  /**
-   * Validate that required authentication is available
-   */
-  async validateAuth(options: AuthOptions = {}): Promise<{ registryUrl: string }> {
-    const registryUrl = this.getRegistryUrl();
-    const hasBearer = await this.tryGetAccessToken(options);
-    if (hasBearer) {
-      return { registryUrl };
-    }
-    const apiKey = await this.getApiKey(options);
-    if (!apiKey) {
-      throw new ConfigError(
-        'No authentication found. Run "opkg login" for OAuth or configure a profile API key.'
-      );
-    }
-    return { registryUrl };
-  }
+	getCurrentProfile(options: AuthOptions = {}): string {
+		if (options.apiKey !== undefined && options.apiKey) {
+			return '<api-key>'
+		}
+		return options.profile || process.env.OPENPACKAGEPROFILE || 'default'
+	}
 
-  /**
-   * Get current profile name being used
-   * Returns '<api-key>' when API key is provided directly via command line
-   */
-  getCurrentProfile(options: AuthOptions = {}): string {
-    // If API key is provided directly, it takes precedence over profile
-    if (options.apiKey !== undefined && options.apiKey) {
-      return '<api-key>';
-    }
-    return options.profile || process.env.OPENPACKAGEPROFILE || 'default';
-  }
+	async isAuthenticated(options: AuthOptions = {}): Promise<boolean> {
+		try {
+			const registryUrl = this.getRegistryUrl()
+			if (!registryUrl) {
+				return false
+			}
+			const apiKey = await this.getApiKey(options)
+			return !!apiKey
+		} catch (error) {
+			logger.debug('Authentication check failed', { error })
+			return false
+		}
+	}
 
-  /**
-   * Check if authentication is configured
-   */
-  async isAuthenticated(options: AuthOptions = {}): Promise<boolean> {
-    try {
-      const registryUrl = this.getRegistryUrl();
-      if (!registryUrl) {
-        return false;
-      }
-      const bearer = await this.tryGetAccessToken(options);
-      if (bearer) {
-        return true;
-      }
-      const apiKey = await this.getApiKey(options);
-      return !!apiKey;
-    } catch (error) {
-      logger.debug('Authentication check failed', { error });
-      return false;
-    }
-  }
+	async getAuthHeaders(options: AuthOptions = {}): Promise<Record<string, string>> {
+		const registryUrl = this.getRegistryUrl()
+		if (!registryUrl) {
+			throw new ConfigError('Registry URL is not configured')
+		}
 
-  /**
-   * Get authentication headers for HTTP requests
-   */
-  async getAuthHeaders(options: AuthOptions = {}): Promise<Record<string, string>> {
-    const registryUrl = this.getRegistryUrl();
-    if (!registryUrl) {
-      throw new ConfigError('Registry URL is not configured');
-    }
+		const apiKey = await this.getApiKey(options)
+		if (apiKey) {
+			return {
+				'X-API-Key': apiKey,
+				'User-Agent': `openpackage-cli/${getVersion()}`,
+			}
+		}
 
-    const accessToken = await this.tryGetAccessToken(options);
-    if (accessToken) {
-      return {
-        Authorization: `Bearer ${accessToken}`,
-        'User-Agent': `openpackage-cli/${getVersion()}`,
-      };
-    }
+		throw new ConfigError(
+			'No authentication found. Run "opkg login" to configure a profile API key.',
+		)
+	}
 
-    const apiKey = await this.getApiKey(options);
-    if (apiKey) {
-      return {
-        'X-API-Key': apiKey,
-        'User-Agent': `openpackage-cli/${getVersion()}`,
-      };
-    }
+	async getAuthInfo(options: AuthOptions = {}): Promise<{
+		profile: string
+		hasApiKey: boolean
+		hasRegistryUrl: boolean
+		source: string
+	}> {
+		const profile = this.getCurrentProfile(options)
+		const apiKey = await this.getApiKey(options)
+		const registryUrl = this.getRegistryUrl()
 
-    throw new ConfigError(
-      'No authentication found. Run "opkg login" for OAuth or configure a profile API key.'
-    );
-  }
+		let source = 'none'
+		if (options.apiKey) {
+			source = 'command-line'
+		} else if (apiKey) {
+			source = 'profile'
+		}
 
-  /**
-   * Get authentication info for debugging/logging (without exposing sensitive data)
-   */
-  async getAuthInfo(options: AuthOptions = {}): Promise<{
-    profile: string;
-    hasApiKey: boolean;
-    hasRegistryUrl: boolean;
-    source: string;
-  }> {
-    const profile = this.getCurrentProfile(options);
-    const apiKey = await this.getApiKey(options);
-    const registryUrl = this.getRegistryUrl();
-
-    let source = 'none';
-    if (options.apiKey) {
-      source = 'command-line';
-    } else if (apiKey) {
-      source = 'profile';
-    }
-
-    const bearer = await this.tryGetAccessToken(options);
-    if (bearer) {
-      source = 'oauth';
-    }
-
-    return {
-      profile,
-      hasApiKey: !!apiKey,
-      hasRegistryUrl: !!registryUrl,
-      source
-    };
-  }
-
-  /**
-   * Attempt to get a usable access token, refreshing if needed.
-   */
-  private async tryGetAccessToken(options: AuthOptions = {}): Promise<string | null> {
-    const profileName = this.getCurrentProfile(options);
-    if (profileName === '<api-key>') {
-      return null;
-    }
-
-    const tokenStore = await this.getTokenStore();
-    const tokens = await tokenStore.get(profileName);
-    if (!tokens) {
-      return null;
-    }
-
-    if (tokens.accessToken && this.isAccessTokenValid(tokens.accessToken, tokens.expiresAt)) {
-      return tokens.accessToken;
-    }
-
-    if (!tokens.refreshToken) {
-      logger.debug('Access token expired and no refresh token available');
-      return null;
-    }
-
-    const refreshed = await this.refreshAccessToken(profileName, tokens.refreshToken);
-    return refreshed;
-  }
-
-  private isAccessTokenValid(accessToken: string, expiresAt?: string): boolean {
-    const expFromToken = this.getExpFromToken(accessToken);
-    if (expFromToken) {
-      return expFromToken * 1000 > Date.now();
-    }
-
-    if (expiresAt) {
-      return new Date(expiresAt).getTime() > Date.now();
-    }
-
-    return false;
-  }
-
-  private getExpFromToken(token: string): number | null {
-    const parts = token.split('.');
-    if (parts.length < 2) {
-      return null;
-    }
-    try {
-      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-      if (payload && typeof payload.exp === 'number') {
-        return payload.exp;
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  }
-
-  private async refreshAccessToken(profileName: string, refreshToken: string): Promise<string | null> {
-    try {
-      const client = await createHttpClient();
-      const response = await client.post<{ accessToken: string; refreshToken: string }>(
-        '/auth/refresh',
-        { refreshToken },
-        { headers: { 'Content-Type': 'application/json' }, skipAuth: true }
-      );
-
-      const expiresAt = this.computeExpiresAt(response.accessToken);
-      const tokenStore = await this.getTokenStore();
-      await tokenStore.set(profileName, {
-        refreshToken: response.refreshToken,
-        accessToken: response.accessToken,
-        expiresAt: expiresAt.toISOString(),
-        tokenType: 'bearer',
-        receivedAt: new Date().toISOString(),
-      });
-
-      return response.accessToken;
-    } catch (error) {
-      logger.debug('Failed to refresh access token', { error });
-      return null;
-    }
-  }
-
-  private computeExpiresAt(accessToken: string): Date {
-    const exp = this.getExpFromToken(accessToken);
-    if (exp) {
-      return new Date(exp * 1000);
-    }
-    return new Date(Date.now() + AuthManager.EXP_FALLBACK_MS);
-  }
-
-  /**
-   * Lazily create a token store so we only instantiate once.
-   */
-  private async getTokenStore(): Promise<TokenStore> {
-    if (!this.tokenStorePromise) {
-      this.tokenStorePromise = createTokenStore();
-    }
-    return this.tokenStorePromise;
-  }
+		return {
+			profile,
+			hasApiKey: !!apiKey,
+			hasRegistryUrl: !!registryUrl,
+			source,
+		}
+	}
 }
 
 // Create and export a singleton instance
