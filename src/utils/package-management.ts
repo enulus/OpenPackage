@@ -92,20 +92,44 @@ export async function ensurePackageWithYml(
 
   await ensureDir(packageDir);
 
-  let packageConfig: PackageYml;
+  let packageConfig: PackageYml | undefined;
   let isNew = false;
 
   if (await exists(packageYmlPath)) {
     packageConfig = await parsePackageYml(packageYmlPath);
   } else {
     isNew = true;
-    if (options.interactive) {
-      console.log(`Create new package "${normalizedName}"`);
-      packageConfig = await promptPackageDetailsForNamed(normalizedName);
-    } else {
+    // Try to seed from existing local registry copy to avoid prompts and preserve metadata.
+    try {
+      const registryExists = await packageManager.packageExists(normalizedName);
+      if (registryExists) {
+        const existing = await packageManager.loadPackage(normalizedName);
+        packageConfig = {
+          ...existing.metadata,
+          name: normalizedName,
+          partial: true
+        };
+        logger.info(`Loaded package.yml for '${normalizedName}' from local registry copy`);
+        console.log(`✓ Loaded package.yml from local registry for ${normalizedName}`);
+      }
+    } catch (error) {
+      logger.debug('Unable to seed package.yml from registry; falling back to prompts', { normalizedName, error });
+    }
+
+    if (!packageConfig) {
+      if (options.interactive) {
+        console.log(`Create new package "${normalizedName}"`);
+        packageConfig = await promptPackageDetailsForNamed(normalizedName);
+      } else {
+        packageConfig = {
+          name: normalizedName,
+          ...(options.defaultVersion ? { version: options.defaultVersion } : {})
+        };
+      }
+
       packageConfig = {
-        name: normalizedName,
-        ...(options.defaultVersion ? { version: options.defaultVersion } : {})
+        ...packageConfig,
+        partial: true
       };
     }
 

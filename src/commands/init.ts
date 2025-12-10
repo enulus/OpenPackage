@@ -97,7 +97,10 @@ async function initNestedPackage(packageName: string, force?: boolean): Promise<
   try {
     await ensureDir(packageFilesDir);
     
-    const packageConfig = await promptPackageDetailsForNamed(normalizedName);
+    const packageConfig = {
+      ...(await promptPackageDetailsForNamed(normalizedName)),
+      partial: true
+    };
     
     // Ensure include pattern is set
     if (!packageConfig.include || packageConfig.include.length === 0) {

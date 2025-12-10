@@ -7,12 +7,16 @@
 
 import type { PackageFile, PackageYml } from '../../types/index.js';
 import type { PackageContext } from '../package-context.js';
+import * as yaml from 'js-yaml';
 import { normalizePackageName } from '../../utils/package-name.js';
 import { remove } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
+import { packageManager } from '../package.js';
 import { getPackageVersionPath } from '../directory.js';
 import { packageVersionExists } from '../../utils/package-versioning.js';
 import { writePackageFilesToDirectory } from '../../utils/package-copy.js';
+import { mergePackageFiles, stripPartialFlag } from '../../utils/package-merge.js';
+import { PACKAGE_PATHS } from '../../constants/index.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -49,16 +53,51 @@ export async function savePackageToRegistry(
   const normalizedConfig: PackageYml = { ...config, name: normalizedName };
 
   const versionDir = getPackageVersionPath(normalizedName, normalizedConfig.version);
+  const manifestIsPartial = isManifestPartial(files);
+  const registryHasPackage = await packageManager.packageExists(normalizedName);
+
+  let filesToWrite = files;
+
+  if (manifestIsPartial && registryHasPackage) {
+    const baseFiles = await loadExistingFiles(normalizedName, normalizedConfig.version);
+    filesToWrite = mergePackageFiles(baseFiles, filesToWrite);
+  }
+
+  if (manifestIsPartial) {
+    filesToWrite = stripPartialFlag(filesToWrite, normalizedName);
+    delete (normalizedConfig as any).partial;
+  }
 
   try {
     await clearExistingVersion(normalizedName, normalizedConfig.version, versionDir);
-    await writePackageFilesToDirectory(versionDir, files);
+    await writePackageFilesToDirectory(versionDir, filesToWrite);
 
     return { success: true, updatedConfig: normalizedConfig };
   } catch (error) {
     const message = `Failed to save ${normalizedName}@${normalizedConfig.version}: ${error}`;
     logger.error(message);
     return { success: false, error: message };
+  }
+}
+
+function isManifestPartial(files: PackageFile[]): boolean {
+  const manifest = files.find(f => f.path === PACKAGE_PATHS.MANIFEST_RELATIVE);
+  if (!manifest) return false;
+
+  try {
+    const parsed = yaml.load(manifest.content) as any;
+    return parsed?.partial === true;
+  } catch {
+    return false;
+  }
+}
+
+async function loadExistingFiles(packageName: string, version?: string): Promise<PackageFile[]> {
+  try {
+    return (await packageManager.loadPackage(packageName, version)).files;
+  } catch (error) {
+    logger.debug(`No existing version to merge`, { packageName, version, error });
+    return [];
   }
 }
 

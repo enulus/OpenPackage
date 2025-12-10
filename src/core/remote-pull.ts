@@ -12,6 +12,7 @@ import { ConfigError, ValidationError } from '../utils/errors.js';
 import { PACKAGE_PATHS } from '../constants/index.js';
 import { formatVersionLabel } from '../utils/package-versioning.js';
 import { normalizeRegistryPath } from '../utils/registry-entry-filter.js';
+import { mergePackageFiles } from '../utils/package-merge.js';
 
 const NETWORK_ERROR_PATTERN = /(fetch failed|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH|network)/i;
 
@@ -578,14 +579,21 @@ async function savePackageToLocalRegistry(
   (metadata as any).created = response.version.createdAt;
   (metadata as any).updated = response.version.updatedAt;
 
-  const pkg: Package = {
-    metadata: metadata as PackageYml,
-    files: extracted.files
-  };
+  let files = extracted.files;
 
-  await packageManager.savePackage(pkg, {
-    partial: Boolean(saveOptions.partial)
-  });
+  if (saveOptions.partial) {
+    try {
+      const existing = await packageManager.loadPackage(response.package.name, response.version.version);
+      files = mergePackageFiles(existing.files, files);
+    } catch {
+      // No existing version; keep files as-is
+    }
+  }
+
+  await packageManager.savePackage(
+    { metadata: metadata as PackageYml, files },
+    { partial: Boolean(saveOptions.partial) }
+  );
 }
 
 function mapErrorToFailure(error: unknown): RemotePullFailure {
