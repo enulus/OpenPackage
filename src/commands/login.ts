@@ -7,6 +7,7 @@ import {
 	persistTokens,
 	openBrowser,
 } from '../core/device-auth.js';
+import { profileManager } from '../core/profiles.js';
 import { logger } from '../utils/logger.js';
 
 type LoginOptions = {
@@ -45,6 +46,18 @@ export function setupLoginCommand(program: Command): void {
 
 					await persistTokens(profileName, tokens);
 
+					const username = extractUsernameFromAccessToken(tokens.accessToken);
+					if (username) {
+						try {
+							await profileManager.setProfileDefaultScope(profileName, `@${username}`);
+							console.log(`✓ Default scope set to @${username} for profile "${profileName}".`);
+						} catch (scopeError) {
+							logger.debug('Failed to set default scope after login', { scopeError });
+						}
+					} else {
+						logger.debug('Could not derive username from access token; default scope not set');
+					}
+
 					console.log('');
 					console.log('✓ Login successful.');
 					console.log(`✓ Tokens stored for profile "${profileName}".`);
@@ -54,5 +67,26 @@ export function setupLoginCommand(program: Command): void {
 				}
 			})
 		);
+}
+
+function extractUsernameFromAccessToken(accessToken: string): string | undefined {
+	if (!accessToken) {
+		return undefined;
+	}
+
+	const parts = accessToken.split('.');
+	if (parts.length < 2) {
+		return undefined;
+	}
+
+	try {
+		const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+		if (payload && typeof payload.username === 'string' && payload.username.trim() !== '') {
+			return payload.username;
+		}
+		return undefined;
+	} catch {
+		return undefined;
+	}
 }
 

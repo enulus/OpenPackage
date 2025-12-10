@@ -13,8 +13,9 @@ const CONFIG_FILE_NAME = 'config.json';
 
 // Default configuration values
 const DEFAULT_CONFIG: OpenPackageConfig = {
-  defaultAuthor: undefined,
-  defaultLicense: 'MIT'
+  defaults: {
+    license: 'MIT'
+  }
 };
 
 class ConfigManager {
@@ -39,7 +40,14 @@ class ConfigManager {
       if (await exists(this.configPath)) {
         logger.debug(`Loading config from: ${this.configPath}`);
         const fileConfig = await readJsonFile<OpenPackageConfig>(this.configPath);
-        this.config = { ...DEFAULT_CONFIG, ...fileConfig };
+        this.config = {
+          ...DEFAULT_CONFIG,
+          ...fileConfig,
+          defaults: {
+            ...DEFAULT_CONFIG.defaults,
+            ...(fileConfig.defaults ?? {})
+          }
+        };
       } else {
         logger.debug('Config file not found, using defaults');
         this.config = { ...DEFAULT_CONFIG };

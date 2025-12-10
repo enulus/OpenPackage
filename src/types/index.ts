@@ -12,15 +12,23 @@ export interface OpenPackageDirectories {
   runtime: string;
 }
 
+export interface ConfigDefaults {
+  license?: string;
+}
+
+export interface ProfileConfigDefaults {
+  author?: string;
+  scope?: string;
+}
+
 export interface OpenPackageConfig {
-  defaultAuthor?: string;
-  defaultLicense?: string;
+  defaults?: ConfigDefaults;
   profiles?: Record<string, ProfileConfig>;
 }
 
 export interface ProfileConfig {
   description?: string;
-  defaultScope?: string;
+  defaults?: ProfileConfigDefaults;
 }
 
 export interface ProfileCredentials {

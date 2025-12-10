@@ -91,7 +91,7 @@ export async function getDefaultScopeForProfile(profileName?: string): Promise<s
 
   const config = await configManager.getAll();
   const profileConfig = config.profiles?.[profileName];
-  return profileConfig?.defaultScope;
+  return profileConfig?.defaults?.scope;
 }
 
 /**

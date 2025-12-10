@@ -49,6 +49,12 @@ class ProfileManager {
       }
 
       const profileConfig = profiles[profileName];
+      const mergedProfileConfig: ProfileConfig = {
+        ...profileConfig,
+        defaults: {
+          ...(profileConfig.defaults ?? {})
+        }
+      };
       let credentials: ProfileCredentials | undefined;
 
       // Load credentials from credentials file
@@ -64,7 +70,7 @@ class ProfileManager {
 
       return {
         name: profileName,
-        config: profileConfig,
+        config: mergedProfileConfig,
         credentials
       };
     } catch (error) {
@@ -93,6 +99,42 @@ class ProfileManager {
     } catch (error) {
       logger.error(`Failed to set profile: ${profileName}`, { error });
       throw new ConfigError(`Failed to set profile: ${error}`);
+    }
+  }
+
+  /**
+   * Set or update the default scope for a profile without disturbing other fields.
+   */
+  async setProfileDefaultScope(profileName: string, scope: string): Promise<void> {
+    try {
+      const config = await configManager.getAll();
+      const normalizedScope = scope.startsWith('@') ? scope : `@${scope}`;
+
+      if (!config.profiles) {
+        config.profiles = {};
+      }
+
+      const existingProfile = config.profiles[profileName] ?? {};
+      const currentScope = existingProfile.defaults?.scope;
+
+      // No-op if already set to the desired scope
+      if (currentScope === normalizedScope) {
+        return;
+      }
+
+      config.profiles[profileName] = {
+        ...existingProfile,
+        defaults: {
+          ...(existingProfile.defaults ?? {}),
+          scope: normalizedScope
+        }
+      };
+
+      await configManager.set('profiles' as keyof typeof config, config.profiles);
+      logger.info(`Default scope for profile '${profileName}' set to ${normalizedScope}`);
+    } catch (error) {
+      logger.error(`Failed to set default scope for profile: ${profileName}`, { error });
+      throw new ConfigError(`Failed to set default scope for profile: ${error}`);
     }
   }
 
