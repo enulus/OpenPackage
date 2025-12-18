@@ -15,10 +15,10 @@ import { getLocalPackagesDir } from './paths.js';
 import { packageManager } from '../core/package.js';
 import { logger } from './logger.js';
 import {
-  FILE_PATTERNS,
-  UNIVERSAL_SUBDIRS
+  FILE_PATTERNS
 } from '../constants/index.js';
 import type { Platform } from '../core/platforms.js';
+import { getAllUniversalSubdirs } from '../core/platforms.js';
 import { normalizePathForProcessing } from './path-normalization.js';
 import {
   isAllowedRegistryPath,
@@ -51,8 +51,6 @@ import { createWorkspaceHash } from './version-generator.js';
 // ============================================================================
 // Types and Interfaces
 // ============================================================================
-
-type UniversalSubdir = typeof UNIVERSAL_SUBDIRS[keyof typeof UNIVERSAL_SUBDIRS];
 
 interface RegistryFileEntry {
   registryPath: string;
@@ -582,7 +580,7 @@ async function loadRegistryFileEntries(
   return entries;
 }
 
-function deriveGroupKey(registryPath: string): string {
+function deriveGroupKey(registryPath: string, cwd?: string): string {
   const normalized = normalizeRegistryPath(registryPath);
   const segments = normalized.split('/');
   if (segments.length <= 1) {
@@ -590,9 +588,9 @@ function deriveGroupKey(registryPath: string): string {
   }
 
   const first = segments[0];
-  const universalValues = Object.values(UNIVERSAL_SUBDIRS) as string[];
+  const universalSubdirs = getAllUniversalSubdirs(cwd);
 
-  if (universalValues.includes(first)) {
+  if (universalSubdirs.has(first)) {
     if (segments.length >= 2) {
       return ensureTrailingSlash(`${segments[0]}/${segments[1]}`);
     }
@@ -613,10 +611,10 @@ function createPlannedFiles(entries: RegistryFileEntry[]): PlannedFile[] {
   }));
 }
 
-function groupPlannedFiles(plannedFiles: PlannedFile[]): Map<string, PlannedFile[]> {
+function groupPlannedFiles(plannedFiles: PlannedFile[], cwd?: string): Map<string, PlannedFile[]> {
   const groups = new Map<string, PlannedFile[]>();
   for (const planned of plannedFiles) {
-    const key = deriveGroupKey(planned.registryPath);
+    const key = deriveGroupKey(planned.registryPath, cwd);
     if (!groups.has(key)) {
       groups.set(key, []);
     }
@@ -933,7 +931,7 @@ export async function installPackageByIndex(
   }
   attachTargetsToPlannedFiles(cwd, plannedFiles, platforms);
 
-  const groups = groupPlannedFiles(plannedFiles);
+  const groups = groupPlannedFiles(plannedFiles, cwd);
   const previousIndex = await readPackageIndex(cwd, packageName);
   const otherIndexes = await loadOtherPackageIndexes(cwd, packageName);
   const context = await buildExpandedIndexesContext(cwd, otherIndexes);
@@ -953,7 +951,7 @@ export async function installPackageByIndex(
   }
 
   // Load platform YAML overrides once per install
-  const yamlOverrides = await loadRegistryYamlOverrides(packageName, version);
+  const yamlOverrides = await loadRegistryYamlOverrides(packageName, version, cwd);
 
   const plannedTargetMap = buildPlannedTargetMap(plannedFiles, yamlOverrides);
   const { planned, deletions } = computeDiff(plannedTargetMap, previousOwnedPaths);
@@ -1020,7 +1018,7 @@ function mapRegistryPathToTargets(
   const normalized = normalizeRegistryPath(registryPath);
   const targets: PlannedTarget[] = [];
 
-  const universalInfo = extractUniversalSubdirInfo(normalized);
+  const universalInfo = extractUniversalSubdirInfo(normalized, cwd);
 
   if (universalInfo) {
     // Parse the universal path to detect platform suffix and normalized relative path
@@ -1033,7 +1031,7 @@ function mapRegistryPathToTargets(
         try {
           const mapped = mapUniversalToPlatform(
             targetPlatform,
-            parsed.universalSubdir as UniversalSubdir,
+            parsed.universalSubdir,
             parsed.relPath,
             cwd
           );
@@ -1054,7 +1052,7 @@ function mapRegistryPathToTargets(
     const rel = parsed ? parsed.relPath : universalInfo.relPath;
     for (const platform of platforms) {
       try {
-        const mapped = mapUniversalToPlatform(platform, universalInfo.universalSubdir as UniversalSubdir, rel, cwd);
+        const mapped = mapUniversalToPlatform(platform, universalInfo.universalSubdir, rel, cwd);
         const targetAbs = join(cwd, mapped.absFile);
         targets.push({
           absPath: targetAbs,
@@ -1332,7 +1330,7 @@ export async function buildIndexMappingForPackageFiles(
   const plannedFiles = createPlannedFiles(registryEntries);
   attachTargetsToPlannedFiles(cwd, plannedFiles, platforms);
   
-  const groups = groupPlannedFiles(plannedFiles);
+  const groups = groupPlannedFiles(plannedFiles, cwd);
   const context = await buildExpandedIndexesContext(cwd, otherIndexes);
   const groupPlans = await decideGroupPlans(cwd, groups, previousIndex, context);
   
@@ -1378,7 +1376,7 @@ export async function applyPlannedSyncForPackageFiles(
   const otherIndexes = await loadOtherPackageIndexes(cwd, packageName);
   const context = await buildExpandedIndexesContext(cwd, otherIndexes);
 
-  const groups = groupPlannedFiles(plannedFiles);
+  const groups = groupPlannedFiles(plannedFiles, cwd);
   const groupPlans = await decideGroupPlans(cwd, groups, previousIndex, context);
   const previousOwnedPaths = await expandIndexToFilePaths(cwd, previousIndex);
 

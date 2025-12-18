@@ -1,6 +1,6 @@
 import { join, dirname } from 'path';
 import { FILE_PATTERNS } from '../../constants/index.js';
-import { getDetectedPlatforms, getPlatformDefinition, getAllPlatforms, isValidUniversalSubdir } from '../platforms.js';
+import { getDetectedPlatforms, getPlatformDefinition, getAllPlatforms } from '../platforms.js';
 import { exists, walkFiles, readTextFile } from '../../utils/fs.js';
 import { extractPackageContentFromRootFile } from '../../utils/root-file-extractor.js';
 

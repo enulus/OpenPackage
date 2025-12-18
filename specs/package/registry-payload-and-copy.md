@@ -15,7 +15,7 @@ The **registry payload** for a given version is defined by two layers of rules.
 
 **Included by default (removable via manifest `exclude`):**
 - Every platform root file declared in `platforms.jsonc` (or user overrides in `~/.openpackage/platforms.jsonc` or `.openpackage/platforms.jsonc`) (e.g., `CLAUDE.md`, `WARP.md`, `AGENTS.md`) when it exists
-- Any `.openpackage/<universal-subdir>/…` directory (agents, rules, commands, skills, etc.)
+- Any `.openpackage/<universal-subdir>/…` directory (standard like agents/rules/commands/skills, plus custom subdirs from platforms.jsonc)
 - Any root-level content (directories/files at package root, outside `.openpackage/`)
 
 **Everything else starts excluded by default.**

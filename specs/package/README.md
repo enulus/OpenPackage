@@ -25,10 +25,7 @@ All package roots have **identical internal structure**:
   .openpackage/
     package.yml              # marks this as a package
     package.index.yml        # install index (not in registry)
-    commands/                # universal content
-    rules/
-    agents/
-    skills/
+    <universal-subdirs>/     # universal content (standard: commands/, rules/, agents/, skills/; custom from platforms.jsonc)
   <root-dir>/                # root-level content (outside .openpackage/)
   AGENTS.md                  # root files
   README.md

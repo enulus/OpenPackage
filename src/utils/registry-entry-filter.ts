@@ -1,18 +1,16 @@
 import {
   DIR_PATTERNS,
-  FILE_PATTERNS,
-  UNIVERSAL_SUBDIRS
+  FILE_PATTERNS
 } from '../constants/index.js';
 import {
   getFirstPathComponent,
   getPathAfterFirstComponent,
   normalizePathForProcessing
 } from './path-normalization.js';
-import { getAllRootFiles, isPlatformId } from '../core/platforms.js';
+import { getPlatformRootFiles, getAllUniversalSubdirs, isPlatformId } from '../core/platforms.js';
 import { isManifestPath } from './manifest-paths.js';
 
-const ROOT_REGISTRY_FILE_NAMES = getAllRootFiles();
-const UNIVERSAL_VALUES: string[] = Object.values(UNIVERSAL_SUBDIRS as Record<string, string>);
+const ROOT_REGISTRY_FILE_NAMES = getPlatformRootFiles();
 const OPENPACKAGE_PREFIX = `${DIR_PATTERNS.OPENPACKAGE}/`;
 
 export function normalizeRegistryPath(registryPath: string): string {
@@ -73,7 +71,8 @@ export function isAllowedRegistryPath(registryPath: string): boolean {
 }
 
 export function extractUniversalSubdirInfo(
-  registryPath: string
+  registryPath: string,
+  cwd?: string
 ): { universalSubdir: string; relPath: string } | null {
   const normalized = normalizeRegistryPath(registryPath);
   if (!normalized.startsWith(OPENPACKAGE_PREFIX)) {
@@ -83,7 +82,8 @@ export function extractUniversalSubdirInfo(
   const afterPrefix = normalized.slice(OPENPACKAGE_PREFIX.length);
   const firstComponent = getFirstPathComponent(afterPrefix);
 
-  if (!firstComponent || !UNIVERSAL_VALUES.includes(firstComponent)) {
+  const universalSubdirs = getAllUniversalSubdirs(cwd);
+  if (!firstComponent || !universalSubdirs.has(firstComponent)) {
     return null;
   }
 

@@ -5,16 +5,18 @@
   "augment": {
     "name": "Augment Code",
     "rootDir": ".augment",
-    "subdirs": {
-      "rules": {
-        "path": "rules",
+    "subdirs": [
+      {
+        "universalDir": "rules",
+        "platformDir": "rules",
         "exts": [".md"]
       },
-      "commands": {
-        "path": "commands",
+      {
+        "universalDir": "commands",
+        "platformDir": "commands",
         "exts": [".md"]
       }
-    }
+    ]
   },
 
   "claude": {
@@ -22,19 +24,22 @@
     "rootDir": ".claude",
     "rootFile": "CLAUDE.md",
     "aliases": ["claudecode"],
-    "subdirs": {
-      "commands": {
-        "path": "commands",
+    "subdirs": [
+      {
+        "universalDir": "commands",
+        "platformDir": "commands",
         "exts": [".md"]
       },
-      "agents": {
-        "path": "agents",
+      {
+        "universalDir": "agents",
+        "platformDir": "agents",
         "exts": [".md"]
       },
-      "skills": {
-        "path": "skills"
+      {
+        "universalDir": "skills",
+        "platformDir": "skills"
       }
-    }
+    ]
   },
 
   "codex": {
@@ -42,21 +47,23 @@
     "rootDir": ".codex",
     "rootFile": "AGENTS.md",
     "aliases": ["codexcli"],
-    "subdirs": {
-      "commands": {
-        "path": "prompts",
+    "subdirs": [
+      {
+        "universalDir": "commands",
+        "platformDir": "prompts",
         "exts": [".md"]
       }
-    }
+    ]
   },
 
   "cursor": {
     "name": "Cursor",
     "rootDir": ".cursor",
     "rootFile": "AGENTS.md",
-    "subdirs": {
-      "rules": {
-        "path": "rules",
+    "subdirs": [
+      {
+        "universalDir": "rules",
+        "platformDir": "rules",
         "exts": [".mdc", ".md"],
         "transformations": [
           {
@@ -65,27 +72,30 @@
           }
         ]
       },
-      "commands": {
-        "path": "commands",
+      {
+        "universalDir": "commands",
+        "platformDir": "commands",
         "exts": [".md"]
       }
-    }
+    ]
   },
 
   "factory": {
     "name": "Factory AI",
     "rootDir": ".factory",
     "rootFile": "AGENTS.md",
-    "subdirs": {
-      "commands": {
-        "path": "commands",
+    "subdirs": [
+      {
+        "universalDir": "commands",
+        "platformDir": "commands",
         "exts": [".md"]
       },
-      "agents": {
-        "path": "droids",
+      {
+        "universalDir": "agents",
+        "platformDir": "droids",
         "exts": [".md"]
       }
-    }
+    ]
   },
 
   "kilo": {
@@ -93,43 +103,48 @@
     "rootDir": ".kilocode",
     "rootFile": "AGENTS.md",
     "aliases": ["kilocode"],
-    "subdirs": {
-      "rules": {
-        "path": "rules",
+    "subdirs": [
+      {
+        "universalDir": "rules",
+        "platformDir": "rules",
         "exts": [".md"]
       },
-      "commands": {
-        "path": "workflows",
+      {
+        "universalDir": "commands",
+        "platformDir": "workflows",
         "exts": [".md"]
       }
-    }
+    ]
   },
 
   "kiro": {
     "name": "Kiro",
     "rootDir": ".kiro",
-    "subdirs": {
-      "rules": {
-        "path": "steering",
+    "subdirs": [
+      {
+        "universalDir": "rules",
+        "platformDir": "steering",
         "exts": [".md"]
       }
-    }
+    ]
   },
 
   "opencode": {
     "name": "OpenCode",
     "rootDir": ".opencode",
     "rootFile": "AGENTS.md",
-    "subdirs": {
-      "commands": {
-        "path": "command",
+    "subdirs": [
+      {
+        "universalDir": "commands",
+        "platformDir": "command",
         "exts": [".md"]
       },
-      "agents": {
-        "path": "agent",
+      {
+        "universalDir": "agents",
+        "platformDir": "agent",
         "exts": [".md"]
       }
-    }
+    ]
   },
 
   "qwen": {
@@ -137,42 +152,44 @@
     "rootDir": ".qwen",
     "rootFile": "QWEN.md",
     "aliases": ["qwencode"],
-    "subdirs": {
-      "agents": {
-        "path": "agents",
+    "subdirs": [
+      {
+        "universalDir": "agents",
+        "platformDir": "agents",
         "exts": [".md"]
       }
-    }
+    ]
   },
 
   "roo": {
     "name": "Roo Code",
     "rootDir": ".roo",
     "rootFile": "AGENTS.md",
-    "subdirs": {
-      "commands": {
-        "path": "commands",
+    "subdirs": [
+      {
+        "universalDir": "commands",
+        "platformDir": "commands",
         "exts": [".md"]
       }
-    }
+    ]
   },
 
   "warp": {
     "name": "Warp",
     "rootDir": ".warp",
     "rootFile": "WARP.md",
-    "subdirs": {}
+    "subdirs": []
   },
 
   "windsurf": {
     "name": "Windsurf",
     "rootDir": ".windsurf",
-    "subdirs": {
-      "rules": {
-        "path": "rules",
+    "subdirs": [
+      {
+        "universalDir": "rules",
+        "platformDir": "rules",
         "exts": [".md"]
       }
-    }
+    ]
   }
 }
-

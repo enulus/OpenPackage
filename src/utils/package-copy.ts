@@ -167,7 +167,7 @@ async function buildDefaultIncludeConfig(
       rootFiles.add(definition.rootFile);
     }
 
-    for (const subdirKey of Object.keys(definition.subdirs ?? {})) {
+    for (const subdirKey of definition.subdirs.keys()) {
       universalSubdirs.add(subdirKey);
     }
   }

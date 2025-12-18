@@ -1,0 +1,90 @@
+{
+  // Example: Custom platform configuration with extended subdirectories
+  // Place this in ~/.openpackage/platforms.jsonc (global) or
+  // <workspace>/.openpackage/platforms.jsonc (local) to extend built-in platforms
+
+  // Extend Cursor with custom subdirs
+  "cursor": {
+    "name": "Cursor",
+    "rootDir": ".cursor",
+    "rootFile": "AGENTS.md",
+    "subdirs": [
+      // Standard subdirs
+      {
+        "universalDir": "rules",
+        "platformDir": "rules",
+        "exts": [".mdc", ".md"],
+        "transformations": [
+          {
+            "packageExt": ".md",
+            "workspaceExt": ".mdc"
+          }
+        ]
+      },
+      {
+        "universalDir": "commands",
+        "platformDir": "commands",
+        "exts": [".md"]
+      },
+      
+      // Custom subdirs - extend with your own!
+      {
+        "universalDir": "memories",
+        "platformDir": "context",
+        "exts": [".json", ".md"]
+      },
+      {
+        "universalDir": "tools",
+        "platformDir": "tools",
+        "exts": [".ts", ".js", ".py"]
+      },
+      {
+        "universalDir": "templates",
+        "platformDir": "templates",
+        "exts": [".md", ".hbs"]
+      }
+    ]
+  },
+
+  // Example: Completely custom platform
+  "my-ai-platform": {
+    "name": "My AI Platform",
+    "rootDir": ".myai",
+    "rootFile": "MYAI.md",
+    "subdirs": [
+      {
+        "universalDir": "prompts",
+        "platformDir": "prompts",
+        "exts": [".md", ".txt"]
+      },
+      {
+        "universalDir": "workflows",
+        "platformDir": "flows",
+        "exts": [".yml", ".yaml"]
+      },
+      {
+        "universalDir": "functions",
+        "platformDir": "functions",
+        "exts": [".js", ".ts"]
+      },
+      {
+        "universalDir": "datasets",
+        "platformDir": "data",
+        "exts": [".json", ".csv"]
+      }
+    ]
+  },
+
+  // Example: Platform with minimal structure
+  "lightweight-ai": {
+    "name": "Lightweight AI",
+    "rootDir": ".lightweight",
+    "subdirs": [
+      {
+        "universalDir": "instructions",
+        "platformDir": "prompts"
+        // No exts specified = all extensions allowed
+      }
+    ]
+  }
+}

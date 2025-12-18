@@ -4,11 +4,11 @@
  * into universal markdown content.
  */
 
-import { DIR_PATTERNS, FILE_PATTERNS, UNIVERSAL_SUBDIRS } from '../constants/index.js';
+import { DIR_PATTERNS, FILE_PATTERNS } from '../constants/index.js';
 import type { PackageFile } from '../types/index.js';
 import { packageManager } from '../core/package.js';
 import * as yaml from 'js-yaml';
-import { getAllPlatforms, type Platform } from '../core/platforms.js';
+import { getAllPlatforms, getAllUniversalSubdirs, type Platform } from '../core/platforms.js';
 
 const OPENPACKAGE_PREFIX = `${DIR_PATTERNS.OPENPACKAGE}/`;
 
@@ -158,7 +158,8 @@ export function mergePlatformYamlOverride(
  */
 export async function loadRegistryYamlOverrides(
   packageName: string,
-  version: string
+  version: string,
+  cwd?: string
 ): Promise<PackageFile[]> {
   const overrides: PackageFile[] = [];
 
@@ -167,7 +168,7 @@ export async function loadRegistryYamlOverrides(
 
   // Known platforms for suffix matching
   const platformValues: string[] = getAllPlatforms({ includeDisabled: true });
-  const subdirs: string[] = Object.values(UNIVERSAL_SUBDIRS as Record<string, string>);
+  const subdirs = getAllUniversalSubdirs(cwd);
 
   for (const file of pkg.files) {
     const path = file.path;
@@ -177,7 +178,8 @@ export async function loadRegistryYamlOverrides(
     
     const afterPrefix = path.slice(OPENPACKAGE_PREFIX.length);
     // Must be in a universal subdir
-    if (!subdirs.some(sd => afterPrefix.startsWith(sd + '/'))) continue;
+    const firstComponent = afterPrefix.split('/')[0];
+    if (!subdirs.has(firstComponent)) continue;
     
     // Must end with .yml and have a platform suffix before it
     if (!path.endsWith(FILE_PATTERNS.YML_FILE)) continue;

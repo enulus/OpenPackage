@@ -3,9 +3,6 @@ import assert from 'node:assert/strict';
 const { mapUniversalToPlatform } = await import(
   new URL('../src/utils/platform-mapper.js', import.meta.url).href
 );
-const { UNIVERSAL_SUBDIRS } = await import(
-  new URL('../src/constants/index.js', import.meta.url).href
-);
 const { logger } = await import(
   new URL('../src/utils/logger.js', import.meta.url).href
 );
@@ -21,7 +18,7 @@ const originalWarn = logger.warn;
 
 try {
   assert.throws(
-    () => mapUniversalToPlatform('claude', UNIVERSAL_SUBDIRS.AGENTS, 'foo.yml'),
+    () => mapUniversalToPlatform('claude', 'agents', 'foo.yml'),
     /extension/i,
     'disallowed extensions should throw'
   );
@@ -31,7 +28,7 @@ try {
   );
 
   const warningCount = warnings.length;
-  const mapped = mapUniversalToPlatform('claude', UNIVERSAL_SUBDIRS.AGENTS, 'foo.md');
+  const mapped = mapUniversalToPlatform('claude', 'agents', 'foo.md');
   assert.ok(
     mapped.absFile.endsWith('.claude/agents/foo.md'),
     'allowed extensions should map to platform directory'

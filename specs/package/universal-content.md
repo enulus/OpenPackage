@@ -13,24 +13,17 @@ Packages contain two types of content:
 
 #### Universal Content Layout under `.openpackage/`
 
-Inside `.openpackage/`, each universal subdir is canonical:
+Universal subdirs (standard: `agents/`, `rules/`, `commands/`, `skills/`; plus any custom defined in `platforms.jsonc`) are canonical inside `.openpackage/`. The full set is dynamically discovered from platform configs.
 
 ```text
 <package-root>/
   .openpackage/
     package.yml                # package manifest
-    agents/
+    <universal-subdir>/        # e.g., agents/, rules/, commands/, skills/, or custom (from platforms.jsonc)
       <name>.md                # universal markdown
       <name>.<platform>.md     # platform-suffixed markdown (optional)
       <name>.<platform>.yml    # YAML override for frontmatter (optional)
-    rules/
-      ...
-    commands/
-      ...
-    skills/
-      ...
-    <custom-subdirs>/          # any additional subdirs
-      ...
+    ...                         # other standard/custom subdirs
 ```
 
 **Definitions:**

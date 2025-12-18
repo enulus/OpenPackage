@@ -18,7 +18,11 @@ The CLI supports deep-merged user configurations for platform customization:
 - **Global config**: `~/.openpackage/platforms.jsonc` or `~/.openpackage/platforms.json` (applies everywhere, merged after built-in).
 - **Local config**: `<workspace>/.openpackage/platforms.jsonc` or `<workspace>/.openpackage/platforms.json` (per-project, highest priority).
 
-Merge order: local → global → built-in (later overrides earlier). Supports both JSONC (with comments) and JSON formats.
+Merge order: local → global → built-in (later configs override earlier). Key behaviors:
+- Platform-level: New platforms added; existing merged with override prefs (e.g., rootDir, aliases replaced).
+- Subdirs arrays: Merged by `universalDir` key—preserves base order, overrides specific fields (platformDir, exts, transformations) if defined in override, adds new entries at end.
+- Validation: After each load/merge, configs strictly validated (req fields like rootDir/name/platformDir/universalDir, types, no duplicate universalDirs per platform). Invalid configs throw detailed errors (e.g., "Platform 'cursor': missing rootDir").
+Supports JSONC (comments) and JSON formats; fallback to JSON if both present.
 
 This enables project-specific changes like disabling platforms, altering root directories/subdirs, or adding extensions/transformations without forking the CLI.
 
@@ -27,10 +31,13 @@ Each platform entry in `platforms.jsonc` has the shape:
 - `name` (string): Human‑readable display name.
 - `rootDir` (string): Platform root directory (e.g. `.cursor`, `.claude`).
 - `rootFile?` (string): Optional root file at the project root (e.g. `CLAUDE.md`, `QWEN.md`).
-- `subdirs` (object): Map from universal subdir keys (`rules`, `commands`, `agents`, `skills`) to:
-  - `path` (string): Directory path under `rootDir`.
-  - `exts?` (string[]): Allowed workspace file extensions. When omitted, all extensions are allowed; when an empty array, no extensions are allowed.
-  - `transformations?` (array): Optional extension conversion rules with `{ packageExt, workspaceExt }` entries that describe how files convert between registry and workspace formats.
+- `subdirs` (array of objects): Defines mappings from universal subdir names (standard like `rules`, `commands`, `agents`, `skills`, or custom extensions) to platform-specific paths and rules. Each entry:
+  - `universalDir` (string): Universal subdirectory name (e.g., `rules`, `custom-tools`).
+  - `platformDir` (string): Platform-specific path under `rootDir` (e.g., `rules`, `droids`, `workflows`).
+  - `exts?` (string[]): Allowed workspace file extensions (omit for all, empty array for none).
+  - `transformations?` (array of `{ packageExt: string, workspaceExt: string }`): Rules for converting extensions between registry/package format and workspace format (e.g., `.md` → `.mdc` for Cursor rules).
+  
+  This array format enables full extensibility: add custom universal subdirs without CLI changes. Duplicates or invalid entries are validated and logged during config load/merge.
 - `aliases?` (string[]): Optional CLI aliases that resolve to this platform.
 - `enabled?` (boolean): When `false`, the platform exists in config but is treated as disabled.
 
@@ -62,11 +69,13 @@ Each platform entry in `platforms.jsonc` has the shape:
 Each platform defines:
 - A **root directory** (e.g. `.cursor`, `.claude`, `.gemini`).
 - Optional **root file** at the project root (e.g. `CLAUDE.md`, `GEMINI.md`, `QWEN.md`, `WARP.md`, or the shared `AGENTS.md`).
-- A set of **universal subdirectories**, which describe where different kinds of content live:
-  - `rules` – steering/rules files for a platform.
-  - `commands` – command/workflow prompt files.
+- **Universal subdirectories**: A dynamic set (discovered from all platform configs via `getAllUniversalSubdirs()`) describing content locations. Standard built-in ones include:
+  - `rules` – steering/rules files.
+  - `commands` – command/workflow prompts.
   - `agents` – agent definitions.
-  - `skills` – skill or tool definitions.
+  - `skills` – skill/tool definitions.
+  
+  Custom universal subdirs (e.g., `memories`, `tools`) can be defined in `platforms.jsonc` for full extensibility. Each platform declares which universal subdirs it supports, with per-subdir extension filters and transformations.
 
 For each subdirectory, the platform definition specifies:
 - **Path** under the platform root (e.g. `.cursor/rules`, `.factory/droids`, `.kilo/workflows`).
@@ -116,14 +125,16 @@ The result is:
 The platforms system provides helpers for:
 
 - **Getting directory paths** for each platform:
-  - For each enabled platform, callers can retrieve:
-    - The `rules` directory path.
-    - Optional `commands`, `agents`, and `skills` directory paths.
-    - Optional `rootFile` path, if the platform defines one.
+  - For each enabled platform, callers can retrieve a map of:
+    - `rootDir`: Full path to platform root.
+    - `rootFile?`: Full path to optional root file.
+    - `subdirs`: Record of all supported universal subdirs (standard + custom) to their full directory paths (e.g., `rules` → `.cursor/rules`).
+  - Single-platform variant available for targeted access.
+  - Paths are dynamically built from config, supporting custom subdirs.
 - **Creating missing platform directories**:
   - Given a list of platform ids and a working directory:
-    - Ensures the `rules` directory exists for each platform.
-    - Creates directories as needed and returns a list of newly created paths.
+    - Ensures all configured subdirectories (standard + custom) exist for each platform.
+    - Creates directories as needed and returns relative paths of newly created ones (with debug logging).
 
 These helpers allow commands like `opkg init` or platform setup flows to create the necessary folder structure for one or more platforms.
 
@@ -132,7 +143,7 @@ These helpers allow commands like `opkg init` or platform setup flows to create 
 ### Validating platform structure
 
 For a given platform and working directory, the system can validate:
-- That the `rules` directory exists.
+- That all configured subdirectories exist.
 - That the configured root file (if any) exists.
 
 It returns:
@@ -146,9 +157,9 @@ This is used by higher‑level commands to surface actionable warnings when a pl
 
 ### File extension behavior
 
-For each platform’s `rules` subdir, the system exposes:
-- The **set of file extensions** that are considered valid rules files for that platform.
-  - Example: Cursor rules accept `.mdc` and `.md`, Gemini commands accept `.toml`, etc.
+For any universal subdir on a platform (via `getPlatformSubdirExts(platform, universalSubdir)`), the system exposes the set of allowed file extensions.
+- Examples: Cursor `rules` accepts `.mdc`/`.md`; other subdirs/platforms may restrict or transform extensions.
+- Used for filtering during discovery, install/uninstall, and validation.
 - Higher‑level discovery utilities rely on this to:
   - Filter files by extension when searching for platform content.
   - Decide which files are safe to manage or delete during uninstall/cleanup operations.

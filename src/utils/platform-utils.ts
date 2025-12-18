@@ -8,7 +8,7 @@ import { getPathLeaf } from './path-normalization.js';
 import { FILE_PATTERNS } from '../constants/index.js';
 import {
   getAllPlatforms,
-  getAllRootFiles,
+  getPlatformRootFiles as getPlatformRootFileNames,
   getPlatformDefinition,
   getPlatformDirLookup,
   type Platform,
@@ -58,7 +58,7 @@ export function getAllPlatformDirs(cwd?: string): string[] {
  * @param cwd - Optional cwd for local overrides
  */
 export function getPlatformRootFiles(cwd?: string): Set<string> {
-  const rootFiles = new Set(getAllRootFiles(cwd));  // from platforms.ts, excludes AGENTS.md
+  const rootFiles = new Set(getPlatformRootFileNames(cwd));  // from platforms.ts, excludes AGENTS.md
   rootFiles.add(FILE_PATTERNS.AGENTS_MD);
   return rootFiles;
 }

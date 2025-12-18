@@ -11,7 +11,6 @@ import { getPathLeaf } from "../utils/path-normalization.js"
 import {
   DIR_PATTERNS,
   FILE_PATTERNS,
-  UNIVERSAL_SUBDIRS,
   type UniversalSubdir,
 } from "../constants/index.js"
 import { mapPlatformFileToUniversal } from "../utils/platform-mapper.js"
@@ -43,225 +42,372 @@ export interface PlatformDefinition {
   name: string
   rootDir: string
   rootFile?: string
-  subdirs: Partial<Record<UniversalSubdir, SubdirDef>>
+  subdirs: Map<string, SubdirDef>  // Map<universalDir, SubdirDef>
   aliases?: string[]
   enabled: boolean
 }
 
-// Types for JSONC config structure
+// Types for JSONC config structure (array format)
+interface SubdirConfigEntry {
+  universalDir: string   // Custom universal directory name
+  platformDir: string    // Platform-specific path
+  exts?: string[]
+  transformations?: SubdirFileTransformation[]
+}
+
 interface PlatformConfig {
   name: string
   rootDir: string
   rootFile?: string
-  subdirs: Partial<Record<string, SubdirDef>>
+  subdirs: SubdirConfigEntry[]  // Array format in config
   aliases?: string[]
   enabled?: boolean
 }
 
 type PlatformsConfig = Record<string, PlatformConfig>
 
+export interface PlatformsState {
+  config: PlatformsConfig
+  defs: Record<Platform, PlatformDefinition>
+  dirLookup: Record<string, Platform>
+  aliasLookup: Record<string, Platform>
+  universalSubdirs: Set<string>
+  rootFiles: string[]
+  allPlatforms: Platform[]
+  enabledPlatforms: Platform[]
+}
+
 /**
  * Create platform definitions from a PlatformsConfig object
+ * Converts array-based config to Map-based internal representation for O(1) lookups
+ * Assumes config is already validated.
  * @param config - The merged platforms configuration
  */
 function createPlatformDefinitions(
   config: PlatformsConfig
 ): Record<Platform, PlatformDefinition> {
-  const result: Partial<Record<Platform, PlatformDefinition>> = {}
+  const result: Record<Platform, PlatformDefinition> = {}
 
   for (const [id, cfg] of Object.entries(config)) {
     const platformId = id as Platform
+
+    const subdirsMap = new Map<string, SubdirDef>()
+    
+    for (const entry of cfg.subdirs ?? []) {
+      subdirsMap.set(entry.universalDir, {
+        path: entry.platformDir,
+        exts: entry.exts,
+        transformations: entry.transformations,
+      })
+    }
 
     result[platformId] = {
       id: platformId,
       name: cfg.name,
       rootDir: cfg.rootDir,
       rootFile: cfg.rootFile,
-      // Normalize subdirs inline
-      subdirs: (() => {
-        const subdirsNorm: Partial<Record<UniversalSubdir, SubdirDef>> = {}
-        if (cfg.subdirs) {
-          for (const [subdirKey, subdirConfig] of Object.entries(cfg.subdirs)) {
-            if (!isValidUniversalSubdir(subdirKey)) {
-              logger.warn(
-                `Invalid universal subdir key in platforms.jsonc: ${subdirKey}`
-              )
-              continue
-            }
-            if (!subdirConfig) continue
-            subdirsNorm[subdirKey as UniversalSubdir] = subdirConfig
-          }
-        }
-        return subdirsNorm
-      })(),
+      subdirs: subdirsMap,
       aliases: cfg.aliases,
       enabled: cfg.enabled !== false,
     }
   }
 
-  return result as Record<Platform, PlatformDefinition>
+  return result
 }
 
 const BUILT_IN_CONFIG: PlatformsConfig =
   readJsoncFileSync<PlatformsConfig>("platforms.jsonc")
 
-const GLOBAL_DIR = join(os.homedir(), ".openpackage")
-// Global config loaded lazily
-const globalConfigCache = new Map<"merged" | "defs", unknown>()
+const builtinErrors = validatePlatformsConfig(BUILT_IN_CONFIG)
+if (builtinErrors.length > 0) {
+  throw new Error(`Built-in platforms.jsonc validation failed:\n  - ${builtinErrors.join('\n  - ')}`)
+}
 
-function getGlobalMergedConfig(): PlatformsConfig {
-  if (globalConfigCache.has("merged")) {
-    return globalConfigCache.get("merged") as PlatformsConfig
+/**
+ * Merge two PlatformsConfig objects, handling per-platform fields and subdirs arrays properly.
+ * Adds new platforms from override; merges existing with override preferences.
+ */
+export function mergePlatformsConfig(base: PlatformsConfig, override: PlatformsConfig): PlatformsConfig {
+  const merged: PlatformsConfig = { ...base }
+
+  for (const [platformId, overridePlat] of Object.entries(override)) {
+    const basePlat = base[platformId]
+    if (!basePlat) {
+      merged[platformId] = overridePlat
+      continue
+    }
+
+    merged[platformId] = {
+      name: overridePlat.name ?? basePlat.name,
+      rootDir: overridePlat.rootDir ?? basePlat.rootDir,
+      rootFile: overridePlat.rootFile ?? basePlat.rootFile,
+      aliases: overridePlat.aliases ?? basePlat.aliases, // replace array
+      enabled: overridePlat.enabled ?? basePlat.enabled,
+      subdirs: (() => {
+        const baseSub = Array.isArray(basePlat.subdirs) ? basePlat.subdirs : []
+        const ovSub = Array.isArray(overridePlat.subdirs) ? overridePlat.subdirs : []
+        return mergeSubdirsConfigs(baseSub, ovSub)
+      })(),
+    }
   }
-  const globalFile =
-    readJsoncOrJson(join(GLOBAL_DIR, "platforms.jsonc")) ??
-    readJsoncOrJson(join(GLOBAL_DIR, "platforms.json"))
-  const merged = globalFile
-    ? (deepMerge(BUILT_IN_CONFIG, globalFile) as PlatformsConfig)
-    : BUILT_IN_CONFIG
-  globalConfigCache.set("merged", merged)
+
   return merged
 }
 
-export function getGlobalDefinitions(): Record<Platform, PlatformDefinition> {
-  if (globalConfigCache.has("defs")) {
-    return globalConfigCache.get("defs") as Record<Platform, PlatformDefinition>
+/**
+ * Merge subdirs arrays by universalDir.
+ * For matches, override specific fields if present.
+ * Adds new entries; preserves base order.
+ */
+function mergeSubdirsConfigs(
+  base: SubdirConfigEntry[], 
+  overrideArr: SubdirConfigEntry[]
+): SubdirConfigEntry[] {
+  const baseMap = new Map<string, SubdirConfigEntry>(
+    base.map(entry => [entry.universalDir, { ...entry }]) // shallow copy
+  )
+
+  for (const ovEntry of overrideArr) {
+    const baseEntry = baseMap.get(ovEntry.universalDir)
+    if (baseEntry) {
+      // Override if field present and defined
+      if ('platformDir' in ovEntry && ovEntry.platformDir !== undefined) {
+        baseEntry.platformDir = ovEntry.platformDir
+      }
+      if ('exts' in ovEntry && ovEntry.exts !== undefined) {
+        baseEntry.exts = ovEntry.exts
+      }
+      if ('transformations' in ovEntry && ovEntry.transformations !== undefined) {
+        baseEntry.transformations = ovEntry.transformations
+      }
+    } else {
+      baseMap.set(ovEntry.universalDir, { ...ovEntry })
+    }
   }
-  const defs = createPlatformDefinitions(getGlobalMergedConfig())
-  globalConfigCache.set("defs", defs)
-  return defs
+
+  // Preserve base order, then append new
+  const result: SubdirConfigEntry[] = []
+  for (const entry of base) {
+    result.push(baseMap.get(entry.universalDir)!)
+  }
+  for (const [key, entry] of baseMap) {
+    if (!base.some(b => b.universalDir === key)) {
+      result.push(entry)
+    }
+  }
+  return result
 }
 
-const localConfigCache = new Map<string, PlatformsConfig>()
-const localDefsCache = new Map<string, Record<Platform, PlatformDefinition>>()
-
 /**
- * Get platform definitions with local cwd overrides merged on top.
- * Caches merged config and definitions per cwd for performance.
- * @param cwd - Optional current working directory for local overrides
- * @returns Merged platform definitions
+ * Validate a PlatformsConfig object and return any validation errors.
+ * @param config - The config to validate
+ * @returns Array of error messages; empty if valid
  */
+export function validatePlatformsConfig(config: PlatformsConfig): string[] {
+  const errors: string[] = []
+
+  for (const [platformId, platConfig] of Object.entries(config)) {
+    if (!platConfig.rootDir || platConfig.rootDir.trim() === '') {
+      errors.push(`Platform '${platformId}': Missing or empty rootDir`)
+    }
+    if (!platConfig.name || platConfig.name.trim() === '') {
+      errors.push(`Platform '${platformId}': Missing or empty name`)
+    }
+
+    if (platConfig.subdirs && Array.isArray(platConfig.subdirs)) {
+      const seenUniversalDirs = new Set<string>()
+      for (let index = 0; index < platConfig.subdirs.length; index++) {
+        const entry = platConfig.subdirs[index]
+        if (!entry || typeof entry !== 'object') {
+          errors.push(`Platform '${platformId}', subdirs[${index}]: Invalid entry (must be object)`)
+          continue
+        }
+        if (!entry.universalDir || typeof entry.universalDir !== 'string' || entry.universalDir.trim() === '') {
+          errors.push(`Platform '${platformId}', subdirs[${index}].universalDir: Missing or invalid string`)
+        } else if (seenUniversalDirs.has(entry.universalDir)) {
+          errors.push(`Platform '${platformId}', subdirs[${index}]: Duplicate universalDir '${entry.universalDir}'`)
+        } else {
+          seenUniversalDirs.add(entry.universalDir)
+        }
+        if (!entry.platformDir || typeof entry.platformDir !== 'string' || entry.platformDir.trim() === '') {
+          errors.push(`Platform '${platformId}', subdirs[${index}].platformDir: Missing or invalid string`)
+        }
+        if (entry.exts !== undefined && (!Array.isArray(entry.exts) || entry.exts.some((e: any) => typeof e !== 'string'))) {
+          errors.push(`Platform '${platformId}', subdirs[${index}].exts: Must be array of strings or undefined`)
+        }
+        if (entry.transformations !== undefined) {
+          if (!Array.isArray(entry.transformations)) {
+            errors.push(`Platform '${platformId}', subdirs[${index}].transformations: Must be array or undefined`)
+          } else {
+            entry.transformations.forEach((t: any, tIndex: number) => {
+              if (!t || typeof t !== 'object' || typeof t.packageExt !== 'string' || typeof t.workspaceExt !== 'string') {
+                errors.push(`Platform '${platformId}', subdirs[${index}].transformations[${tIndex}]: Invalid {packageExt: string, workspaceExt: string}`)
+              }
+            })
+          }
+        }
+      }
+    } else if (platConfig.subdirs !== undefined) {
+      errors.push(`Platform '${platformId}': subdirs must be array or undefined`)
+    }
+
+    if (platConfig.aliases !== undefined && (!Array.isArray(platConfig.aliases) || platConfig.aliases.some((a: any) => typeof a !== 'string'))) {
+      errors.push(`Platform '${platformId}': aliases must be array of strings or undefined`)
+    }
+    if (typeof platConfig.enabled !== 'boolean' && platConfig.enabled !== undefined) {
+      errors.push(`Platform '${platformId}': enabled must be boolean or undefined`)
+    }
+  }
+
+  return errors
+}
+
+const GLOBAL_DIR = join(os.homedir(), ".openpackage")
+
+const stateCache = new Map<string | null, PlatformsState>()
+
+function getPlatformsState(cwd?: string | null): PlatformsState {
+  const key = cwd ?? null
+  if (stateCache.has(key)) {
+    return stateCache.get(key)!
+  }
+
+  let config: PlatformsConfig
+
+  if (key === null) {
+    // Global
+    const globalFile =
+      readJsoncOrJson(join(GLOBAL_DIR, "platforms.jsonc")) ??
+      readJsoncOrJson(join(GLOBAL_DIR, "platforms.json")) as PlatformsConfig | undefined
+    config = globalFile
+      ? mergePlatformsConfig(BUILT_IN_CONFIG, globalFile)
+      : BUILT_IN_CONFIG
+
+    const errors = validatePlatformsConfig(config)
+    if (errors.length > 0) {
+      throw new Error(`Global platforms config validation failed:\n  - ${errors.join('\n  - ')}`)
+    }
+  } else {
+    // Local
+    const globalState = getPlatformsState(null)
+    const globalConfig = globalState.config
+
+    const localDir = join(key, DIR_PATTERNS.OPENPACKAGE)
+    const localFile =
+      readJsoncOrJson(join(localDir, "platforms.jsonc")) ??
+      readJsoncOrJson(join(localDir, "platforms.json")) as PlatformsConfig | undefined
+    config = localFile
+      ? mergePlatformsConfig(globalConfig, localFile)
+      : globalConfig
+
+    const errors = validatePlatformsConfig(config)
+    if (errors.length > 0) {
+      throw new Error(`Local platforms config validation failed in ${key}:\n  - ${errors.join('\n  - ')}`)
+    }
+  }
+
+  // Create definitions and compute state
+  const defs = createPlatformDefinitions(config)
+
+  const dirLookup: Record<string, Platform> = {}
+  const aliasLookup: Record<string, Platform> = {}
+  const universalSubdirs = new Set<string>()
+  const rootFiles: string[] = []
+  const allPlatforms: Platform[] = []
+
+  for (const def of Object.values(defs)) {
+    allPlatforms.push(def.id)
+    dirLookup[def.rootDir] = def.id
+    for (const alias of def.aliases ?? []) {
+      aliasLookup[alias.toLowerCase()] = def.id
+    }
+    for (const univ of def.subdirs.keys()) {
+      universalSubdirs.add(univ)
+    }
+    if (def.rootFile) {
+      rootFiles.push(def.rootFile)
+    }
+  }
+
+  const enabledPlatforms = allPlatforms.filter(p => defs[p].enabled)
+
+  const state: PlatformsState = {
+    config,
+    defs,
+    dirLookup,
+    aliasLookup,
+    universalSubdirs,
+    rootFiles,
+    allPlatforms,
+    enabledPlatforms
+  }
+
+  stateCache.set(key, state)
+  return state
+}
+
 export function getPlatformDefinitions(
   cwd?: string
 ): Record<Platform, PlatformDefinition> {
-  if (cwd === undefined) {
-    return getGlobalDefinitions()
-  }
-
-  if (localDefsCache.has(cwd)) {
-    return localDefsCache.get(cwd)!
-  }
-
-  let mergedConfig: PlatformsConfig
-  const cachedConfig = localConfigCache.get(cwd)
-  if (cachedConfig !== undefined) {
-    mergedConfig = cachedConfig
-  } else {
-    const localDir = join(cwd, DIR_PATTERNS.OPENPACKAGE)
-    const localFile =
-      readJsoncOrJson(join(localDir, "platforms.jsonc")) ??
-      readJsoncOrJson(join(localDir, "platforms.json"))
-    mergedConfig = localFile
-      ? (deepMerge(getGlobalMergedConfig(), localFile) as PlatformsConfig)
-      : getGlobalMergedConfig()
-    localConfigCache.set(cwd, mergedConfig)
-  }
-
-  const defs = createPlatformDefinitions(mergedConfig)
-  localDefsCache.set(cwd, defs)
-
-  return defs
+  return getPlatformsState(cwd).defs
 }
-
-// Backwards compatibility alias (deprecated - use getPlatformDefinitions() instead)
-export const PLATFORM_DEFINITIONS = getGlobalDefinitions()
 
 /**
- * Get all platform IDs (including disabled)
+ * Get all unique universal subdirectory names defined across all platforms.
+ * This dynamically discovers what subdirs exist based on the loaded platform configs.
+ * @param cwd - Optional cwd for local config overrides
+ * @returns Set of all universal subdir names
  */
-export function getAllPlatformIds(cwd?: string): Platform[] {
-  return Object.keys(getPlatformDefinitions(cwd)) as Platform[]
+export function getAllUniversalSubdirs(cwd?: string): Set<string> {
+  return new Set(getPlatformsState(cwd).universalSubdirs)
 }
 
-// Global versions for backwards compatibility and non-cwd uses
-export const ALL_PLATFORMS: Platform[] = getAllPlatformIds()
-
-const dirLookupCache = new Map<string | undefined, Record<string, Platform>>()
+/**
+ * Check if a string is a recognized universal subdir.
+ * @param subdirName - Name to check
+ * @param cwd - Optional cwd for local config overrides
+ * @returns true if the subdir is defined in any platform
+ */
+export function isKnownUniversalSubdir(subdirName: string, cwd?: string): boolean {
+  return getPlatformsState(cwd).universalSubdirs.has(subdirName)
+}
 
 /**
  * Get lookup map from platform directory name to platform ID.
- * Cached per cwd for performance.
  */
 export function getPlatformDirLookup(cwd?: string): Record<string, Platform> {
-  const key = cwd ?? "global"
-  if (dirLookupCache.has(key)) {
-    return dirLookupCache.get(key)!
-  }
-  const defs = getPlatformDefinitions(cwd)
-  const map: Record<string, Platform> = {}
-  for (const def of Object.values(defs)) {
-    map[def.rootDir] = def.id
-  }
-  dirLookupCache.set(key, map)
-  return map
+  return getPlatformsState(cwd).dirLookup
 }
-
-// Deprecated global lookup removed: use getPlatformDirLookup(cwd?)
-
-const aliasLookupCache = new Map<string | undefined, Record<string, Platform>>()
 
 /**
  * Get lookup map from platform alias to platform ID.
- * Cached per cwd for performance.
  */
 export function getPlatformAliasLookup(cwd?: string): Record<string, Platform> {
-  const key = cwd ?? "global"
-  if (aliasLookupCache.has(key)) {
-    return aliasLookupCache.get(key)!
-  }
-  const defs = getPlatformDefinitions(cwd)
-  const map: Record<string, Platform> = {}
-  for (const def of Object.values(defs)) {
-    for (const alias of def.aliases ?? []) {
-      map[alias.toLowerCase()] = def.id
-    }
-  }
-  aliasLookupCache.set(key, map)
-  return map
+  return getPlatformsState(cwd).aliasLookup
 }
-
-// Deprecated global lookup removed: use getPlatformAliasLookup(cwd?)
 
 /**
  * Get all known platform root files.
  */
 export function getPlatformRootFiles(cwd?: string): string[] {
-  const defs = getPlatformDefinitions(cwd)
-  return Object.values(defs)
-    .map((def) => def.rootFile)
-    .filter((file): file is string => typeof file === "string")
+  return getPlatformsState(cwd).rootFiles
 }
 
-// Backwards compatibility (deprecated)
-export const PLATFORM_ROOT_FILES = Object.freeze(getPlatformRootFiles())
 
-// Legacy type definitions for compatibility
-export type PlatformName = Platform
-export type PlatformCategory = string
 
 export interface PlatformDetectionResult {
   name: Platform
   detected: boolean
 }
 
+export type PlatformPaths = {
+  rootDir: string
+  rootFile?: string
+  subdirs: Record<string, string> // universalDir -> full directory path
+}
+
 export interface PlatformDirectoryPaths {
-  [platformName: string]: {
-    rulesDir: string
-    rootFile?: string
-    commandsDir?: string
-    agentsDir?: string
-    skillsDir?: string
-  }
+  [platformName: string]: PlatformPaths
 }
 
 /**
@@ -272,8 +418,8 @@ export function getPlatformDefinition(
   name: Platform,
   cwd?: string
 ): PlatformDefinition {
-  const defs = getPlatformDefinitions(cwd)
-  const def = defs[name]
+  const state = getPlatformsState(cwd)
+  const def = state.defs[name]
   if (!def) {
     throw new Error(`Unknown platform: ${name}`)
   }
@@ -287,13 +433,11 @@ export function getAllPlatforms(
   options?: { includeDisabled?: boolean },
   cwd?: string
 ): Platform[] {
-  const defs = getPlatformDefinitions(cwd)
-  const ids = Object.keys(defs) as Platform[]
-
+  const state = getPlatformsState(cwd)
   if (options?.includeDisabled) {
-    return ids
+    return state.allPlatforms
   }
-  return ids.filter((platform) => defs[platform].enabled)
+  return state.enabledPlatforms
 }
 
 export function resolvePlatformName(
@@ -304,66 +448,62 @@ export function resolvePlatformName(
     return undefined
   }
 
-  const defs = getPlatformDefinitions(cwd)
+  const state = getPlatformsState(cwd)
   const normalized = input.toLowerCase()
-  if (normalized in defs) {
+  if (normalized in state.defs) {
     return normalized as Platform
   }
 
-  const aliasLookup = getPlatformAliasLookup(cwd)
-  return aliasLookup[normalized]
+  return state.aliasLookup[normalized]
 }
 
-export function getAllRootFiles(cwd?: string): string[] {
-  return getPlatformRootFiles(cwd)
+/**
+ * Internal helper to build directory paths for a single platform definition.
+ */
+function buildDirectoryPaths(
+  definition: PlatformDefinition, 
+  cwd: string
+): PlatformPaths {
+  const subdirsPaths: Record<string, string> = {}
+  for (const [universalDir, subdirDef] of definition.subdirs.entries()) {
+    subdirsPaths[universalDir] = join(cwd, definition.rootDir, subdirDef.path)
+  }
+
+  return {
+    rootDir: join(cwd, definition.rootDir),
+    rootFile: definition.rootFile ? join(cwd, definition.rootFile) : undefined,
+    subdirs: subdirsPaths
+  }
 }
 
 /**
  * Get platform directory paths for a given working directory
  */
 export function getPlatformDirectoryPaths(cwd: string): PlatformDirectoryPaths {
+  const state = getPlatformsState(cwd)
   const paths: PlatformDirectoryPaths = {}
 
-  for (const platform of getAllPlatforms(undefined, cwd)) {
-    const definition = getPlatformDefinition(platform, cwd)
-    const rulesSubdir = definition.subdirs[UNIVERSAL_SUBDIRS.RULES]
-    paths[platform] = {
-      rulesDir: join(cwd, definition.rootDir, rulesSubdir?.path || ""),
-    }
-
-    if (definition.rootFile) {
-      paths[platform].rootFile = join(cwd, definition.rootFile)
-    }
-
-    const commandsSubdir = definition.subdirs[UNIVERSAL_SUBDIRS.COMMANDS]
-    if (commandsSubdir) {
-      paths[platform].commandsDir = join(
-        cwd,
-        definition.rootDir,
-        commandsSubdir.path
-      )
-    }
-
-    const agentsSubdir = definition.subdirs[UNIVERSAL_SUBDIRS.AGENTS]
-    if (agentsSubdir) {
-      paths[platform].agentsDir = join(
-        cwd,
-        definition.rootDir,
-        agentsSubdir.path
-      )
-    }
-
-    const skillsSubdir = definition.subdirs[UNIVERSAL_SUBDIRS.SKILLS]
-    if (skillsSubdir) {
-      paths[platform].skillsDir = join(
-        cwd,
-        definition.rootDir,
-        skillsSubdir.path
-      )
-    }
+  for (const platform of state.enabledPlatforms) {
+    paths[platform] = buildDirectoryPaths(state.defs[platform], cwd)
   }
 
   return paths
+}
+
+/**
+ * Get directory paths for a specific platform.
+ * @throws Error if platform unknown
+ */
+export function getPlatformDirectoryPathsForPlatform(
+  platform: Platform,
+  cwd: string
+): PlatformPaths {
+  const state = getPlatformsState(cwd)
+  const definition = state.defs[platform]
+  if (!definition) {
+    throw new Error(`Unknown platform: ${platform}`)
+  }
+  return buildDirectoryPaths(definition, cwd)
 }
 
 /**
@@ -374,9 +514,10 @@ export function getPlatformDirectoryPaths(cwd: string): PlatformDirectoryPaths {
 export async function detectAllPlatforms(
   cwd: string
 ): Promise<PlatformDetectionResult[]> {
-  const detectionPromises = getAllPlatforms(undefined, cwd).map(
+  const state = getPlatformsState(cwd)
+  const detectionPromises = state.enabledPlatforms.map(
     async (platform) => {
-      const definition = getPlatformDefinition(platform, cwd)
+      const definition = state.defs[platform]
       const rootDirPath = join(cwd, definition.rootDir)
 
       // Detected if root dir exists OR unique root file exists (skip AGENTS.md)
@@ -418,23 +559,28 @@ export async function createPlatformDirectories(
   cwd: string,
   platforms: Platform[]
 ): Promise<string[]> {
+  const state = getPlatformsState(cwd)
   const created: string[] = []
-  const paths = getPlatformDirectoryPaths(cwd)
 
   for (const platform of platforms) {
-    const platformPaths = paths[platform]
-
-    try {
-      const dirExists = await exists(platformPaths.rulesDir)
-      if (!dirExists) {
-        await ensureDir(platformPaths.rulesDir)
-        created.push(relative(cwd, platformPaths.rulesDir))
-        logger.debug(`Created platform directory: ${platformPaths.rulesDir}`)
+    const definition = state.defs[platform]
+    if (!definition) {
+      throw new Error(`Unknown platform: ${platform}`)
+    }
+    for (const [universalDir, subdirDef] of definition.subdirs.entries()) {
+      const dirPath = join(cwd, definition.rootDir, subdirDef.path)
+      try {
+        const dirExists = await exists(dirPath)
+        if (!dirExists) {
+          await ensureDir(dirPath)
+          created.push(relative(cwd, dirPath))
+          logger.debug(`Created platform directory ${universalDir}: ${dirPath}`)
+        }
+      } catch (error) {
+        logger.error(
+          `Failed to create platform directory ${universalDir} (${dirPath}): ${error}`
+        )
       }
-    } catch (error) {
-      logger.error(
-        `Failed to create platform directory ${platformPaths.rulesDir}: ${error}`
-      )
     }
   }
 
@@ -448,20 +594,27 @@ export async function validatePlatformStructure(
   cwd: string,
   platform: Platform
 ): Promise<{ valid: boolean; issues: string[] }> {
-  const issues: string[] = []
-  const definition = getPlatformDefinition(platform, cwd)
-  const paths = getPlatformDirectoryPaths(cwd)
-  const platformPaths = paths[platform]
-
-  // Check if rules directory exists
-  if (!(await exists(platformPaths.rulesDir))) {
-    issues.push(`Rules directory does not exist: ${platformPaths.rulesDir}`)
+  const state = getPlatformsState(cwd)
+  const definition = state.defs[platform]
+  if (!definition) {
+    throw new Error(`Unknown platform: ${platform}`)
   }
 
-  // Check root file for platforms that require it
-  if (definition.rootFile && platformPaths.rootFile) {
-    if (!(await exists(platformPaths.rootFile))) {
-      issues.push(`Root file does not exist: ${platformPaths.rootFile}`)
+  const issues: string[] = []
+
+  // Check root file
+  if (definition.rootFile) {
+    const rootFilePath = join(cwd, definition.rootFile)
+    if (!(await exists(rootFilePath))) {
+      issues.push(`Root file does not exist: ${rootFilePath}`)
+    }
+  }
+
+  // Check all subdirs directories exist
+  for (const [universalDir, subdirDef] of definition.subdirs.entries()) {
+    const dirPath = join(cwd, definition.rootDir, subdirDef.path)
+    if (!(await exists(dirPath))) {
+      issues.push(`${universalDir} directory does not exist: ${dirPath}`)
     }
   }
 
@@ -472,14 +625,26 @@ export async function validatePlatformStructure(
 }
 
 /**
- * Get rules directory file patterns for a specific platform
+ * Get file extensions allowed in a specific universal subdir for a platform
+ * @param universalSubdir - The universal subdirectory name (e.g., 'rules', 'commands', or custom)
+ * @returns Allowed extensions or empty array if subdir not supported
  */
-export function getPlatformRulesDirFilePatterns(
+export function getPlatformSubdirExts(
   platform: Platform,
+  universalSubdir: string,
   cwd?: string
 ): string[] {
-  const definition = getPlatformDefinition(platform, cwd)
-  return definition.subdirs[UNIVERSAL_SUBDIRS.RULES]?.exts || []
+  const state = getPlatformsState(cwd)
+  const definition = state.defs[platform]
+  if (!definition) {
+    throw new Error(`Unknown platform: ${platform}`)
+  }
+  const subdirDef = definition.subdirs.get(universalSubdir)
+  if (!subdirDef) {
+    logger.warn(`Platform ${platform} does not support universal subdir '${universalSubdir}'`)
+    return []
+  }
+  return subdirDef.exts || []
 }
 
 /**
@@ -489,34 +654,16 @@ export function getPlatformUniversalSubdirs(
   cwd: string,
   platform: Platform
 ): Array<{ dir: string; label: string; leaf: string }> {
-  const paths = getPlatformDirectoryPaths(cwd)
-  const platformPaths = paths[platform]
+  const paths = getPlatformDirectoryPathsForPlatform(platform, cwd)
   const subdirs: Array<{ dir: string; label: string; leaf: string }> = []
 
-  if (platformPaths.rulesDir)
+  for (const [label, dir] of Object.entries(paths.subdirs)) {
     subdirs.push({
-      dir: platformPaths.rulesDir,
-      label: UNIVERSAL_SUBDIRS.RULES,
-      leaf: getPathLeaf(platformPaths.rulesDir),
+      dir,
+      label,
+      leaf: getPathLeaf(dir),
     })
-  if (platformPaths.commandsDir)
-    subdirs.push({
-      dir: platformPaths.commandsDir,
-      label: UNIVERSAL_SUBDIRS.COMMANDS,
-      leaf: getPathLeaf(platformPaths.commandsDir),
-    })
-  if (platformPaths.agentsDir)
-    subdirs.push({
-      dir: platformPaths.agentsDir,
-      label: UNIVERSAL_SUBDIRS.AGENTS,
-      leaf: getPathLeaf(platformPaths.agentsDir),
-    })
-  if (platformPaths.skillsDir)
-    subdirs.push({
-      dir: platformPaths.skillsDir,
-      label: UNIVERSAL_SUBDIRS.SKILLS,
-      leaf: getPathLeaf(platformPaths.skillsDir),
-    })
+  }
 
   return subdirs
 }
@@ -524,25 +671,19 @@ export function getPlatformUniversalSubdirs(
 /**
  * Check if a normalized path represents a universal subdir
  */
-export function isUniversalSubdirPath(normalizedPath: string): boolean {
-  return Object.values(UNIVERSAL_SUBDIRS).some((subdir) => {
-    return (
+export function isUniversalSubdirPath(normalizedPath: string, cwd?: string): boolean {
+  const state = getPlatformsState(cwd)
+  for (const subdir of state.universalSubdirs) {
+    if (
       normalizedPath.startsWith(`${subdir}/`) ||
       normalizedPath === subdir ||
       normalizedPath.startsWith(`${DIR_PATTERNS.OPENPACKAGE}/${subdir}/`) ||
       normalizedPath === `${DIR_PATTERNS.OPENPACKAGE}/${subdir}`
-    )
-  })
-}
-
-/**
- * Check if a subKey is a valid universal subdir
- * Used for validating subdir keys before processing
- */
-export function isValidUniversalSubdir(subKey: string): boolean {
-  return Object.values(UNIVERSAL_SUBDIRS).includes(
-    subKey as (typeof UNIVERSAL_SUBDIRS)[keyof typeof UNIVERSAL_SUBDIRS]
-  )
+    ) {
+      return true
+    }
+  }
+  return false
 }
 
 /**
@@ -553,8 +694,7 @@ export function isPlatformId(
   cwd?: string
 ): value is Platform {
   if (!value) return false
-  const defs = getPlatformDefinitions(cwd)
-  return value in defs
+  return value in getPlatformsState(cwd).defs
 }
 
 /**

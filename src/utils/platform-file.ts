@@ -7,11 +7,12 @@ import { basename } from 'path';
 import {
   getPlatformDefinition,
   getAllPlatforms,
+  getAllUniversalSubdirs,
   isPlatformId,
   getWorkspaceExt,
   type Platform
 } from '../core/platforms.js';
-import { DIR_PATTERNS, FILE_PATTERNS, UNIVERSAL_SUBDIRS, type UniversalSubdir } from '../constants/index.js';
+import { DIR_PATTERNS, FILE_PATTERNS, type UniversalSubdir } from '../constants/index.js';
 import { getFirstPathComponent, parsePathWithPrefix, normalizePathForProcessing } from './path-normalization.js';
 
 /**
@@ -23,10 +24,10 @@ import { getFirstPathComponent, parsePathWithPrefix, normalizePathForProcessing 
  */
 export function parseUniversalPath(
   path: string,
-  options: { allowPlatformSuffix?: boolean } = {}
-): { universalSubdir: UniversalSubdir; relPath: string; platformSuffix?: string } | null {
-  // Check if path starts with universal subdirs
-  const universalSubdirs = Object.values(UNIVERSAL_SUBDIRS) as UniversalSubdir[];
+  options: { allowPlatformSuffix?: boolean; cwd?: string } = {}
+): { universalSubdir: string; relPath: string; platformSuffix?: string } | null {
+  // Check if path starts with universal subdirs (dynamically discovered)
+  const universalSubdirs = getAllUniversalSubdirs(options.cwd);
   const knownPlatforms = getAllPlatforms({ includeDisabled: true }) as readonly Platform[];
   const normalized = normalizePathForProcessing(path);
   const withoutPrefix = normalized.startsWith(`${DIR_PATTERNS.OPENPACKAGE}/`)
@@ -92,12 +93,12 @@ export function parseUniversalPath(
  * @param platform - Target platform
  * @returns Platform-specific filename like "auth.mdc"
  */
-export function getPlatformSpecificFilename(universalPath: string, platform: Platform): string {
+export function getPlatformSpecificFilename(universalPath: string, platform: Platform, cwd?: string): string {
   const universalSubdir = getFirstPathComponent(universalPath);
   const registryFileName = basename(universalPath);
 
-  const platformDef = getPlatformDefinition(platform);
-  const subdirDef = platformDef.subdirs[universalSubdir as keyof typeof platformDef.subdirs];
+  const platformDef = getPlatformDefinition(platform, cwd);
+  const subdirDef = platformDef.subdirs.get(universalSubdir);
 
   if (!subdirDef) {
     // Fallback to original filename if subdir not supported by platform
@@ -127,7 +128,7 @@ export function getPlatformSpecificFilename(universalPath: string, platform: Pla
  */
 export async function getPlatformSpecificPath(
   cwd: string,
-  universalSubdir: UniversalSubdir,
+  universalSubdir: string,
   relPath: string,
   platform: Platform
 ): Promise<{ absDir: string; absFile: string }> {

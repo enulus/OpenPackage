@@ -3,13 +3,15 @@ import {
   getPlatformDefinition,
   getDetectedPlatforms,
   getAllPlatforms,
+  getPlatformDirectoryPathsForPlatform,
   getWorkspaceExt,
   getPackageExt,
   isExtAllowed,
-  type Platform
+  type Platform,
+  type PlatformPaths
 } from '../core/platforms.js';
 import { logger } from './logger.js';
-import { UNIVERSAL_SUBDIRS, type UniversalSubdir } from '../constants/index.js';
+import { type UniversalSubdir } from '../constants/index.js';
 import { normalizePathForProcessing, findSubpathIndex } from './path-normalization.js';
 
 /**
@@ -33,12 +35,12 @@ export function normalizePlatforms(platforms?: string[]): string[] | undefined {
  */
 export function mapUniversalToPlatform(
   platform: Platform,
-  subdir: UniversalSubdir,
+  subdir: string,
   relPath: string,
   cwd?: string
 ): { absDir: string; absFile: string } {
   const definition = getPlatformDefinition(platform, cwd);
-  const subdirDef = definition.subdirs[subdir];
+  const subdirDef = definition.subdirs.get(subdir);
 
   if (!subdirDef) {
     throw new Error(`Platform ${platform} does not support subdir ${subdir}`);
@@ -72,16 +74,17 @@ export function mapUniversalToPlatform(
 export function mapPlatformFileToUniversal(
   absPath: string,
   cwd = process.cwd()
-): { platform: Platform; subdir: UniversalSubdir; relPath: string } | null {
+): { platform: Platform; subdir: string; relPath: string } | null {
   const normalizedPath = normalizePathForProcessing(absPath);
 
+
   // Check each platform
-  for (const platform of getAllPlatforms({ includeDisabled: true })) {
+  for (const platform of getAllPlatforms({ includeDisabled: true }, cwd)) {
     const definition = getPlatformDefinition(platform, cwd);
 
     // Check each subdir in this platform
-    for (const [subdirName, subdirDef] of Object.entries(definition.subdirs)) {
-      const subdir = subdirName as UniversalSubdir;
+    for (const [subdirName, subdirDef] of definition.subdirs.entries()) {
+      const subdir = subdirName;
       const platformSubdirPath = join(definition.rootDir, subdirDef.path);
 
       // Check if the path contains this platform subdir
@@ -144,34 +147,13 @@ export async function resolveInstallTargets(
 
 /**
  * Get all platform subdirectories for a given platform and working directory
+ * Returns dynamic subdirs map for extensibility with custom universal subdirs
  */
 export function getAllPlatformSubdirs(
   platform: Platform,
   cwd: string
-): { rulesDir: string; commandsDir?: string; agentsDir?: string; rootDir: string } {
-  const definition = getPlatformDefinition(platform);
-  const rulesSubdir = definition.subdirs[UNIVERSAL_SUBDIRS.RULES];
-
-  const result: any = {
-    rootDir: join(cwd, definition.rootDir),
-    rulesDir: join(cwd, definition.rootDir, rulesSubdir?.path || '')
-  };
-
-  if (definition.rootFile) {
-    result.rootFile = join(cwd, definition.rootFile);
-  }
-
-  const commandsSubdir = definition.subdirs[UNIVERSAL_SUBDIRS.COMMANDS];
-  if (commandsSubdir) {
-    result.commandsDir = join(cwd, definition.rootDir, commandsSubdir.path);
-  }
-
-  const agentsSubdir = definition.subdirs[UNIVERSAL_SUBDIRS.AGENTS];
-  if (agentsSubdir) {
-    result.agentsDir = join(cwd, definition.rootDir, agentsSubdir.path);
-  }
-
-  return result;
+): PlatformPaths {
+  return getPlatformDirectoryPathsForPlatform(platform, cwd)
 }
 
 /**

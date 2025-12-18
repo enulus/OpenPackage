@@ -34,7 +34,7 @@ export function applyPlatformSpecificPaths(
     }
 
     const definition = getPlatformDefinition(mapping.platform);
-    const subdirDef = definition.subdirs[mapping.subdir];
+    const subdirDef = definition.subdirs.get(mapping.subdir);
     if (!subdirDef?.path) {
       continue;
     }

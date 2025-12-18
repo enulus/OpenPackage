@@ -1,4 +1,6 @@
 import { normalizeRegistryPath } from './registry-entry-filter.js';
+import { DIR_PATTERNS } from '../constants/index.js';
+import { getAllUniversalSubdirs } from '../core/platforms.js';
 
 /**
  * Commander option parser for comma-separated registry paths.
@@ -43,13 +45,12 @@ export function buildRequestedPaths(
     ...(specPath ? [specPath] : [])
   ]);
 }
-import { DIR_PATTERNS, UNIVERSAL_SUBDIRS } from '../constants/index.js';
 
-export function formatRegistryPathForDisplay(registryPath: string): string {
-  const universalValues: string[] = Object.values(UNIVERSAL_SUBDIRS as Record<string, string>);
+export function formatRegistryPathForDisplay(registryPath: string, cwd?: string): string {
+  const universalSubdirs = getAllUniversalSubdirs(cwd);
   const firstComponent = registryPath.split('/')[0];
 
-  if (firstComponent && universalValues.includes(firstComponent)) {
+  if (firstComponent && universalSubdirs.has(firstComponent)) {
     return `${DIR_PATTERNS.OPENPACKAGE}/${registryPath}`;
   }
 
