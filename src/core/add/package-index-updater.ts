@@ -246,7 +246,8 @@ async function buildExactFileMapping(
         const { absFile } = mapUniversalToPlatform(
           parsed.platformSuffix,
           parsed.universalSubdir as any,
-          parsed.relPath
+          parsed.relPath,
+          cwd
         );
         const baseKey = `${parsed.universalSubdir}/${parsed.relPath}`;
         const set = platformSpecificTargetsByBase.get(baseKey) ?? new Set<string>();
@@ -276,7 +277,8 @@ async function buildExactFileMapping(
           const { absFile } = mapUniversalToPlatform(
             parsed.platformSuffix,
             parsed.universalSubdir as any,
-            parsed.relPath
+            parsed.relPath,
+            cwd
           );
           const relPath = absFile.replace(/\\/g, '/');
           if (await checkExists(relPath)) {
@@ -289,7 +291,7 @@ async function buildExactFileMapping(
         // Universal registry key → only include platform paths that actually exist
         for (const platform of platforms) {
           try {
-            const { absFile } = mapUniversalToPlatform(platform, parsed.universalSubdir as any, parsed.relPath);
+            const { absFile } = mapUniversalToPlatform(platform, parsed.universalSubdir as any, parsed.relPath, cwd);
             const relPath = absFile.replace(/\\/g, '/');
             if (await checkExists(relPath)) {
               values.add(relPath);

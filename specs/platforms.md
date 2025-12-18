@@ -10,7 +10,17 @@ From a user’s perspective, the platform layer answers:
 - **Which files belong to which platform (or to the generic `ai` space)?**
 - **Which root files (e.g. `CLAUDE.md`) are active, and how are they used?**
 
-All platform definitions (names, directories, root files, and subdirectories) are centralized in `platforms.jsonc`.
+All platform definitions (names, directories, root files, and subdirectories) are centralized in the built-in `platforms.jsonc` file.
+
+### User Overrides
+The CLI supports deep-merged user configurations for platform customization:
+
+- **Global config**: `~/.openpackage/platforms.jsonc` or `~/.openpackage/platforms.json` (applies everywhere, merged after built-in).
+- **Local config**: `<workspace>/.openpackage/platforms.jsonc` or `<workspace>/.openpackage/platforms.json` (per-project, highest priority).
+
+Merge order: local → global → built-in (later overrides earlier). Supports both JSONC (with comments) and JSON formats.
+
+This enables project-specific changes like disabling platforms, altering root directories/subdirs, or adding extensions/transformations without forking the CLI.
 
 Each platform entry in `platforms.jsonc` has the shape:
 

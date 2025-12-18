@@ -2,7 +2,8 @@ import prompts from 'prompts';
 import { basename } from 'path';
 import { PackageYml } from '../types/index.js';
 import { UserCancellationError } from './errors.js';
-import { PLATFORM_DEFINITIONS } from '../core/platforms.js';
+import { getGlobalDefinitions } from '../core/platforms.js';
+import type { PlatformDefinition } from '../core/platforms.js';
 import { normalizePackageName, validatePackageName } from './package-name.js';
 import { readTextFile } from './fs.js';
 
@@ -220,7 +221,7 @@ export async function promptVersionOverwrite(packageName: string, oldVersion: st
  * Prompt user to select platform they're using
  */
 export async function promptPlatformSelection(): Promise<string[]> {
-  const choices = Object.values(PLATFORM_DEFINITIONS).map(platform => ({
+  const choices = Object.values(getGlobalDefinitions()).map((platform: PlatformDefinition) => ({
     title: platform.name,
     value: platform.id
   }));

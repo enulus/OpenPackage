@@ -1034,7 +1034,8 @@ function mapRegistryPathToTargets(
           const mapped = mapUniversalToPlatform(
             targetPlatform,
             parsed.universalSubdir as UniversalSubdir,
-            parsed.relPath
+            parsed.relPath,
+            cwd
           );
           const targetAbs = join(cwd, mapped.absFile);
           targets.push({
@@ -1053,7 +1054,7 @@ function mapRegistryPathToTargets(
     const rel = parsed ? parsed.relPath : universalInfo.relPath;
     for (const platform of platforms) {
       try {
-        const mapped = mapUniversalToPlatform(platform, universalInfo.universalSubdir as UniversalSubdir, rel);
+        const mapped = mapUniversalToPlatform(platform, universalInfo.universalSubdir as UniversalSubdir, rel, cwd);
         const targetAbs = join(cwd, mapped.absFile);
         targets.push({
           absPath: targetAbs,

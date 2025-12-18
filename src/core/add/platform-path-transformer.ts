@@ -28,7 +28,7 @@ export function applyPlatformSpecificPaths(
       continue;
     }
 
-    const mapping = mapPlatformFileToUniversal(sourcePath);
+    const mapping = mapPlatformFileToUniversal(sourcePath, cwd);
     if (!mapping) {
       continue;
     }

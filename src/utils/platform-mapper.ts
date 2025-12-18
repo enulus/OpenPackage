@@ -34,9 +34,10 @@ export function normalizePlatforms(platforms?: string[]): string[] | undefined {
 export function mapUniversalToPlatform(
   platform: Platform,
   subdir: UniversalSubdir,
-  relPath: string
+  relPath: string,
+  cwd?: string
 ): { absDir: string; absFile: string } {
-  const definition = getPlatformDefinition(platform);
+  const definition = getPlatformDefinition(platform, cwd);
   const subdirDef = definition.subdirs[subdir];
 
   if (!subdirDef) {
@@ -66,15 +67,17 @@ export function mapUniversalToPlatform(
 
 /**
  * Map a platform-specific file path back to universal subdir and relative path
+ * Supports local platform configs via cwd.
  */
 export function mapPlatformFileToUniversal(
-  absPath: string
+  absPath: string,
+  cwd = process.cwd()
 ): { platform: Platform; subdir: UniversalSubdir; relPath: string } | null {
   const normalizedPath = normalizePathForProcessing(absPath);
 
   // Check each platform
   for (const platform of getAllPlatforms({ includeDisabled: true })) {
-    const definition = getPlatformDefinition(platform);
+    const definition = getPlatformDefinition(platform, cwd);
 
     // Check each subdir in this platform
     for (const [subdirName, subdirDef] of Object.entries(definition.subdirs)) {
@@ -124,7 +127,7 @@ export async function resolveInstallTargets(
 
   for (const platform of detectedPlatforms) {
     try {
-      const { absDir, absFile } = mapUniversalToPlatform(platform, file.universalSubdir, file.relPath);
+      const { absDir, absFile } = mapUniversalToPlatform(platform, file.universalSubdir, file.relPath, cwd);
       targets.push({
         platform,
         absDir: join(cwd, absDir),

@@ -3,7 +3,7 @@
  * Handles reading and parsing JSONC files with comment support
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { parse } from 'jsonc-parser';
@@ -46,5 +46,30 @@ export function readJsoncFileSync<T = unknown>(relativePath: string): T {
     logger.error(`Failed to read JSONC file: ${relativePath}`, { error, fullPath });
     throw new Error(`Failed to read JSONC file ${relativePath}: ${error}`);
   }
+}
+
+/**
+ * Read and parse a JSONC or JSON file from an absolute path.
+ * Returns undefined if the file doesn't exist, parsing fails, or result is not a plain object.
+ * @param fullPath - Absolute path to the file
+ * @returns Parsed object or undefined
+ */
+export function readJsoncOrJson(fullPath: string): Record<string, any> | undefined {
+  if (!existsSync(fullPath)) {
+    return undefined;
+  }
+
+  try {
+    const content = readFileSync(fullPath, 'utf-8');
+    const parsed = parse(content);
+
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed !== null) {
+      return parsed as Record<string, any>;
+    }
+  } catch (error) {
+    logger.warn(`Failed to parse JSONC/JSON file ${fullPath}: ${(error as Error).message}`);
+  }
+
+  return undefined;
 }
 

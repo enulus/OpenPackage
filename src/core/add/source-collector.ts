@@ -42,7 +42,7 @@ function deriveSourceEntry(absFilePath: string, cwd: string): SourceEntry | null
   const normalizedRelPath = normalizePathForProcessing(relativePath);
 
   // Check if this is a platform-specific file (e.g., .cursor/commands/test.md)
-  const mapping = mapPlatformFileToUniversal(absFilePath);
+  const mapping = mapPlatformFileToUniversal(absFilePath, cwd);
   if (mapping) {
     // Universal content: prefix with .openpackage/
     return {

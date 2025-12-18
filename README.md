@@ -213,7 +213,6 @@ There are two ways to compose packages:
 ## Supported Platforms
 
 OpenPackage performs installation and platform sync of files for supported AI coding platforms outlined by the table below.  
-Files and paths will be automatically converted to platform specific designations during `save` and `install`. The `platforms.jsonc` file includes the specifications for all supported platforms.
 
 > [!NOTE]  
 > OpenPackage searches and includes markdown files under supported platform directories as well as any other workspace directories.
@@ -232,6 +231,12 @@ Files and paths will be automatically converted to platform specific designation
 | Roo | .roo/ | AGENTS.md | | commands/ | | |
 | Warp | .warp/ | WARP.md | | | |
 | Windsurf | .windsurf/ | | rules/ | | | |
+
+The built-in `platforms.jsonc` defines supported platforms, but can be overridden by user configs:
+- Global: `~/.openpackage/platforms.jsonc` (`.json`)
+- Local: `<project>/.openpackage/platforms.jsonc` (`.json`)
+
+Deep-merged (local > global > built-in) for per-project customization.
 
 ## Contributing
 
