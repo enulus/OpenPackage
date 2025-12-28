@@ -4,29 +4,34 @@
 
 ```text
 <workspace-root>/                              # root package (package root = cwd/)
-  .openpackage/
-    package.yml                                # root package manifest
-    package.index.yml                          # root package index
-    commands/                                  # root package universal content
-      shared-command.md
-    rules/
-      shared-rule.md
-  <root-dir>/                                  # root package root-level content (any directory)
-    workspace-helper.md
-  AGENTS.md                                    # root package root file
-  packages/                                    # nested packages directory (workspace root only)
-    alpha/                                     # nested package (package root = .openpackage/packages/alpha/)
-      .openpackage/
-        package.yml
-        package.index.yml
+  openpackage.yml                              # root package manifest (payload)
+  commands/                                    # root package universal content (payload)
+    shared-command.md
+  rules/
+    shared-rule.md
+  AGENTS.md                                    # root package root file (payload)
+  root/                                        # direct copy: copied 1:1 to workspace root (payload)
+    tools/
+      helper.sh                                # → installs to <workspace>/tools/helper.sh
+  docs/                                        # other root-level content (NOT installed)
+    README.md
+  .openpackage/                                # workspace-local metadata (not payload)
+    openpackage.yml                            # workspace manifest (dependency intent)
+    openpackage.index.yml                      # OPTIONAL – workspace-local root index (never in registry payload)
+    packages/                                  # nested packages directory
+      alpha/                                   # nested package (package root = .openpackage/packages/alpha/)
+        openpackage.yml                        # cached payload mirror
+        openpackage.index.yml                  # workspace-local per-package index (never in registry payload)
         commands/
           alpha-command.md
-      <root-dir>/                              # nested package root-level content
-        alpha-helper.md
-    beta/                                      # nested package (package root = .openpackage/packages/beta/)
-      .openpackage/
-        package.yml
-        package.index.yml
+        root/                                  # direct copy for nested package
+          scripts/
+            setup.sh                           # → installs to <workspace>/scripts/setup.sh
+        docs/                                  # NOT installed
+          notes.md
+      beta/                                    # nested package (package root = .openpackage/packages/beta/)
+        openpackage.yml                        # cached payload mirror
+        openpackage.index.yml                  # workspace-local per-package index (never in registry payload)
         rules/
           beta-rule.md
 ```
@@ -35,16 +40,16 @@
 
 #### Key Rules
 
-- Each `packages/<name>/` directory is its **own canonical package root**, with:
-  - Its own `.openpackage/package.yml` (marks it as a package)
-  - Its own `.openpackage/` content directory
-  - Its own root-level content (outside `.openpackage/`)
+- Each `.openpackage/packages/<name>/` directory is its **own canonical package root**, with:
+  - Its own `openpackage.yml` at the package root (marks it as a package)
+  - Its own universal subdirs at the package root (e.g., `commands/`, `rules/`)
+  - Its own root-level content (root files, `root/` directory, etc.)
 
-- The **parent root package never inlines** `packages/<name>/` into its own payload.
+- The **parent root package never inlines** `.openpackage/packages/<name>/` into its own payload.
 
 - Registry entries for `alpha` and `beta` are created **independently** from their respective package roots.
 
-- **Only the workspace root package** can have a `packages/` directory. Nested packages cannot have further nested packages.
+- **Only the workspace root package** can have a `.openpackage/packages/` directory. Nested packages cannot have further nested packages.
 
 ---
 
@@ -64,10 +69,8 @@ Both root and nested packages have **identical internal structure**:
 
 ```text
 <package-root>/
-  .openpackage/
-    package.yml
-    package.index.yml
-    <universal-subdirs>/
+  openpackage.yml
+  <universal-subdirs>/
   <root-level-content>/
   <root-files>
 ```

@@ -127,7 +127,7 @@ This mechanism lets a user:
 
 #### 8. Escalation from YAML Overrides to Full Platform Markdown
 
-When a registry path participates in the frontmatter/YAML override pipeline (e.g. `.openpackage/agents/*.md`) **and** the user marks one or more workspace candidates as platform‑specific during conflict resolution:
+When a registry path participates in the frontmatter/YAML override pipeline (e.g. `agents/*.md`) **and** the user marks one or more workspace candidates as platform‑specific during conflict resolution:
 
 - **Universal body update**
   - The universal markdown file keeps its existing frontmatter.

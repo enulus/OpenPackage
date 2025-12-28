@@ -47,5 +47,5 @@ Apply prints:
 
 - `apply-behavior.md` – details of what is created/updated/deleted.
 - `conflicts.md` – conflict prompting rules and strategies.
-- `index-effects.md` – how `package.index.yml` changes after apply.
+- `index-effects.md` – how `openpackage.index.yml` changes after apply.
 

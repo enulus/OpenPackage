@@ -12,7 +12,9 @@ For each save/pack run, the pipeline considers up to four sets of candidates:
 
 ##### Local platform candidates
 
-- Files already present in the **package directory** under `.openpackage/packages/<name>/`.
+- Files already present in the **package root**:
+  - **Root package**: `<cwd>/` (universal subdirs, root files, `root/` direct copy)
+  - **Nested package**: `<cwd>/.openpackage/packages/<name>/`
 - Excludes:
   - Internal `openpackage.index.yml` metadata.
   - Certain root marker files (e.g. the unified root agents file) that are handled specially.

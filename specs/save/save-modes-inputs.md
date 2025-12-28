@@ -27,13 +27,13 @@ The pipeline runs in one of two **modes**:
 
 ##### WIP mode (`save`)
 
-- Always produces a **WIP prerelease** version derived from the stable line in `package.yml`.
-- May optionally auto‑bump `package.yml.version` to the next patch after a stable cycle, per `../save-pack-versioning.md`.
+- Always produces a **WIP prerelease** version derived from the stable line in `openpackage.yml`.
+- May optionally auto‑bump `openpackage.yml.version` to the next patch after a stable cycle, per `../save-pack-versioning.md`.
 
 ##### Stable mode (`pack`)
 
-- Produces a **stable** version exactly equal to the current `package.yml.version`.
-- Never mutates `package.yml.version`.
+- Produces a **stable** version exactly equal to the current `openpackage.yml.version`.
+- Never mutates `openpackage.yml.version`.
 
 ---
 

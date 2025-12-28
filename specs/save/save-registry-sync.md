@@ -10,8 +10,8 @@ This document covers the final stages of the save pipeline: version/index handli
 
 The pipeline follows these principles (see `../save-pack-versioning.md` for full details):
 
-- The version declared in **`package.yml`** is the **canonical "next stable"** version.
-- The **WIP or last stable version** recorded for this workspace lives in `package.index.yml` under `workspace.version`.
+- The version declared in **`openpackage.yml`** is the **canonical "next stable"** version.
+- The **WIP or last stable version** recorded for this workspace lives in `openpackage.index.yml` under `workspace.version`.
 - WIP versions are always **pre‑releases derived from the stable line**, including:
   - A time component, and
   - A workspace hash component.
@@ -19,18 +19,18 @@ The pipeline follows these principles (see `../save-pack-versioning.md` for full
 ##### On WIP saves
 
 - A new WIP version is computed from the current stable line.
-- `package.index.yml` is updated with:
+- `openpackage.index.yml` is updated with:
   - `workspace.version` (the exact WIP version).
   - `workspace.hash` (derived from `cwd`).
 
 ##### On stable packs
 
-- The stable version is always exactly the value in `package.yml.version`.
-- `package.index.yml.workspace.version` is updated to that stable version.
+- The stable version is always exactly the value in `openpackage.yml.version`.
+- `openpackage.index.yml.workspace.version` is updated to that stable version.
 
 ##### Version conflicts
 
-- When `package.yml.version` and the last workspace version disagree, the **`package.yml` version wins**, and the WIP stream restarts from that version.
+- When `openpackage.yml.version` and the last workspace version disagree, the **`openpackage.yml` version wins**, and the WIP stream restarts from that version.
 
 ---
 

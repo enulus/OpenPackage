@@ -1,6 +1,6 @@
 ### Package Root Layout
 
-This document describes the **v2 package payload layout** and how it relates to
+This document describes the **package payload layout** and how it relates to
 workspace-local metadata.
 
 ```text
@@ -18,7 +18,7 @@ workspace-local metadata.
   AGENTS.md                    # OPTIONAL – universal root file
   <platform-root-files>        # OPTIONAL – platform-specific root files (e.g. CLAUDE.md)
 
-  # Escape hatch: direct copy to workspace root
+  # Direct copy to workspace root
   root/                        # OPTIONAL – files copied 1:1 into the workspace root
     <any-files-or-dirs>/
 
@@ -29,7 +29,7 @@ workspace-local metadata.
 
 ---
 
-#### Installation Semantics (v2)
+#### Installation Semantics
 
 1. **Universal subdirs at package root** (`commands/`, `rules/`, `agents/`, `skills/`, plus any platform-defined custom subdirs):
    - Stored in a platform-normalized “universal” format.
@@ -48,13 +48,13 @@ workspace-local metadata.
 #### Key Invariants
 
 - **`openpackage.yml`** marks a directory as a package root.
-- **Universal content** lives at the **package root** under universal subdirs (no `.openpackage/<subdir>/` container in v2 payloads).
+- **Universal content** lives at the **package root** under universal subdirs (no `.openpackage/<subdir>/` container in package payloads).
 - **Install mapping**:
   - Universal-subdir paths are platform-mapped.
   - `root/` is the only prefix that uses a **strip-prefix** rule (copy-to-root).
   - Other root-level files/dirs are **not installed** by default.
-- **Cached packages** (workspace-local installed copies) live under `cwd/.openpackage/packages/<name>/` and mirror the v2 payload layout.
-- **Global registry copies** (under `~/.openpackage/registry/...`) store the v2 payload layout and **never include** workspace index files.
+- **Cached packages** (workspace-local installed copies) live under `cwd/.openpackage/packages/<name>/` and mirror the package payload layout.
+- **Global registry copies** (under `~/.openpackage/registry/...`) store the package payload layout and **never include** workspace index files.
 
 ---
 

@@ -51,8 +51,8 @@ Registry keys are **relative to the package root**:
 | Content Type | Key Format | Example |
 |--------------|------------|---------|
 | Universal content | `<subdir>/<file>` | `commands/test.md` |
-| Root-level content | `<path>` | `<dir>/helper.md` (not installed by default) |
 | Root files | `<filename>` | `AGENTS.md` |
+| `root/` directory (direct copy) | `root/<path>` | `root/tools/helper.sh` |
 
 ---
 
@@ -63,7 +63,8 @@ Values are **relative to the workspace root (`cwd`)** and represent **paths that
 | Content Type | Value Format | Example |
 |--------------|--------------|---------|
 | Universal content | Platform-specific paths | `.cursor/commands/test.md`, `.opencode/commands/test.md` |
-| Root-level content | Same as key | `ai/helper.md` (when explicitly installed) |
+| Root files | Same as key | `AGENTS.md` |
+| `root/` directory (direct copy) | Strip `root/` prefix | `tools/helper.sh` |
 
 > **Important**: The index only records paths where files **actually exist**. If a file is only installed to one platform (e.g., `.cursor/`), only that path appears in the index—not hypothetical paths for other platforms.
 
@@ -86,41 +87,20 @@ See `../apply/index-effects.md` for concrete before/after examples.
 
 ---
 
-#### Root Package Skip Logic
-
-For **root packages only**, when a registry key maps to the exact same value, the mapping is **skipped** because:
-- The file is already at the correct location
-- No installation/syncing needed
-- Avoids redundant mappings
-
-**Example**: For a root package, `<dir>/helper.md` → `<dir>/helper.md` is skipped.
-
----
-
-#### Nested Package Full Mapping
-
-For **nested packages**, all mappings are included because:
-- Files live inside the nested package directory
-- Need to be mapped OUT to workspace root during install
-
-**Example**: For nested package `foo`:
-- File at `.openpackage/packages/foo/<dir>/helper.md`
-- Key: `<dir>/helper.md`
-- Value: `<dir>/helper.md` (installed at workspace root)
-
----
-
 #### Add Command Examples
 
 When adding files, the index only records the **source path that exists**:
 
 | Command | Package | Stored At | Registry Key | Values (in index) |
 |---------|---------|-----------|--------------|-------------------|
-| `opkg add foo <dir>/foo.md` | Nested `foo` | `.openpackage/packages/foo/<dir>/foo.md` | `<dir>/foo.md` | `<dir>/foo.md` |
-| `opkg add foo .cursor/test/foo.md` | Nested `foo` | `.openpackage/packages/foo/.openpackage/test/foo.md` | `.openpackage/test/foo.md` | `.cursor/test/foo.md` (only source) |
-| `opkg add <dir>/foo.md` | Root | `.openpackage/<dir>/foo.md` | `<dir>/foo.md` | SKIPPED |
-| `opkg add .cursor/test/foo.md` | Root | `.openpackage/test/foo.md` | `.openpackage/test/foo.md` | `.cursor/test/foo.md` (only source) |
+| `opkg add foo helpers/foo.md` | Nested `foo` | `.openpackage/packages/foo/helpers/foo.md` | `helpers/foo.md` | `helpers/foo.md` |
+| `opkg add foo .cursor/commands/foo.md` | Nested `foo` | `.openpackage/packages/foo/commands/foo.md` | `commands/foo.md` | `.cursor/commands/foo.md` (source) |
+| `opkg add helpers/foo.md` | Root | `helpers/foo.md` | `helpers/foo.md` | `helpers/foo.md` |
+| `opkg add .cursor/commands/foo.md` | Root | `commands/foo.md` | `commands/foo.md` | `.cursor/commands/foo.md` (source) |
 
-> **Note**: The index expands to include other platform paths (e.g., `.opencode/test/foo.md`) only after an apply/sync step runs (e.g., `opkg apply` or `opkg save --apply`). See `../apply/index-effects.md`.
+**Notes**:
+- Platform-specific paths (e.g., `.cursor/commands/foo.md`) are normalized to universal registry paths (e.g., `commands/foo.md`) and stored at the package root.
+- Universal content lives directly at the package root (not under `.openpackage/<subdir>/`).
+- The index expands to include other platform paths (e.g., `.opencode/commands/foo.md`) only after an apply/sync step runs (e.g., `opkg apply` or `opkg save --apply`). See `../apply/index-effects.md`.
 
 

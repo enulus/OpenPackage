@@ -37,13 +37,13 @@ async function runRootSaveIndexTest(): Promise<void> {
     assert.equal(result.success, true, 'save pipeline should succeed');
 
     let indexRecord = await readPackageIndex(tempDir, 'root-save-index-test', 'root');
-    assert.ok(indexRecord, 'package.index.yml should be created for root package (first save)');
+    assert.ok(indexRecord, 'openpackage.index.yml should be created for root package (first save)');
 
     let files = indexRecord!.files;
     assert.notEqual(
       Object.keys(files).length,
       0,
-      'package.index.yml.files should not be empty after first save with universal content'
+      'openpackage.index.yml.files should not be empty after first save with universal content'
     );
 
     const key = 'commands/example.md';
@@ -57,13 +57,13 @@ async function runRootSaveIndexTest(): Promise<void> {
     assert.equal(secondResult.success, true, 'second save pipeline should also succeed');
 
     indexRecord = await readPackageIndex(tempDir, 'root-save-index-test', 'root');
-    assert.ok(indexRecord, 'package.index.yml should still exist after second save');
+    assert.ok(indexRecord, 'openpackage.index.yml should still exist after second save');
 
     files = indexRecord!.files;
     assert.notEqual(
       Object.keys(files).length,
       0,
-      'package.index.yml.files should not be emptied after second save with universal content'
+      'openpackage.index.yml.files should not be emptied after second save with universal content'
     );
     assert.ok(Array.isArray(files[key]) && files[key].length > 0);
 

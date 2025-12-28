@@ -32,7 +32,7 @@ CLI mapping:
 
 #### 4. Ownership and safety
 
-Apply uses workspace-local indexes (`package.index.yml`) to understand which paths are “owned” by which packages, so it can:
+Apply uses workspace-local indexes (`openpackage.index.yml`) to understand which paths are "owned" by which packages, so it can:
 
 - avoid clobbering other packages’ files where possible, and
 - compute deletions for stale paths that were previously installed by this package.

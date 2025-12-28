@@ -11,9 +11,9 @@ Packages contain two types of content:
 
 ---
 
-#### Universal Content Layout (v2)
+#### Universal Content Layout
 
-Universal subdirs (standard: `agents/`, `rules/`, `commands/`, `skills/`; plus any custom defined in `platforms.jsonc`) are canonical inside `.openpackage/`. The full set is dynamically discovered from platform configs.
+Universal subdirs (standard: `agents/`, `rules/`, `commands/`, `skills/`; plus any custom defined in `platforms.jsonc`) are canonical at the **package root**. The full set is dynamically discovered from platform configs.
 
 ```text
 <package-root>/
@@ -62,8 +62,8 @@ Registry paths are **relative to the package root**:
 | Content Type | Example Registry Path |
 |--------------|----------------------|
 | Universal content | `commands/test.md` |
-| Root-level content | `<dir>/helper.md` (not installed by default) |
 | Root files | `AGENTS.md` |
+| `root/` directory (direct copy) | `root/tools/helper.sh` |
 
 **Rules:**
 
@@ -88,7 +88,6 @@ Registry paths are **relative to the package root**:
 |---------------|----------------|
 | `AGENTS.md` | `AGENTS.md` |
 | `root/tools/helper.sh` | `tools/helper.sh` (strip `root/` prefix) |
-| `<dir>/helper.md` | _not installed by default_ |
 
 ---
 

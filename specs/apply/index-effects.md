@@ -1,8 +1,8 @@
-### Apply – `package.index.yml` Effects
+### Apply – `openpackage.index.yml` Effects
 
 #### 1. Overview
 
-Apply/sync updates `package.index.yml` to reflect the **actual installed paths** created by apply. This is the mechanism by which the index “expands” from a single source path (recorded by add) to multiple platform paths (after apply).
+Apply/sync updates `openpackage.index.yml` to reflect the **actual installed paths** created by apply. This is the mechanism by which the index "expands" from a single source path (recorded by add) to multiple platform paths (after apply).
 
 For the index file format and general semantics, see `../package/package-index-yml.md`.
 
@@ -44,11 +44,10 @@ files:
     - .opencode/command/test.md   # Synced by apply
   rules/auth.md:
     - .cursor/rules/auth.mdc
-  # Note: package.yml is NOT included (it's the manifest, not synced content)
-  # Note: <dir>/helper.md is SKIPPED for root packages (maps to itself)
+  # Note: openpackage.yml is NOT included (it's the manifest, not synced content)
 ```
 
-**Nested package** (`cwd/.openpackage/packages/foo/.openpackage/package.index.yml`):
+**Nested package** (`cwd/.openpackage/packages/foo/openpackage.index.yml`):
 
 ```yaml
 workspace:
@@ -58,8 +57,6 @@ files:
   commands/test.md:
     - .cursor/commands/test.md
     - .opencode/command/test.md
-  <dir>/helper.md:
-    - <dir>/helper.md
   AGENTS.md:
     - AGENTS.md
 ```

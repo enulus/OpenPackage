@@ -4,7 +4,7 @@
 
 - **Stable version**: A semver-valid version with no prerelease segment, e.g. `1.2.3`.
 - **Prerelease version**: A semver-valid version with a prerelease segment, e.g. `1.2.3-dev.abc123`.
-- **Unversioned package**: A package whose `package.yml` omits `version`; represented and stored as semver `0.0.0` locally (one per package) and can be pushed like any other stable version.
+- **Unversioned package**: A package whose `openpackage.yml` omits `version`; represented and stored as semver `0.0.0` locally (one per package) and can be pushed like any other stable version.
 - **Local registry**: The on-disk package store used by `opkg` (managed via `packageManager`).
 
 This document defines the rules `opkg push` uses to decide **which local version** is eligible to be pushed to the remote registry.

@@ -1,35 +1,27 @@
 ### Registry Payload and 1:1 Copy
 
-The **registry payload** for a given version is defined by two layers of rules.
+The **registry payload** for a given version is defined structurally. There is
+no manifest-level include/exclude filtering.
 
 ---
 
-#### 1. Static Rules
+#### 1. Payload membership
 
-**Always exclude:**
-- `openpackage.index.yml` (workspace-local metadata)
-- Anything under `.openpackage/packages/` (cached nested packages are separate units and workspace-local)
+**Never include (always excluded):**
+- `.openpackage/**` (workspace-local metadata directory; never part of payload)
+- `openpackage.index.yml` (workspace-local index; never part of payload)
 
-**Always include (cannot be excluded):**
-- `openpackage.yml` (package manifest)
+**Always include:**
+- `openpackage.yml` (package manifest; marks the package root)
 
-**Included by default (removable via manifest `exclude`):**
-- Every platform root file declared in `platforms.jsonc` (or user overrides in `~/.openpackage/platforms.jsonc` or `.openpackage/platforms.jsonc`) (e.g., `CLAUDE.md`, `WARP.md`, `AGENTS.md`) when it exists
-- Any `.openpackage/<universal-subdir>/…` directory (standard like agents/rules/commands/skills, plus custom subdirs from platforms.jsonc)
-- Any root-level content (directories/files at package root, outside `.openpackage/`)
+**Included in the payload when present at the package root:**
+- Universal subdirs (standard: `commands/`, `rules/`, `agents/`, `skills/`, plus custom from `platforms.jsonc`)
+- Root files (e.g., `AGENTS.md`, and platform root files like `CLAUDE.md`)
+- `root/**` (direct copy; copied 1:1 to workspace root with `root/` stripped on install)
+- Other root-level files/dirs (e.g., `README.md`, `LICENSE.md`, arbitrary folders)
 
-**Everything else starts excluded by default.**
-
----
-
-#### 2. Manifest Filters
-
-In `openpackage.yml`:
-
-- **`include`** (array): Expands the payload by listing additional glob-like patterns relative to the package root
-- **`exclude`** (array): Removes matches after include rules are applied (but never overrides hard includes/excludes)
-
-> **Note**: Newly created nested packages default their `openpackage.yml` to `include: ["**"]`, so they start including all files until the author narrows the list.
+> **Note**: Some root-level content is not installed by default, but it can still be
+> part of the payload (e.g., docs or license files).
 
 ---
 
@@ -55,11 +47,10 @@ Registry copies maintain the same structure as workspace packages:
 ```text
 ~/.openpackage/registry/<name>/<version>/
   openpackage.yml              # package manifest
-  .openpackage/
-    commands/                  # universal content
-      test.md
-    rules/
-      auth.md
+  commands/                    # universal content
+    test.md
+  rules/
+    auth.md
   <root-dir>/                  # root-level content (any directory)
     helper.md
   AGENTS.md                    # root files

@@ -11,7 +11,10 @@ This document defines the **user-facing behavior** of the `install` command, ass
 ## 0. Workspace Context
 The `install` command operates on the **workspace root** determined by the effective current working directory (`cwd` from shell or overridden by global `--cwd <dir>` flag; see [../../cli-options.md]). This affects:
 - Detection of `openpackage.yml` (must exist at effective cwd for root package ops).
-- Target location for file installations (universal content to `.openpackage/<subdir>/`, root files to cwd root).
+- Target location for file installations:
+  - **Universal content**: platform-mapped from package subdirs (e.g., `commands/`, `rules/`) to platform-specific locations (e.g., `.cursor/commands/`, `.opencode/commands/`).
+  - **Root files**: installed at workspace root (e.g., `AGENTS.md`).
+  - **`root/` directory (direct copy)**: copied 1:1 to workspace root with `root/` prefix stripped.
 - Dependency resolution from workspace `openpackage.yml`.
 
 If no package detected at effective cwd, errors with "No package project found" (unless dry-run or flags allow).
@@ -32,7 +35,7 @@ If no package detected at effective cwd, errors with "No package project found" 
     - If `<name>` is **not declared**: `<spec>` is treated as the **initial version range** to store in `openpackage.yml`, and resolution uses the **local-first with remote-fallback** policy under that range (or strictly local / remote when the corresponding flags are set).
 
 - **`opkg install <name>/<registry-path>`** and **`opkg install <name>@<spec>/<registry-path>`**
-  - **Meaning**: Install only the specified registry-relative path(s) for `<name>` (e.g. `.openpackage/universal/prompts/foo.md`, `workspace/agents.md`). The path must be an **exact registry path** (no globs) and applies only to the **root dependency** being installed.
+  - **Meaning**: Install only the specified registry-relative path(s) for `<name>` (e.g. `commands/foo.md`, `agents/helper.md`). The path must be an **exact registry path** (no globs) and applies only to the **root dependency** being installed.
 
 - **`opkg install git:<url>[#ref]`**
   - **Meaning**: Install a package directly from a git repository by cloning it and installing from the checked-out working tree.

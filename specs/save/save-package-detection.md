@@ -47,7 +47,7 @@ Each detected package context includes:
 
 - **Package directory** (logical package root for reporting).
 - **Path to `openpackage.yml`** (authoritative manifest location).
-- **Package files directory** (`packageFilesDir` in code; v2 layout = package root):
+- **Package files directory** (`packageFilesDir` in code; same as package root):
   - For the **root package**: `<cwd>/`
   - For **nested packages**: `<cwd>/.openpackage/packages/<name>/`
 - Parsed `openpackage.yml` configuration.

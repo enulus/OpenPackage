@@ -13,7 +13,7 @@ After the package context is known, the pipeline determines the **effective name
   - The detected package config's `name` when no argument is provided.
 - The pipeline **never accepts a version suffix** here:
   - Any `name@version` input is rejected with a clear error.
-  - The error instructs the user to change the stable line in `package.yml` instead.
+  - The error instructs the user to change the stable line in `openpackage.yml` instead.
 
 ---
 
@@ -67,7 +67,7 @@ At the end of this phase the pipeline knows:
 
 When a rename is needed during `save` or `pack`, the workspace is updated so that **on‑disk layout matches the new name**.
 
-##### `package.yml`
+##### `openpackage.yml`
 
 - The package's `name` field is updated to the final name.
 
@@ -75,9 +75,9 @@ When a rename is needed during `save` or `pack`, the workspace is updated so tha
 
 - Root files that contain package markers (e.g. sections in shared documentation) are updated so that markers reference the new name instead of the old one.
 
-##### Root `package.yml` dependencies
+##### Root `openpackage.yml` dependencies
 
-- The workspace's root `package.yml` (if present) updates any dependency entries that reference the old name to the new name in both `packages` and `dev-packages`.
+- The workspace's root `openpackage.yml` (if present) updates any dependency entries that reference the old name to the new name in both `packages` and `dev-packages`.
 
 ##### Nested package directories
 

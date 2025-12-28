@@ -18,7 +18,7 @@ This document describes how `push` handles scoping for upload. Scoping is applie
    - A scoped upload name is computed (e.g. `@user/test`) via the existing prompt/default-scope flow.
    - No local rename occurs; the local registry and workspace remain on the unscoped name.
 3. Before tarball creation:
-   - The package is cloned in-memory and its `.openpackage/package.yml` `name` field is rewritten to the scoped upload name.
+   - The package is cloned in-memory and its `openpackage.yml` `name` field is rewritten to the scoped upload name.
    - The upload payload (full or partial) uses this in-memory manifest, so the remote receives the scoped identity.
 4. Version selection and path validation still operate on the local name and local files.
 
