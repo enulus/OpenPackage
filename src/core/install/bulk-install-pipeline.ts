@@ -24,6 +24,8 @@ interface BulkPackageEntry {
   name: string;
   version?: string;
   path?: string;
+  git?: string;
+  ref?: string;
   isDev: boolean;
 }
 
@@ -97,6 +99,7 @@ export async function runBulkInstallPipeline(
   for (const pkg of packagesToInstall) {
     try {
       const label = pkg.path ? `${pkg.name} (from ${pkg.path})` : (pkg.version ? `${pkg.name}@${pkg.version}` : pkg.name);
+      const gitLabel = pkg.git ? `${pkg.name} (git:${pkg.git}${pkg.ref ? `#${pkg.ref}` : ''})` : label;
 
       const baseConflictDecisions = options.conflictDecisions
         ? { ...options.conflictDecisions }
@@ -108,6 +111,40 @@ export async function runBulkInstallPipeline(
         resolvedPlatforms,
         conflictDecisions: baseConflictDecisions
       };
+
+      // Handle git-based packages
+      if (pkg.git) {
+        console.log(`\n🔧 Installing ${pkg.isDev ? '[dev] ' : ''}${gitLabel}...`);
+
+        const { sourcePath } = await (await import('./git-package-loader.js')).loadPackageFromGit({
+          url: pkg.git,
+          ref: pkg.ref
+        });
+
+        const result = await runPathInstallPipeline({
+          ...installOptions,
+          sourcePath,
+          sourceType: 'directory',
+          targetDir,
+          gitUrl: pkg.git,
+          gitRef: pkg.ref
+        });
+
+        if (result.success) {
+          totalInstalled++;
+          results.push({ name: pkg.name, success: true });
+          console.log(`✓ Successfully installed ${pkg.name}`);
+
+          if (result.warnings && result.warnings.length > 0) {
+            result.warnings.forEach(warning => aggregateWarnings.add(warning));
+          }
+        } else {
+          totalSkipped++;
+          results.push({ name: pkg.name, success: false, error: result.error });
+          console.log(`❌ Failed to install ${pkg.name}: ${result.error}`);
+        }
+        continue;
+      }
 
       // Handle path-based packages
       if (pkg.path) {

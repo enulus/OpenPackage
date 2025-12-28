@@ -1,5 +1,5 @@
 import * as yaml from 'js-yaml';
-import { PackageYml } from '../types/index.js';
+import { PackageDependency, PackageYml } from '../types/index.js';
 import { readTextFile, writeTextFile } from './fs.js';
 import { isScopedName } from '../core/scoping/package-scoping.js';
 
@@ -22,6 +22,27 @@ export async function parsePackageYml(packageYmlPath: string): Promise<PackageYm
     const content = await readTextFile(packageYmlPath);
     const parsed = yaml.load(content) as PackageYml;
     const isPartial = (parsed as any).partial === true;
+    const validateDependencies = (deps: PackageDependency[] | undefined, section: 'packages' | 'dev-packages'): void => {
+      if (!deps) return;
+      for (const dep of deps) {
+        const sources = [dep.version, dep.path, dep.git].filter(Boolean);
+        if (sources.length === 0) {
+          throw new Error(
+            `package.yml ${section}: dependency '${dep.name}' must specify exactly one source: version, path, or git`
+          );
+        }
+        if (sources.length > 1) {
+          throw new Error(
+            `package.yml ${section}: dependency '${dep.name}' has multiple sources; choose exactly one of version, path, or git`
+          );
+        }
+        if (dep.ref && !dep.git) {
+          throw new Error(
+            `package.yml ${section}: dependency '${dep.name}' has ref but no git source`
+          );
+        }
+      }
+    };
     
     // Validate required fields
     if (!parsed.name) {
@@ -46,6 +67,9 @@ export async function parsePackageYml(packageYmlPath: string): Promise<PackageYm
     } else {
       delete (parsed as any).partial;
     }
+
+    validateDependencies(parsed.packages, 'packages');
+    validateDependencies(parsed['dev-packages'], 'dev-packages');
     
     return parsed;
   } catch (error) {

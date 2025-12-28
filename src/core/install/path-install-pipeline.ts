@@ -30,6 +30,8 @@ export interface PathInstallPipelineOptions extends InstallOptions {
   sourcePath: string;     // Absolute path to local package directory or tarball
   sourceType: 'directory' | 'tarball';
   targetDir: string;
+  gitUrl?: string;
+  gitRef?: string;
 }
 
 export interface PathInstallPipelineResult {
@@ -290,7 +292,9 @@ export async function runPathInstallPipeline(
       undefined,  // No range for path-based packages
       true,
       undefined,  // No include filter
-      pathToStore  // Store the path
+      options.gitUrl ? undefined : pathToStore,  // Store the path when not git
+      options.gitUrl,
+      options.gitRef
     );
   }
 

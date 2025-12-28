@@ -34,6 +34,19 @@ If no package detected at effective cwd, errors with "No package project found" 
 - **`opkg install <name>/<registry-path>`** and **`opkg install <name>@<spec>/<registry-path>`**
   - **Meaning**: Install only the specified registry-relative path(s) for `<name>` (e.g. `.openpackage/universal/prompts/foo.md`, `workspace/agents.md`). The path must be an **exact registry path** (no globs) and applies only to the **root dependency** being installed.
 
+- **`opkg install git:<url>[#ref]`**
+  - **Meaning**: Install a package directly from a git repository by cloning it and installing from the checked-out working tree.
+  - Requirements:
+    - The repository root MUST contain `.openpackage/package.yml`.
+    - `git` must be available on PATH.
+  - Notes:
+    - The installed package version is taken from the repo’s `.openpackage/package.yml`.
+    - `install` persists this dependency to `.openpackage/package.yml` using `git` + optional `ref` (not a registry `version` range).
+
+- **`opkg install github:<owner>/<repo>[#ref]`**
+  - **Meaning**: Shorthand for GitHub git installs. Equivalent to:
+    - `opkg install git:https://github.com/<owner>/<repo>.git[#ref]`
+
 Other flags (`--dev`, `--remote`, `--platforms`, `--dry-run`, `--stable`, conflicts) keep their existing semantics unless overridden below.
 
 ---
@@ -158,12 +171,18 @@ Other flags (`--dev`, `--remote`, `--platforms`, `--dry-run`, `--stable`, confli
 
 - **Inputs**:
   - `.openpackage/package.yml`:
-    - `packages[]` and `dev-packages[]`, each with `name` and `version` (range or exact).
+    - `packages[]` and `dev-packages[]`, each with `name` and exactly one source:
+      - `version` (registry range or exact)
+      - `path` (directory or tarball)
+      - `git` (git URL) with optional `ref`
 
 - **Behavior**:
   - For each declared dependency:
-    - Determine its **effective range** (canonical, possibly reconciled with any global overrides).
-    - Resolve **latest satisfying version from local+remote**.
+    - If it is a registry dependency (`version`):
+      - Determine its **effective range** (canonical, possibly reconciled with any global overrides).
+      - Resolve **latest satisfying version from local+remote**.
+    - If it is a path dependency (`path`) or git dependency (`git` + optional `ref`):
+      - Load directly from that source (no registry version resolution).
     - If that version is **already installed**, **do nothing** (idempotent).
     - If a **newer satisfying version exists**, **upgrade** the installed version to that one.
   - This makes `opkg install` act as:

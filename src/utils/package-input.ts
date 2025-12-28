@@ -3,8 +3,9 @@ import { exists } from './fs.js';
 import { isValidPackageDirectory } from '../core/package-context.js';
 import { parsePackageInstallSpec } from './package-name.js';
 import { ValidationError } from './errors.js';
+import { parseGitSpec } from './git-spec.js';
 
-export type PackageInputType = 'registry' | 'directory' | 'tarball';
+export type PackageInputType = 'registry' | 'directory' | 'tarball' | 'git';
 
 export interface PackageInputClassification {
   type: PackageInputType;
@@ -13,6 +14,10 @@ export interface PackageInputClassification {
   name?: string;
   version?: string;
   registryPath?: string;
+
+  // For 'git' type
+  gitUrl?: string;
+  gitRef?: string;
   
   // For 'directory' or 'tarball' types
   resolvedPath?: string;  // Absolute path
@@ -34,6 +39,16 @@ export async function classifyPackageInput(
   raw: string,
   cwd: string = process.cwd()
 ): Promise<PackageInputClassification> {
+  // Check for git/github specs first
+  const gitSpec = parseGitSpec(raw);
+  if (gitSpec) {
+    return {
+      type: 'git',
+      gitUrl: gitSpec.url,
+      gitRef: gitSpec.ref
+    };
+  }
+
   // Check for tarball file extension
   const isTarballPath = raw.endsWith('.tgz') || raw.endsWith('.tar.gz');
   

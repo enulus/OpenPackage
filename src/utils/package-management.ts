@@ -174,7 +174,9 @@ export async function addPackageToYml(
   originalVersion?: string, // The original version/range that was requested
   silent: boolean = false,
   include?: string[] | null,
-  path?: string  // Path to local directory or tarball (for path-based dependencies)
+  path?: string,  // Path to local directory or tarball (for path-based dependencies)
+  git?: string,   // Git source url (mutually exclusive with path/version)
+  ref?: string    // Git ref (branch/tag/sha)
 ): Promise<void> {
   const packageYmlPath = getLocalPackageYmlPath(cwd);
   
@@ -213,9 +215,9 @@ export async function addPackageToYml(
       : undefined;
 
   const shouldOmitVersion = isUnversionedVersion(packageVersion) || isUnversionedVersion(originalVersion);
-  let versionToWrite: string | undefined = shouldOmitVersion ? undefined : originalVersion;
+  let versionToWrite: string | undefined = git ? undefined : shouldOmitVersion ? undefined : originalVersion;
 
-  if (!shouldOmitVersion && packageVersion) {
+  if (!git && !shouldOmitVersion && packageVersion) {
     const baseVersion = extractBaseVersion(packageVersion);
     const defaultRange = createCaretRange(baseVersion);
     versionToWrite = originalVersion ?? defaultRange;
@@ -267,7 +269,9 @@ export async function addPackageToYml(
     name: normalizedPackageName,
     ...(versionToWrite ? { version: versionToWrite } : {}),
     ...(includeToWrite ? { include: includeToWrite } : {}),
-    ...(path ? { path } : {})
+    ...(path ? { path } : {}),
+    ...(git ? { git } : {}),
+    ...(ref ? { ref } : {})
   };
   
   // Determine target location (packages vs dev-packages)

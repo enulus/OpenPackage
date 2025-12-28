@@ -11,7 +11,7 @@ The aim is to make behavior predictable and avoid “CLI overrides” that silen
 - **Canonical source of truth**:
   - For the **current workspace**, `.openpackage/package.yml` is the **only authoritative declaration** of:
     - Which **direct dependencies** exist.
-    - Which **version ranges** apply to those dependencies.
+    - Which **source** and **version intent** apply to those dependencies.
   - This applies to both:
     - `packages` (regular dependencies).
     - `dev-packages` (development dependencies).
@@ -38,6 +38,21 @@ The aim is to make behavior predictable and avoid “CLI overrides” that silen
 ---
 
 ## 3. Mapping CLI input to canonical ranges
+
+### 3.0 Dependency entry schema (source fields)
+
+Each dependency entry MUST specify **exactly one** source field:
+
+- `version`: a registry range or exact version (`^1.2.0`, `1.2.3`, `*`, etc.)
+- `path`: a filesystem path to a package directory or tarball
+- `git`: a git URL (https/ssh/etc.) with optional `ref`
+
+Additional rules:
+
+- `ref` is only valid when `git` is present.
+- A dependency entry MUST NOT specify multiple sources (e.g. `version` + `path`).
+
+This keeps dependency intent unambiguous and aligns with modern package managers that treat source types as mutually exclusive.
 
 ### 3.1 Fresh packages (not yet in `package.yml`)
 
@@ -89,6 +104,19 @@ The aim is to make behavior predictable and avoid “CLI overrides” that silen
           - “Version spec `<spec>` conflicts with `package.yml` range `R_pkg` for `<name>`. Edit `.openpackage/package.yml` if you intend to change the dependency line.”
         - No installs or upgrades are performed.
 
+### 3.3 Path and git dependencies (non-registry sources)
+
+When a dependency uses `path` or `git`, it is treated as a **source-pinned** dependency rather than a semver-ranged registry dependency:
+
+- The installed content is loaded from that source.
+- The installed package version comes from the dependency’s own `.openpackage/package.yml`.
+- `install` MUST NOT write a registry `version` range for `path`/`git` dependencies.
+
+For git dependencies:
+
+- `git` stores the repository URL.
+- `ref` optionally stores the branch/tag/commit provided by the user.
+
 ---
 
 ## 4. When and how `package.yml` is mutated
@@ -102,6 +130,10 @@ The aim is to make behavior predictable and avoid “CLI overrides” that silen
   - It **must not**:
     - Remove existing entries.
     - Rewrite existing version ranges.
+
+- **Adding source-pinned dependencies**:
+  - When installing from `path` or `git`, `install` persists the dependency using the corresponding source fields.
+  - It must not add a `version` field in these cases (source-pinned dependencies are not semver-ranged).
 
 - **Rewriting malformed entries (edge case)**:
   - If `package.yml` contains a **syntactically invalid** version range for a dependency that the user is trying to install:

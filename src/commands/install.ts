@@ -5,6 +5,7 @@ import { DIR_PATTERNS, PACKAGE_PATHS } from '../constants/index.js';
 import { runBulkInstallPipeline } from '../core/install/bulk-install-pipeline.js';
 import { runInstallPipeline, determineResolutionMode } from '../core/install/install-pipeline.js';
 import { runPathInstallPipeline } from '../core/install/path-install-pipeline.js';
+import { loadPackageFromGit } from '../core/install/git-package-loader.js';
 import { withErrorHandling } from '../utils/errors.js';
 import { normalizePlatforms } from '../utils/platform-mapper.js';
 import { classifyPackageInput } from '../utils/package-input.js';
@@ -50,6 +51,21 @@ async function installCommand(
   // Classify the input to determine if it's a registry name, directory, or tarball
   const classification = await classifyPackageInput(packageInput, cwd);
   
+  if (classification.type === 'git') {
+    const { sourcePath } = await loadPackageFromGit({
+      url: classification.gitUrl!,
+      ref: classification.gitRef
+    });
+    return await runPathInstallPipeline({
+      ...options,
+      sourcePath,
+      sourceType: 'directory',
+      targetDir,
+      gitUrl: classification.gitUrl,
+      gitRef: classification.gitRef
+    });
+  }
+
   if (classification.type === 'directory' || classification.type === 'tarball') {
     return await runPathInstallPipeline({
       ...options,

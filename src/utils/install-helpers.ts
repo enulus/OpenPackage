@@ -7,32 +7,27 @@ import { arePackageNamesEquivalent } from './package-name.js';
 /**
  * Extract packages from package.yml configuration
  */
-export function extractPackagesFromConfig(config: PackageYml): Array<{ name: string; version?: string; path?: string; isDev: boolean }> {
-  const packages: Array<{ name: string; version?: string; path?: string; isDev: boolean }> = [];
+export function extractPackagesFromConfig(config: PackageYml): Array<{ name: string; version?: string; path?: string; git?: string; ref?: string; isDev: boolean }> {
+  const packages: Array<{ name: string; version?: string; path?: string; git?: string; ref?: string; isDev: boolean }> = [];
   
-  // Extract regular packages
-  if (config.packages) {
-    for (const pkg of config.packages) {
-      packages.push({
-        name: pkg.name,
-        version: pkg.version,
-        path: pkg.path,
-        isDev: false
-      });
+  const processSection = (section: 'packages' | 'dev-packages', isDev: boolean) => {
+    const deps = config[section];
+    if (deps) {
+      for (const pkg of deps) {
+        packages.push({
+          name: pkg.name,
+          version: pkg.version,
+          path: pkg.path,
+          git: (pkg as any).git,
+          ref: (pkg as any).ref,
+          isDev
+        });
+      }
     }
-  }
-  
-  // Extract dev packages
-  if (config['dev-packages']) {
-    for (const pkg of config['dev-packages']) {
-      packages.push({
-        name: pkg.name,
-        version: pkg.version,
-        path: pkg.path,
-        isDev: true
-      });
-    }
-  }
+  };
+
+  processSection('packages', false);
+  processSection('dev-packages', true);
   
   return packages;
 }

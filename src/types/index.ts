@@ -68,23 +68,30 @@ export interface PackageRepository {
 // Package.yml file types
 export interface PackageDependency {
   name: string;
+  /**
+   * Registry source (mutually exclusive with path/git).
+   */
   version?: string;
+  /**
+   * Local filesystem source (mutually exclusive with version/git).
+   * If ends with .tgz/.tar.gz → tarball, otherwise directory.
+   */
+  path?: string;
+  /**
+   * Git source (mutually exclusive with version/path).
+   * Supports https/ssh/git URLs; refs handled separately.
+   */
+  git?: string;
+  /**
+   * Optional ref (branch/tag/commit) when using git source.
+   */
+  ref?: string;
   /**
    * Optional list of registry-relative paths to install for this dependency.
    * When provided (non-empty), installs are partial and limited to these paths.
    * When omitted, installs include the full package payload.
    */
   include?: string[];
-  /**
-   * Path to local directory or tarball file.
-   * - If ends with .tgz/.tar.gz: treated as tarball
-   * - Otherwise: treated as directory
-   * - If omitted: resolved from registry by name+version
-   * 
-   * Relative paths are resolved from the workspace root (for root package.yml)
-   * or from the parent package's directory (for transitive dependencies).
-   */
-  path?: string;
 }
 
 export interface PackageYml {

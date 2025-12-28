@@ -16,6 +16,7 @@ import { extractRemoteErrorReason } from '../utils/error-reasons.js';
 import { PACKAGE_PATHS } from '../constants/index.js';
 import { formatVersionLabel } from '../utils/package-versioning.js';
 import { loadPackageFromPath } from './install/path-package-loader.js';
+import { loadPackageFromGit } from './install/git-package-loader.js';
 
 /**
  * Resolved package interface for dependency resolution
@@ -30,11 +31,12 @@ export interface ResolvedPackage {
    * - 'local'  => resolved purely from local registry data
    * - 'remote' => required remote metadata/versions to satisfy constraints
    * - 'path'   => loaded directly from a local directory or tarball path
+   * - 'git'    => loaded from a git repository
    *
    * This is used for UX-only surfaces (e.g. install summaries) and does not
    * affect any resolution logic.
    */
-  source?: 'local' | 'remote' | 'path';
+  source?: 'local' | 'remote' | 'path' | 'git';
   conflictResolution?: 'kept' | 'overwritten' | 'skipped';
   requiredVersion?: string; // The version required by the parent package
   requiredRange?: string; // The version range required by the parent package
@@ -459,46 +461,63 @@ export async function resolveDependencies(
     // Determine the source directory for resolving relative paths
     // If currentPackageSourcePath is provided, use its directory; otherwise use targetDir
     const baseDir = currentPackageSourcePath ? dirname(currentPackageSourcePath) : targetDir;
-    
-    for (const dep of dependencies) {
-      // Check if this is a path-based dependency
-      if (dep.path) {
+
+    const resolveLocalPackage = async (
+      pkg: Package,
+      sourceType: 'git' | 'path',
+      sourcePath: string,
+      requiredRange?: string
+    ) => {
+      if (!resolvedPackages.has(pkg.metadata.name)) {
+        resolvedPackages.set(pkg.metadata.name, {
+          name: pkg.metadata.name,
+          version: pkg.metadata.version || '0.0.0',
+          pkg: pkg,
+          isRoot: false,
+          source: sourceType,
+          requiredVersion: pkg.metadata.version,
+          requiredRange
+        });
+
+        const child = await resolveDependencies(
+          pkg.metadata.name,
+          targetDir,
+          false,
+          visitedStack,
+          resolvedPackages,
+          pkg.metadata.version,
+          requiredVersions,
+          globalConstraints,
+          rootOverrides,
+          resolverOptions,
+          remoteOutcomes,
+          sourcePath
+        );
+        for (const m of child.missingPackages) missing.add(m);
+      }
+    };
+
+    const processDependencyEntry = async (dep: any) => {
+      // Git-based dependency
+      if (dep.git) {
+        try {
+          const { pkg, sourcePath } = await loadPackageFromGit({
+            url: dep.git,
+            ref: dep.ref
+          });
+          await resolveLocalPackage(pkg, 'git', sourcePath, dep.version);
+        } catch (error) {
+          logger.error(`Failed to load git-based dependency '${dep.name}' from '${dep.git}': ${error}`);
+          missing.add(dep.name);
+        }
+      } else if (dep.path) {
         // Resolve path relative to the current package's location
         const resolvedPath = resolve(baseDir, dep.path);
         
         try {
           // Load package from path
           const pathPackage = await loadPackageFromPath(resolvedPath);
-          
-          // Check if already resolved (avoid duplicates)
-          if (!resolvedPackages.has(pathPackage.metadata.name)) {
-            resolvedPackages.set(pathPackage.metadata.name, {
-              name: pathPackage.metadata.name,
-              version: pathPackage.metadata.version || '0.0.0',
-              pkg: pathPackage,
-              isRoot: false,
-              source: 'path',
-              requiredVersion: pathPackage.metadata.version,
-              requiredRange: dep.version
-            });
-            
-            // Recurse into this package's dependencies
-            const child = await resolveDependencies(
-              pathPackage.metadata.name,
-              targetDir,
-              false,
-              visitedStack,
-              resolvedPackages,
-              pathPackage.metadata.version,
-              requiredVersions,
-              globalConstraints,
-              rootOverrides,
-              resolverOptions,
-              remoteOutcomes,
-              resolvedPath  // Pass the source path for relative resolution
-            );
-            for (const m of child.missingPackages) missing.add(m);
-          }
+          await resolveLocalPackage(pathPackage, 'path', resolvedPath, dep.version);
         } catch (error) {
           logger.error(`Failed to load path-based dependency '${dep.name}' from '${dep.path}': ${error}`);
           missing.add(dep.name);
@@ -520,75 +539,23 @@ export async function resolveDependencies(
         );
         for (const m of child.missingPackages) missing.add(m);
       }
+    };
+    
+    // Process regular packages
+    for (const dep of dependencies) {
+      await processDependencyEntry(dep);
     }
     
     // For root package, also process dev-packages
     if (isRoot) {
       const devDependencies = config['dev-packages'] || [];
       for (const dep of devDependencies) {
-        // Check if this is a path-based dependency
-        if (dep.path) {
-          // Resolve path relative to the current package's location
-          const resolvedPath = resolve(baseDir, dep.path);
-          
-          try {
-            // Load package from path
-            const pathPackage = await loadPackageFromPath(resolvedPath);
-            
-            // Check if already resolved (avoid duplicates)
-            if (!resolvedPackages.has(pathPackage.metadata.name)) {
-              resolvedPackages.set(pathPackage.metadata.name, {
-                name: pathPackage.metadata.name,
-                version: pathPackage.metadata.version || '0.0.0',
-                pkg: pathPackage,
-                isRoot: false,
-                source: 'path',
-                requiredVersion: pathPackage.metadata.version,
-                requiredRange: dep.version
-              });
-              
-              // Recurse into this package's dependencies
-              const child = await resolveDependencies(
-                pathPackage.metadata.name,
-                targetDir,
-                false,
-                visitedStack,
-                resolvedPackages,
-                pathPackage.metadata.version,
-                requiredVersions,
-                globalConstraints,
-                rootOverrides,
-                resolverOptions,
-                remoteOutcomes,
-                resolvedPath  // Pass the source path for relative resolution
-              );
-              for (const m of child.missingPackages) missing.add(m);
-            }
-          } catch (error) {
-            logger.error(`Failed to load path-based dev dependency '${dep.name}' from '${dep.path}': ${error}`);
-            missing.add(dep.name);
-          }
-        } else {
-          // Standard registry-based dependency resolution
-          const child = await resolveDependencies(
-            dep.name,
-            targetDir,
-            false,
-            visitedStack,
-            resolvedPackages,
-            dep.version,
-            requiredVersions,
-            globalConstraints,
-            rootOverrides,
-            resolverOptions,
-            remoteOutcomes
-          );
-          for (const m of child.missingPackages) missing.add(m);
-        }
+        await processDependencyEntry(dep);
       }
     }
     
     visitedStack.delete(packageName);
+
   }
   
   // Attach the requiredVersions map to each resolved package for later use
