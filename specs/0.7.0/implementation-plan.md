@@ -104,6 +104,7 @@ Exit criteria:
 
 ---
 
+[NOT IMPLEMENTED]
 ## Phase 2 — Directory layout enforcement (`init` + safety)
 
 Deliverable: consistent on-disk layout as specified.
@@ -174,12 +175,14 @@ Deliverable: `install` installs a registry version and updates workspace `openpa
 
 Todos:
 - **Resolve version**:
-  - Support `opkg install name@1.2.3` and/or version ranges if already supported (lock exact version in manifest after resolution, per spec examples).
+  - Support `opkg install name@1.2.3` and/or version ranges if already supported.
+  - For registry installs requested with a range, preserve the requested constraint in `openpackage.yml` (do not rewrite to an exact version).
 - **Read from local registry directory**:
   - `~/.openpackage/registry/<name>/<version>/`
 - **Apply files to workspace** (share mapping code with `apply`).
 - **Update `.openpackage/openpackage.yml`**:
-  - Ensure dependency entry has `version: <resolved>` and `path: ~/.openpackage/registry/<name>/<resolved>/`
+  - Ensure dependency entry preserves `version: <requested>` (range or exact) and does **not** write `path:` for registry installs (it is inferred)
+  - The exact installed version and resolved source path are recorded in `.openpackage/openpackage.index.yml`
 - **Update unified index** for installed package.
 
 Exit criteria:

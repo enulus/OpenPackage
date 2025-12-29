@@ -11,14 +11,13 @@ import {
   walkFiles
 } from './fs.js';
 import { writeIfChanged } from '../core/install/file-updater.js';
-import { getLocalPackagesDir } from './paths.js';
 import { packageManager } from '../core/package.js';
+import { getRegistryDirectories } from '../core/directory.js';
 import { logger } from './logger.js';
 import {
   FILE_PATTERNS,
-  PACKAGE_ROOT_DIRS
 } from '../constants/index.js';
-import { getPlatformRootFileNames, stripRootCopyPrefix, isRootCopyPath } from './platform-root-files.js';
+import { getPlatformRootFileNames, stripRootCopyPrefix } from './platform-root-files.js';
 import type { Platform } from '../core/platforms.js';
 import { getAllUniversalSubdirs } from '../core/platforms.js';
 import { normalizePathForProcessing } from './path-normalization.js';
@@ -36,23 +35,37 @@ import type { PackageFile } from '../types/index.js';
 import { mergeInlinePlatformOverride } from './platform-yaml-merge.js';
 import { parseUniversalPath } from './platform-file.js';
 import { getPlatformDefinition } from '../core/platforms.js';
-
 import {
-  getPackageIndexPath,
-  readPackageIndex,
-  writePackageIndex,
   sortMapping,
   ensureTrailingSlash,
   isDirKey,
-  type PackageIndexRecord,
-  pruneNestedDirectories,
-  type PackageIndexLocation
+  pruneNestedDirectories
 } from './package-index-yml.js';
-import { createWorkspaceHash } from './version-generator.js';
+import {
+  getWorkspaceIndexPath,
+  readWorkspaceIndex,
+  writeWorkspaceIndex
+} from './workspace-index-yml.js';
+import {
+  buildWorkspaceOwnershipContext,
+  type WorkspaceConflictOwner
+} from './workspace-index-ownership.js';
 
 // ============================================================================
 // Types and Interfaces
 // ============================================================================
+
+type PackageIndexLocation = 'root' | 'nested';
+
+interface PackageIndexRecord {
+  path: string;
+  packageName: string;
+  workspace: {
+    version: string;
+    hash?: string;
+  };
+  files: Record<string, string[]>;
+}
 
 interface RegistryFileEntry {
   registryPath: string;
@@ -81,12 +94,7 @@ interface GroupPlan {
   targetDirs: Set<string>;
 }
 
-interface ConflictOwner {
-  packageName: string;
-  key: string;
-  type: 'file' | 'dir';
-  indexPath: string;
-}
+type ConflictOwner = WorkspaceConflictOwner;
 
 interface ExpandedIndexesContext {
   dirKeyOwners: Map<string, ConflictOwner[]>;
@@ -106,6 +114,61 @@ interface PlannedTargetDetail {
   relPath: string;
   content: string;
   encoding?: string;
+}
+
+async function readPackageIndex(
+  cwd: string,
+  packageName: string,
+  _location?: PackageIndexLocation
+): Promise<PackageIndexRecord | null> {
+  const record = await readWorkspaceIndex(cwd);
+  const entry = record.index.packages?.[packageName];
+  if (!entry) return null;
+  return {
+    path: entry.path ?? '',
+    packageName,
+    workspace: {
+      version: entry.version ?? '',
+      hash: undefined
+    },
+    files: entry.files ?? {}
+  };
+}
+
+async function writePackageIndex(record: PackageIndexRecord, cwd?: string): Promise<void> {
+  const resolvedCwd =
+    cwd ??
+    (record.path
+      ? dirname(dirname(record.path))
+      : undefined);
+  if (!resolvedCwd) {
+    logger.warn(`Unable to write workspace index for ${record.packageName}: missing cwd`);
+    return;
+  }
+
+  const wsRecord = await readWorkspaceIndex(resolvedCwd);
+  const entry = wsRecord.index.packages?.[record.packageName];
+  const pathToUse =
+    entry?.path ??
+    record.path ??
+    (record.workspace?.version
+      ? join(getRegistryDirectories().packages, record.packageName, record.workspace.version, sep)
+      : '');
+  if (!pathToUse) {
+    logger.warn(
+      `Skipping workspace index write for ${record.packageName}: source path is unknown`
+    );
+    return;
+  }
+
+  wsRecord.index.packages[record.packageName] = {
+    ...entry,
+    path: pathToUse,
+    version: entry.version ?? record.workspace?.version,
+    files: sortMapping(record.files ?? {})
+  };
+
+  await writeWorkspaceIndex(wsRecord);
 }
 
 // ============================================================================
@@ -227,7 +290,8 @@ async function updateOwnerIndexAfterRename(
   owner: ConflictOwner,
   oldRelPath: string,
   newRelPath: string,
-  indexByPackage: Map<string, PackageIndexRecord>
+  indexByPackage: Map<string, PackageIndexRecord>,
+  cwd: string
 ): Promise<void> {
   const normalizedOld = normalizePathForProcessing(oldRelPath);
   const normalizedNew = normalizePathForProcessing(newRelPath);
@@ -240,7 +304,7 @@ async function updateOwnerIndexAfterRename(
     const idx = values.findIndex(value => normalizePathForProcessing(value) === normalizedOld);
     if (idx === -1) return;
     values[idx] = normalizedNew;
-    await writePackageIndex(record);
+    await writePackageIndex(record, cwd);
   } else {
     // Directory key still valid; nothing to change.
   }
@@ -315,7 +379,13 @@ async function resolveConflictsForPlannedFiles(
           await ensureDir(dirname(absLocalPath));
           try {
             await fs.rename(absTarget, absLocalPath);
-            await updateOwnerIndexAfterRename(owner, normalizedRel, localRelPath, indexByPackage);
+            await updateOwnerIndexAfterRename(
+              owner,
+              normalizedRel,
+              localRelPath,
+              indexByPackage,
+              cwd
+            );
             context.installedPathOwners.delete(normalizedRel);
             context.installedPathOwners.set(normalizePathForProcessing(localRelPath), owner);
             warnings.push(`Renamed existing ${normalizedRel} from ${owner.packageName} to ${localRelPath}.`);
@@ -427,58 +497,23 @@ function normalizeRelativePath(cwd: string, absPath: string): string {
   return normalized.replace(/\\/g, '/');
 }
 
-async function collectPackageDirectories(
-  cwd: string
-): Promise<Array<{ packageName: string; dir: string }>> {
-  const packagesRoot = getLocalPackagesDir(cwd);
-  if (!(await exists(packagesRoot))) {
-    return [];
-  }
-
-  const results: Array<{ packageName: string; dir: string }> = [];
-
-  async function recurse(currentDir: string, relativeBase: string): Promise<void> {
-    const packageYmlPath = join(currentDir, FILE_PATTERNS.OPENPACKAGE_YML);
-    if (await exists(packageYmlPath)) {
-      const packageName = relativeBase.replace(new RegExp(`\\${sep}`, 'g'), '/');
-      results.push({ packageName, dir: currentDir });
-      return;
-    }
-
-    const subdirs = await listDirectories(currentDir).catch(() => [] as string[]);
-    for (const subdir of subdirs) {
-      const nextDir = join(currentDir, subdir);
-      const nextRelative = relativeBase ? `${relativeBase}${sep}${subdir}` : subdir;
-      await recurse(nextDir, nextRelative);
-    }
-  }
-
-  const topLevelDirs = await listDirectories(packagesRoot).catch(() => [] as string[]);
-  for (const dir of topLevelDirs) {
-    const absolute = join(packagesRoot, dir);
-    await recurse(absolute, dir);
-  }
-
-  return results;
-}
-
 export async function loadOtherPackageIndexes(
   cwd: string,
   excludePackage: string
 ): Promise<PackageIndexRecord[]> {
-  const directories = await collectPackageDirectories(cwd);
+  const record = await readWorkspaceIndex(cwd);
+  const wsPath = getWorkspaceIndexPath(cwd);
+  const packages = record.index.packages ?? {};
   const results: PackageIndexRecord[] = [];
 
-  for (const entry of directories) {
-    if (entry.packageName === excludePackage) continue;
-    const indexPath = join(entry.dir, FILE_PATTERNS.OPENPACKAGE_INDEX_YML);
-    if (!(await exists(indexPath))) continue;
-
-    const record = await readPackageIndex(cwd, entry.packageName);
-    if (record) {
-      record.path = indexPath;
-      results.push(record);
-    }
+  for (const [name, entry] of Object.entries(packages)) {
+    if (name === excludePackage) continue;
+    results.push({
+      path: entry?.path ?? wsPath,
+      packageName: name,
+      workspace: { version: entry?.version ?? '' },
+      files: entry?.files ?? {}
+    });
   }
 
   return results;
@@ -516,8 +551,7 @@ async function buildExpandedIndexesContext(
       const owner: ConflictOwner = {
         packageName: record.packageName,
         key,
-        type: key.endsWith('/') ? 'dir' : 'file',
-        indexPath: record.path
+        type: key.endsWith('/') ? 'dir' : 'file'
       };
 
       if (owner.type === 'dir') {
@@ -960,17 +994,15 @@ export async function installPackageByIndex(
 
   if (!options.dryRun) {
     const mapping = buildIndexMappingFromPlans(groupPlans);
-    const workspaceHash = previousIndex?.workspace?.hash ?? createWorkspaceHash(cwd);
     const indexRecord: PackageIndexRecord = {
-      path: getPackageIndexPath(cwd, packageName),
+      path: join(getRegistryDirectories().packages, packageName, version, sep),
       packageName,
       workspace: {
-        hash: workspaceHash,
         version
       },
       files: mapping
     };
-    await writePackageIndex(indexRecord);
+    await writePackageIndex(indexRecord, cwd);
   }
 
   return operationResult;
@@ -1472,17 +1504,6 @@ export async function applyPlannedSyncForPackageFiles(
       packageFiles,
       platforms
     );
-    const workspaceHash = previousIndex?.workspace?.hash ?? createWorkspaceHash(cwd);
-    const indexRecord: PackageIndexRecord = {
-      path: getPackageIndexPath(cwd, packageName, location),
-      packageName,
-      workspace: {
-        hash: workspaceHash,
-        version
-      },
-      files: mapping
-    };
-    await writePackageIndex(indexRecord);
   }
 
   return {

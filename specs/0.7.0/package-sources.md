@@ -35,12 +35,11 @@ packages:
 ```yaml
 packages:
   - name: community-pkg
-    version: 1.2.3
-    path: ~/.openpackage/registry/community-pkg/1.2.3/
+    version: ^1.2.0
 ```
 
-- `version:` indicates origin from registry
-- `path:` points to immutable registry location
+- `version:` indicates origin from registry (constraint or exact)
+- The resolved registry directory is inferred at runtime and recorded in the unified `.openpackage/openpackage.index.yml`
 - `apply`, `install` work; `save`, `add` fail with error
 
 ### 4. Git Source
@@ -72,7 +71,7 @@ In this codebase, git sources are cloned under the local registry (for caching/o
 1. Read dependency from workspace openpackage.yml
 2. Determine source type:
    - Has `path:` → Use path directly (resolve ~ and relative paths)
-   - Has only `version:` → Resolve from registry, populate path
+   - Has only `version:` → Resolve from registry to an installed version, infer runtime path
    - Has `git:` → Clone/fetch from repository to a local directory, then use that path
 3. Validate source exists
 4. Proceed with operation
@@ -133,7 +132,7 @@ Relative paths (e.g., `./.openpackage/packages/...`) resolve relative to the `op
 
 ## Registry Path After Install
 
-When installing from registry, the path is populated:
+When installing from registry, the exact installed version and resolved source path are recorded in the unified index:
 
 ```yaml
 # Before install (in openpackage.yml)
@@ -144,8 +143,8 @@ packages:
 # After `opkg install` resolves and installs
 packages:
   - name: community-pkg
-    version: 1.2.3
-    path: ~/.openpackage/registry/community-pkg/1.2.3/
+    version: ^1.2.0
 ```
 
-The `version` field is retained to indicate the package originated from the registry.
+The `version` field remains the requested constraint (range or exact).
+The exact installed version and resolved source path are recorded in the unified `.openpackage/openpackage.index.yml`.

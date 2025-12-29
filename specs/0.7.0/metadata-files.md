@@ -29,10 +29,9 @@ packages:
   - name: shared-tools
     path: ~/.openpackage/packages/shared-tools/
     
-  # Registry-installed (version + resolved path)
+  # Registry-installed (version constraint only; path inferred from registry)
   - name: community-pkg
-    version: 1.2.3
-    path: ~/.openpackage/registry/community-pkg/1.2.3/
+    version: ^1.2.0
     
   # Git sources
   - name: git-pkg
@@ -179,21 +178,21 @@ packages:
     version: ^1.2.0
 ```
 
-- When installed, `path:` is added pointing to registry location
+- The registry directory is inferred at runtime from `version` (constraint) by resolving to an installed version.
 - Enables `install`, `apply` (read-only)
 - `save`, `add` fail with clear error
 
 ### After Registry Install
 
 ```yaml
-# In openpackage.yml after `opkg install community-pkg@1.2.3`
+# In openpackage.yml after `opkg install community-pkg@^1.2.0`
 packages:
   - name: community-pkg
-    version: 1.2.3
-    path: ~/.openpackage/registry/community-pkg/1.2.3/
+    version: ^1.2.0
 ```
 
-The `version` field indicates origin; `path` is the runtime source.
+The `version` field remains the requested constraint (range).
+The exact installed version and resolved source path are recorded in the unified `.openpackage/openpackage.index.yml`.
 
 ### Git-Based
 

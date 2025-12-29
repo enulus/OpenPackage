@@ -142,13 +142,15 @@ opkg apply my-pkg
 1. Resolve version from registry
 2. Locate registry directory: ~/.openpackage/registry/<name>/<version>/
 3. Apply files to workspace platforms
-4. Update workspace openpackage.yml with dependency (version + path)
+4. Update workspace openpackage.yml with dependency:
+   - Registry installs: preserve the requested `version` constraint (range or exact) and do not write `path:` (it is inferred)
+   - Git/path installs: do not write ranges; persist the source (`git`/`ref` or `path`) and any version written must be exact
 5. Update unified openpackage.index.yml with file mappings
 ```
 
 **Example**:
 ```bash
-opkg install community-pkg@1.2.3
+opkg install community-pkg@^1.2.0
 
 # Reads from:
 #   ~/.openpackage/registry/community-pkg/1.2.3/
@@ -156,8 +158,7 @@ opkg install community-pkg@1.2.3
 # Updates openpackage.yml:
 #   packages:
 #     - name: community-pkg
-#       version: 1.2.3
-#       path: ~/.openpackage/registry/community-pkg/1.2.3/
+#       version: ^1.2.0
 ```
 
 ---

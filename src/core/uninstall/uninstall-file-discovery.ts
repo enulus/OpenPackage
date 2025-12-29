@@ -3,7 +3,9 @@ import { type UninstallDiscoveredFile } from '../../types/index.js';
 import { getAllPlatforms, getPlatformDefinition } from '../platforms.js';
 import { exists, isDirectory, walkFiles, readTextFile } from '../../utils/fs.js';
 import { extractPackageContentFromRootFile } from '../../utils/root-file-extractor.js';
-import { readPackageIndex, type PackageIndexRecord, isDirKey } from '../../utils/package-index-yml.js';
+import { isDirKey } from '../../utils/package-index-yml.js';
+import { readWorkspaceIndex } from '../../utils/workspace-index-yml.js';
+import type { WorkspaceIndexPackage } from '../../types/workspace-index.js';
 import { normalizePathForProcessing } from '../../utils/path-normalization.js';
 
 async function collectFilesUnderDirectory(cwd: string, dirRel: string): Promise<string[]> {
@@ -20,12 +22,12 @@ async function collectFilesUnderDirectory(cwd: string, dirRel: string): Promise<
 
 async function expandIndexToFilePaths(
   cwd: string,
-  index: PackageIndexRecord | null
+  index: WorkspaceIndexPackage | undefined
 ): Promise<Set<string>> {
   const owned = new Set<string>();
   if (!index) return owned;
 
-  for (const [key, values] of Object.entries(index.files)) {
+  for (const [key, values] of Object.entries(index.files ?? {})) {
     if (isDirKey(key)) {
       for (const dirRel of values) {
         const files = await collectFilesUnderDirectory(cwd, dirRel);
@@ -51,8 +53,9 @@ async function discoverViaIndex(
   packageName: string
 ): Promise<UninstallDiscoveredFile[]> {
   const cwd = process.cwd();
-  const index = await readPackageIndex(cwd, packageName);
-  const owned = await expandIndexToFilePaths(cwd, index);
+  const ws = await readWorkspaceIndex(cwd);
+  const pkgEntry = ws.index.packages?.[packageName];
+  const owned = await expandIndexToFilePaths(cwd, pkgEntry);
   const results: UninstallDiscoveredFile[] = [];
 
   for (const rel of owned) {

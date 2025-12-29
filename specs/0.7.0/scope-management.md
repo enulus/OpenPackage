@@ -145,7 +145,6 @@ packages:
 packages:
   - name: community-pkg
     version: 1.2.3
-    path: ~/.openpackage/registry/community-pkg/1.2.3/
 ```
 
 ---
