@@ -52,8 +52,19 @@ packages:
     ref: main
 ```
 
-- Cloned/fetched on demand
-- Behavior depends on local clone location
+- Git dependencies are resolved by cloning/fetching the repository locally.
+- **Mutability is determined by the resolved filesystem path** (not by the fact that the source is git):
+  - If the resolved path is under `~/.openpackage/registry/`, it is treated as an **immutable registry snapshot**.
+  - If the resolved path is under a mutable packages directory (e.g. `~/.openpackage/packages/` or `./.openpackage/packages/`), it is treated as **mutable**.
+  - 0.7.0 does not standardize a "git working copy" location; it standardizes that **registry locations are immutable**.
+
+#### Git clone location (this repo’s 0.7.0 behavior)
+
+In this codebase, git sources are cloned under the local registry (for caching/offline use), so they are **immutable**:
+
+```
+~/.openpackage/registry/...
+```
 
 ## Source Resolution Flow
 
@@ -62,7 +73,7 @@ packages:
 2. Determine source type:
    - Has `path:` → Use path directly (resolve ~ and relative paths)
    - Has only `version:` → Resolve from registry, populate path
-   - Has `git:` → Clone/fetch from repository
+   - Has `git:` → Clone/fetch from repository to a local directory, then use that path
 3. Validate source exists
 4. Proceed with operation
 ```
@@ -74,7 +85,8 @@ packages:
 | `./.openpackage/packages/...` | ✅ | ✅ | ✅ | ✅ | N/A |
 | `~/.openpackage/packages/...` | ✅ | ✅ | ✅ | ✅ | N/A |
 | `~/.openpackage/registry/...` | ❌ | ❌ | N/A | ✅ | ✅ |
-| `git: ...` | ⚠️ | ⚠️ | ✅ | ✅ | ✅ |
+| `git: ...` (resolved to `~/.openpackage/registry/...`) | ❌ | ❌ | ✅ | ✅ | ✅ |
+| `git: ...` (resolved to a mutable packages dir) | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ## Error Handling
 

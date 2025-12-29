@@ -88,6 +88,12 @@ Once created, registry entries are never modified:
 - Re-packing overwrites entire directory (idempotent)
 - No partial updates
 
+### Git clones stored in the registry
+
+If git sources are cloned under `~/.openpackage/registry/` (as this repo’s 0.7.0 behavior does), those directories are treated as **immutable** as well. The invariant is simple:
+
+- Anything under `~/.openpackage/registry/` is **read-only** for `save` / `add` (regardless of whether it came from `pack`, `install`, or `git`).
+
 ### Enforcement
 
 The `save` and `add` commands detect registry paths and fail:

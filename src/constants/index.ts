@@ -76,8 +76,67 @@ export const CONFLICT_RESOLUTION = {
 
 export const UNVERSIONED = '0.0.0' as const;
 
+/**
+ * Source type constants for package resolution.
+ */
+export const SOURCE_TYPES = {
+  PATH: 'path',
+  REGISTRY: 'registry',
+  GIT: 'git'
+} as const;
+
+/**
+ * Mutability constants for package sources.
+ */
+export const MUTABILITY = {
+  MUTABLE: 'mutable',
+  IMMUTABLE: 'immutable'
+} as const;
+
+/**
+ * Resolution source constants (where version was resolved from).
+ */
+export const RESOLUTION_SOURCES = {
+  LOCAL: 'local',
+  REMOTE: 'remote'
+} as const;
+
+/**
+ * Git-related constants.
+ */
+export const GIT = {
+  DIRECTORY: 'git',
+  DEFAULT_REF: 'HEAD',
+  COMMANDS: {
+    CLONE: 'clone',
+    FETCH: 'fetch',
+    CHECKOUT: 'checkout',
+    PULL: 'pull',
+    DEPTH_FLAG: '--depth',
+    DEPTH_VALUE: '1',
+    BRANCH_FLAG: '--branch',
+    ORIGIN: 'origin'
+  }
+} as const;
+
+/**
+ * Default version constraint (wildcard/latest).
+ */
+export const DEFAULT_VERSION_CONSTRAINT = '*' as const;
+
+/**
+ * Registry path prefixes (for constructing declared paths).
+ */
+export const REGISTRY_PATH_PREFIXES = {
+  BASE: '~/.openpackage/registry/',
+  GIT: '~/.openpackage/registry/git/'
+} as const;
+
 export type FilePattern = typeof FILE_PATTERNS[keyof typeof FILE_PATTERNS];
 export type UniversalSubdir = string;
 export type OpenPackageDir = typeof OPENPACKAGE_DIRS[keyof typeof OPENPACKAGE_DIRS];
 export type DependencyArray = typeof DEPENDENCY_ARRAYS[keyof typeof DEPENDENCY_ARRAYS];
 export type ConflictResolution = typeof CONFLICT_RESOLUTION[keyof typeof CONFLICT_RESOLUTION];
+export type SourceType = typeof SOURCE_TYPES[keyof typeof SOURCE_TYPES];
+export type Mutability = typeof MUTABILITY[keyof typeof MUTABILITY];
+export type ResolutionSource = typeof RESOLUTION_SOURCES[keyof typeof RESOLUTION_SOURCES];

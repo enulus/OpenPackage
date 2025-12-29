@@ -141,6 +141,11 @@ Todos:
 Exit criteria:
 - Any command can ask “where do I read from?” and “am I allowed to write?” without re-implementing logic.
 
+Note:
+- **Mutability is determined by resolved path**:
+  - Paths under `~/.openpackage/registry/` are treated as **immutable** (including git clones if stored there).
+  - Paths under `./.openpackage/packages/` or `~/.openpackage/packages/` are treated as **mutable**.
+
 ---
 
 ## Phase 4 — `apply` (Source → Workspace) using unified index

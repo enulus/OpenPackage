@@ -204,8 +204,13 @@ packages:
     ref: v1.0.0
 ```
 
-- Optional `ref:` for branch/tag/commit
-- Cloned on demand
+- Optional `ref:` for branch/tag/commit.
+- The dependency ultimately resolves to a local filesystem path (after cloning/fetching).
+- **Mutability is determined by the resolved path**:
+  - If the clone lives under `~/.openpackage/registry/`, it is treated as **immutable** (same rules as any registry snapshot: `save`/`add` must fail).
+  - If the clone lives under a mutable packages directory (e.g. `~/.openpackage/packages/` or `./.openpackage/packages/`), it is treated as **mutable**.
+
+This repo’s 0.7.0 behavior clones git sources under `~/.openpackage/registry/`, so git sources are **immutable by default**.
 
 ### Partial Install
 
