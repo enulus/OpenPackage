@@ -16,6 +16,9 @@ import { writePackageYml } from '../../utils/package-yml.js';
 import { printPlatformSyncSummary } from '../sync/platform-sync-summary.js';
 import { resolveWorkspaceNames, SaveMode } from './name-resolution.js';
 import { resolvePackageFilesWithConflicts } from './save-conflict-resolution.js';
+import { getDetectedPlatforms, type Platform } from '../platforms.js';
+import { buildIndexMappingForPackageFiles, loadOtherPackageIndexes } from '../../utils/index-based-installer.js';
+import { getPackageIndexPath } from '../../utils/package-index-yml.js';
 import { 
   detectPackageContext, 
   getNoPackageDetectedMessage,
@@ -184,6 +187,29 @@ export async function runSavePipeline(
         packageLocation: packageContext.location
       }
     );
+  }
+
+  // Always write/update the workspace-local package index on save (wip or stable).
+  // The index records concrete workspace paths that exist today; apply/install will expand it later.
+  try {
+    const detectedPlatforms: Platform[] = await getDetectedPlatforms(cwd);
+    const otherIndexes = await loadOtherPackageIndexes(cwd, effectiveConfig.name);
+    const mapping = await buildIndexMappingForPackageFiles(
+      cwd,
+      packageFiles,
+      detectedPlatforms,
+      indexRecord,
+      otherIndexes
+    );
+
+    await writePackageIndex({
+      path: getPackageIndexPath(cwd, effectiveConfig.name, packageContext.location),
+      packageName: effectiveConfig.name,
+      workspace: { hash: workspaceHash, version: effectiveConfig.version },
+      files: mapping
+    });
+  } catch (error) {
+    logger.warn(`Failed to update openpackage.index.yml for ${effectiveConfig.name}: ${String(error)}`);
   }
 
   if (packageContext.location !== 'root') {

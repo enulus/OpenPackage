@@ -53,6 +53,8 @@ workspace-local metadata.
   - Universal-subdir paths are platform-mapped.
   - `root/` is the only prefix that uses a **strip-prefix** rule (copy-to-root).
   - Other root-level files/dirs are **not installed** by default.
+- **Reserved directory**:
+  - `packages/` is reserved and **never included** in the package payload.
 - **Cached packages** (workspace-local installed copies) live under `cwd/.openpackage/packages/<name>/` and mirror the package payload layout.
 - **Global registry copies** (under `~/.openpackage/registry/...`) store the package payload layout and **never include** workspace index files.
 

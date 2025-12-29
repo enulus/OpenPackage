@@ -2,6 +2,7 @@ import {
   DIR_PATTERNS,
   FILE_PATTERNS
 } from '../constants/index.js';
+import { isRootCopyPath } from './platform-root-files.js';
 import {
   getFirstPathComponent,
   getPathAfterFirstComponent,
@@ -61,7 +62,7 @@ export function isAllowedRegistryPath(registryPath: string): boolean {
   if (isSkippableRegistryPath(normalized)) return false;
 
   // Reject copy-to-root entries here; they are handled explicitly elsewhere
-  if (normalized.startsWith('root/')) return false;
+  if (isRootCopyPath(normalized)) return false;
 
   // Strict v2: only accept paths whose first component is a universal subdir
   const universalInfo = extractUniversalSubdirInfo(normalized);

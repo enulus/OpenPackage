@@ -37,6 +37,17 @@ export const OPENPACKAGE_DIRS = {
 } as const;
 
 /**
+ * Package root directory names (relative to package root).
+ */
+export const PACKAGE_ROOT_DIRS = {
+  /**
+   * Direct copy directory: files under `root/**` are copied 1:1 to workspace root
+   * with the `root/` prefix stripped during install.
+   */
+  ROOT_COPY: 'root'
+} as const;
+
+/**
  * Canonical paths within a package or cached copy (relative to the package root).
  */
 export const PACKAGE_PATHS = {

@@ -10,6 +10,7 @@ no manifest-level include/exclude filtering.
 **Never include (always excluded):**
 - `.openpackage/**` (workspace-local metadata directory; never part of payload)
 - `openpackage.index.yml` (workspace-local index; never part of payload)
+- `packages/**` (reserved; never part of payload)
 
 **Always include:**
 - `openpackage.yml` (package manifest; marks the package root)

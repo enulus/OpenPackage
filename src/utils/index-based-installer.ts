@@ -15,8 +15,10 @@ import { getLocalPackagesDir } from './paths.js';
 import { packageManager } from '../core/package.js';
 import { logger } from './logger.js';
 import {
-  FILE_PATTERNS
+  FILE_PATTERNS,
+  PACKAGE_ROOT_DIRS
 } from '../constants/index.js';
+import { getPlatformRootFileNames, stripRootCopyPrefix, isRootCopyPath } from './platform-root-files.js';
 import type { Platform } from '../core/platforms.js';
 import { getAllUniversalSubdirs } from '../core/platforms.js';
 import { normalizePathForProcessing } from './path-normalization.js';
@@ -1286,6 +1288,72 @@ async function decideGroupPlans(
 // Shared Helper for Building Index Mappings
 // ============================================================================
 
+function addMappingValue(mapping: Record<string, string[]>, key: string, value: string): void {
+  if (!mapping[key]) {
+    mapping[key] = [];
+  }
+  if (!mapping[key]!.includes(value)) {
+    mapping[key]!.push(value);
+  }
+}
+
+async function augmentIndexMappingWithRootAndCopyToRoot(
+  cwd: string,
+  mapping: Record<string, string[]>,
+  packageFiles: PackageFile[],
+  platforms: Platform[]
+): Promise<Record<string, string[]>> {
+  const augmented: Record<string, string[]> = { ...mapping };
+
+  const rootFileNames = getPlatformRootFileNames(platforms);
+  const explicitRootKeys = new Set<string>();
+  const hasAgents = packageFiles.some(file => normalizeRegistryPath(file.path) === FILE_PATTERNS.AGENTS_MD);
+
+  for (const file of packageFiles) {
+    const normalized = normalizeRegistryPath(file.path);
+
+    const stripped = stripRootCopyPrefix(normalized);
+    if (stripped !== null) {
+      if (await exists(join(cwd, stripped))) {
+        addMappingValue(augmented, normalized, stripped);
+      }
+      continue;
+    }
+
+    if (rootFileNames.has(normalized) || isRootRegistryPath(normalized)) {
+      explicitRootKeys.add(normalized);
+      if (await exists(join(cwd, normalized))) {
+        addMappingValue(augmented, normalized, normalized);
+      }
+    }
+  }
+
+  // For allowed registry paths, if the file already exists at the workspace-relative path,
+  // record that concrete location. This is important for root packages and for "add"/"save"
+  // flows where the source path itself is the only existing workspace location before apply/install.
+  for (const file of packageFiles) {
+    const normalized = normalizeRegistryPath(file.path);
+    if (!isAllowedRegistryPath(normalized)) continue;
+    if (isSkippableRegistryPath(normalized)) continue;
+    if (await exists(join(cwd, normalized))) {
+      addMappingValue(augmented, normalized, normalized);
+    }
+  }
+
+  // AGENTS.md can populate platform root files when no explicit override exists in the package.
+  if (hasAgents) {
+    for (const rootFile of rootFileNames) {
+      if (rootFile === FILE_PATTERNS.AGENTS_MD) continue;
+      if (explicitRootKeys.has(rootFile)) continue;
+      if (await exists(join(cwd, rootFile))) {
+        addMappingValue(augmented, FILE_PATTERNS.AGENTS_MD, rootFile);
+      }
+    }
+  }
+
+  return sortMapping(augmented);
+}
+
 /**
  * Build index mapping for package files using the same logic flow as installPackageByIndex
  * This function reuses the planning, grouping, and decision logic to ensure consistency
@@ -1321,7 +1389,7 @@ export async function buildIndexMappingForPackageFiles(
     }));
 
   if (registryEntries.length === 0) {
-    return {};
+    return await augmentIndexMappingWithRootAndCopyToRoot(cwd, {}, packageFiles, platforms);
   }
 
   // Reuse existing planning logic - this ensures consistency with installPackageByIndex
@@ -1333,7 +1401,8 @@ export async function buildIndexMappingForPackageFiles(
   const groupPlans = await decideGroupPlans(cwd, groups, previousIndex, context);
   
   // Build the mapping using the same logic as installPackageByIndex
-  return buildIndexMappingFromPlans(groupPlans);
+  const mapping = buildIndexMappingFromPlans(groupPlans);
+  return await augmentIndexMappingWithRootAndCopyToRoot(cwd, mapping, packageFiles, platforms);
 }
 
 function filterRegistryEntriesForPackageFiles(packageFiles: PackageFile[]): RegistryFileEntry[] {
@@ -1397,7 +1466,12 @@ export async function applyPlannedSyncForPackageFiles(
 
   let mapping: Record<string, string[]> = {};
   if (!options.dryRun) {
-    mapping = buildIndexMappingFromPlans(groupPlans);
+    mapping = await augmentIndexMappingWithRootAndCopyToRoot(
+      cwd,
+      buildIndexMappingFromPlans(groupPlans),
+      packageFiles,
+      platforms
+    );
     const workspaceHash = previousIndex?.workspace?.hash ?? createWorkspaceHash(cwd);
     const indexRecord: PackageIndexRecord = {
       path: getPackageIndexPath(cwd, packageName, location),

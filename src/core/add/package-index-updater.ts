@@ -1,5 +1,5 @@
 import { dirname, join } from 'path';
-import { FILE_PATTERNS } from '../../constants/index.js';
+import { FILE_PATTERNS, PACKAGE_ROOT_DIRS } from '../../constants/index.js';
 import { exists } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
 import { parsePackageYml } from '../../utils/package-yml.js';
@@ -20,7 +20,7 @@ import type { PackageFile } from '../../types/index.js';
 import type { PackageContext } from '../package-context.js';
 import { parseUniversalPath } from '../../utils/platform-file.js';
 import { mapUniversalToPlatform } from '../../utils/platform-mapper.js';
-import { isPlatformId, type Platform } from '../platforms.js';
+import { getAllUniversalSubdirs, isPlatformId, type Platform } from '../platforms.js';
 import {
   normalizeRegistryPath,
   isRootRegistryPath,
@@ -28,20 +28,24 @@ import {
   isAllowedRegistryPath
 } from '../../utils/registry-entry-filter.js';
 import { createWorkspaceHash } from '../../utils/version-generator.js';
+import { getPlatformRootFileNames, stripRootCopyPrefix, isRootCopyPath } from '../../utils/platform-root-files.js';
 
 /**
  * Compute the directory key (registry side) to collapse file mappings under.
  * Mirrors the grouping behavior used by install/index mapping logic.
  */
-export function computeDirKeyFromRegistryPath(registryPath: string): string {
+export function computeDirKeyFromRegistryPath(registryPath: string, cwd?: string): string {
   const normalized = registryPath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
   const parts = normalized.split('/');
   if (parts.length <= 1) return '';
-  const universal = new Set<string>(['ai', 'rules', 'commands', 'agents', 'skills']);
-  if (universal.has(parts[0])) {
+  
+  // Use dynamically discovered universal subdirs instead of hardcoded list
+  const universalSubdirs = getAllUniversalSubdirs(cwd);
+  if (universalSubdirs.has(parts[0])) {
     if (parts.length >= 2) return `${parts[0]}/${parts[1]}/`;
     return `${parts[0]}/`;
   }
+  
   const idx = normalized.lastIndexOf('/');
   if (idx === -1) return '';
   return normalized.substring(0, idx + 1);
@@ -118,69 +122,7 @@ function mergeMappingsRespectingExisting(
 }
 
 /**
- * Collapse file entries into directory keys when appropriate.
- * Groups file entries by their directory key and automatically collapses them into dir key entries.
- * This is universally applied to all eligible groups to ensure consistent index structure.
- */
-function collapseFileEntriesToDirKeys(
-  mapping: Record<string, string[]>
-): Record<string, string[]> {
-  const collapsed: Record<string, string[]> = {};
-  const dirKeyGroups = new Map<string, Array<{ key: string; values: string[] }>>();
-
-  // Group file entries by their directory key
-  for (const [key, values] of Object.entries(mapping)) {
-    // Skip directory keys (they already end with /)
-    if (key.endsWith('/')) {
-      collapsed[key] = values;
-      continue;
-    }
-
-    const dirKey = computeDirKeyFromRegistryPath(key);
-    if (!dirKey) {
-      // No dir key possible, keep as file entry
-      collapsed[key] = values;
-      continue;
-    }
-
-    if (!dirKeyGroups.has(dirKey)) {
-      dirKeyGroups.set(dirKey, []);
-    }
-    dirKeyGroups.get(dirKey)!.push({ key, values });
-  }
-
-  // Process each directory group - always collapse when multiple files share a dir key
-  for (const [dirKey, entries] of dirKeyGroups.entries()) {
-    // Collapse: collect all installed directories from file entries
-    const dirValues = new Set<string>();
-    for (const entry of entries) {
-      for (const v of entry.values) {
-        const d = dirname(v);
-        if (d && d !== '.') {
-          const normalized = d.endsWith('/') ? d : `${d}/`;
-          dirValues.add(normalized);
-        }
-      }
-    }
-
-    if (dirValues.size > 0) {
-      // Replace file entries with a single dir key entry
-      const pruned = pruneNestedDirectories(Array.from(dirValues));
-      collapsed[dirKey] = pruned.sort();
-    } else {
-      // No directories found, keep as individual file entries
-      for (const entry of entries) {
-        collapsed[entry.key] = entry.values;
-      }
-    }
-  }
-
-  return sortMapping(collapsed);
-}
-
-/**
  * Build mapping from PackageFile[] and write/merge to package index file.
- * Automatically collapses file entries into directory keys when appropriate.
  */
 export interface BuildIndexOptions {
   /**
@@ -233,10 +175,16 @@ async function buildExactFileMapping(
     return await exists(absPath);
   };
 
+  const rootFileNames = getPlatformRootFileNames(platforms, cwd);
+
+  const explicitRootKeys = new Set<string>();
+  const hasAgents = packageFiles.some(file => normalizeRegistryPath(file.path) === FILE_PATTERNS.AGENTS_MD);
+
   // First pass: record platform-specific target files keyed by base universal key
   for (const file of packageFiles) {
     const normalized = normalizeRegistryPath(file.path);
-    if (isRootRegistryPath(normalized)) continue;
+    if (isRootCopyPath(normalized)) continue;
+    if (isRootRegistryPath(normalized) || rootFileNames.has(normalized)) continue;
     if (isSkippableRegistryPath(normalized)) continue;
     if (!isAllowedRegistryPath(normalized)) continue;
 
@@ -262,12 +210,32 @@ async function buildExactFileMapping(
   // Second pass: build exact mappings, only including paths that actually exist
   for (const file of packageFiles) {
     const normalized = normalizeRegistryPath(file.path);
-    if (isRootRegistryPath(normalized)) continue;
     if (isSkippableRegistryPath(normalized)) continue;
-    if (!isAllowedRegistryPath(normalized)) continue;
 
     const key = normalized.replace(/\\/g, '/');
     const values = new Set<string>();
+
+    // Copy-to-root: root/** → strip prefix in workspace
+    const stripped = stripRootCopyPrefix(key);
+    if (stripped !== null) {
+      if (await checkExists(stripped)) {
+        values.add(stripped);
+      }
+      addTargets(key, values);
+      continue;
+    }
+
+    // Root files: store at workspace root with same name; AGENTS.md may also populate platform root files
+    if (rootFileNames.has(key) || isRootRegistryPath(key)) {
+      explicitRootKeys.add(key);
+      if (await checkExists(key)) {
+        values.add(key);
+      }
+      addTargets(key, values);
+      continue;
+    }
+
+    if (!isAllowedRegistryPath(normalized)) continue;
 
     const parsed = parseUniversalPath(key);
     if (parsed) {
@@ -300,6 +268,12 @@ async function buildExactFileMapping(
             // Ignore unsupported platforms
           }
         }
+        // Also record the workspace-relative key itself when it exists.
+        // This is important for root packages (and add flows) where the source path may be the only
+        // concrete workspace location before any apply/install expansion.
+        if (await checkExists(key)) {
+          values.add(key);
+        }
         // Prune: if platform-specific keys exist for this base, remove their targets from universal
         const baseKey = `${parsed.universalSubdir}/${parsed.relPath}`;
         const covered = platformSpecificTargetsByBase.get(baseKey);
@@ -317,6 +291,20 @@ async function buildExactFileMapping(
     }
 
     addTargets(key, values);
+  }
+
+  // If AGENTS.md exists in the package and platform root files exist in the workspace (without explicit overrides),
+  // record them as installed paths for AGENTS.md.
+  if (hasAgents) {
+    const values = new Set<string>(mapping[FILE_PATTERNS.AGENTS_MD] ?? []);
+    for (const rootFile of rootFileNames) {
+      if (rootFile === FILE_PATTERNS.AGENTS_MD) continue;
+      if (explicitRootKeys.has(rootFile)) continue;
+      if (await checkExists(rootFile)) {
+        values.add(rootFile);
+      }
+    }
+    addTargets(FILE_PATTERNS.AGENTS_MD, values);
   }
 
   return mapping;
@@ -337,7 +325,11 @@ export async function buildMappingAndWriteIndex(
     // These are manifest/metadata files that are NOT synced to workspace locations
     const indexEligibleFiles = packageFiles.filter(f => {
       const normalized = normalizeRegistryPath(f.path);
-      return isAllowedRegistryPath(normalized) && !isSkippableRegistryPath(normalized);
+      if (isSkippableRegistryPath(normalized)) return false;
+      if (isAllowedRegistryPath(normalized)) return true;
+      if (isRootRegistryPath(normalized)) return true;
+      if (isRootCopyPath(normalized)) return true;
+      return false;
     });
 
     // Read existing index and other indexes for conflict context

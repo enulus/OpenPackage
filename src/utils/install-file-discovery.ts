@@ -3,6 +3,7 @@ import { FILE_PATTERNS, PACKAGE_PATHS } from '../constants/index.js';
 import type { PackageFile } from '../types/index.js';
 import { getPlatformDefinition, type Platform } from '../core/platforms.js';
 import { buildNormalizedIncludeSet, isManifestPath, normalizePackagePath } from './manifest-paths.js';
+import { getPlatformRootFileNames, stripRootCopyPrefix, isRootCopyPath } from './platform-root-files.js';
 
 export interface CategorizedInstallFiles {
   pathBasedFiles: PackageFile[];
@@ -25,11 +26,7 @@ export async function discoverAndCategorizeFiles(
     !normalizedIncludes || normalizedIncludes.has(normalizePackagePath(path));
 
   // Precompute platform root filenames
-  const platformRootNames = new Set<string>();
-  for (const platform of platforms) {
-    const def = getPlatformDefinition(platform);
-    if (def.rootFile) platformRootNames.add(def.rootFile);
-  }
+  const platformRootNames = getPlatformRootFileNames(platforms);
 
   // Single pass classification
   const pathBasedFiles: PackageFile[] = [];
@@ -43,11 +40,9 @@ export async function discoverAndCategorizeFiles(
     if (!shouldInclude(p)) continue;
 
     // root/** copy-to-root handling
-    if (normalized.startsWith('root/')) {
-      const stripped = normalized.slice('root/'.length);
-      if (stripped.length > 0) {
-        rootCopyFiles.push({ ...file, path: stripped });
-      }
+    const stripped = stripRootCopyPrefix(normalized);
+    if (stripped !== null) {
+      rootCopyFiles.push({ ...file, path: stripped });
       continue;
     }
 
