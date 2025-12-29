@@ -134,6 +134,10 @@ packages:
 |------------|------|---------|
 | `name/` (trailing slash) | Directory | `rules/`, `commands/` |
 | `name` (no slash) | File | `AGENTS.md`, `docs/guide.md` |
+| `root/...` | Copy-to-root payload | `root/README.md`, `root/docs/guide.md` |
+
+Notes:
+- Keys under `root/` are installed into the workspace root with the `root/` prefix stripped (see `universal-content.md` rules in the package specs).
 
 ### File Mapping Values
 
@@ -153,6 +157,10 @@ files:
   # Individual file
   AGENTS.md:
     - AGENTS.md
+
+  # Copy-to-root content: installed into workspace root, prefix stripped
+  root/docs/guide.md:
+    - docs/guide.md
 ```
 
 ---

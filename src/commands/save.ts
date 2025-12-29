@@ -1,10 +1,10 @@
 import { Command } from 'commander';
 import { SaveOptions, CommandResult } from '../types/index.js';
 import { withErrorHandling } from '../utils/errors.js';
-import { runSavePipeline } from '../core/save/save-pipeline.js';
-import { runAddPipeline, type AddPipelineOptions } from '../core/add/add-pipeline.js';
+import { runSaveToSourcePipeline } from '../core/save/save-to-source-pipeline.js';
+import { runAddToSourcePipeline, type AddToSourceOptions } from '../core/add/add-to-source-pipeline.js';
 
-type SaveCommandOptions = SaveOptions & AddPipelineOptions;
+type SaveCommandOptions = Pick<SaveOptions, 'force'> & Pick<AddToSourceOptions, 'apply' | 'platformSpecific'>;
 
 async function savePackageCommand(
   packageName: string | undefined,
@@ -21,17 +21,15 @@ async function savePackageCommand(
   }
 
   if (hasPath) {
-    const addResult = await runAddPipeline(packageName, pathArg, {
-      platformSpecific: options.platformSpecific
+    const addResult = await runAddToSourcePipeline(packageName, pathArg, {
+      platformSpecific: options.platformSpecific,
+      apply: options.apply
     });
     if (!addResult.success) throw new Error(addResult.error || 'Add operation failed');
   }
 
-  return runSavePipeline(packageName, {
-    mode: 'wip',
-    force: options.force,
-    rename: options.rename,
-    apply: options.apply
+  return runSaveToSourcePipeline(packageName, {
+    force: options.force
   });
 }
 
@@ -42,17 +40,14 @@ export function setupSaveCommand(program: Command): void {
     .argument('[package-name]', 'package name (required when providing a path)')
     .argument('[path]', 'file or directory to add before saving')
     .description(
-      'Save a package snapshot for this workspace.\n' +
+      'Sync workspace edits back to a mutable package source based on unified index mappings.\n' +
       'Usage:\n' +
-      '  opkg save                  # Save cwd package (requires openpackage.yml)\n' +
-      '  opkg save <package-name>   # Save specific package by name\n' +
-      '  opkg save <package-name> <path>   # Add path to package, then save snapshot\n' +
-      'Use `opkg pack` to create a stable copy in the registry.'
+      '  opkg save <package-name>\n' +
+      '  opkg save <package-name> <path>   # Add path to package (copy-to-root for non-platform paths), then save\n'
     )
-    .option('-f, --force', 'overwrite existing version or skip confirmations')
-    .option('--rename <newName>', 'Rename package during save')
-    .option('--platform-specific', 'Save platform-specific variants for platform subdir inputs')
-    .option('--apply', 'Apply/sync saved snapshot into workspace platforms after saving')
+    .option('-f, --force', 'auto-select latest mtime when conflicts occur')
+    .option('--platform-specific', 'Treat platform subdir inputs as platform-specific when adding before save')
+    .option('--apply', 'Apply after add-before-save to sync platforms')
     .action(
       withErrorHandling(async (packageName: string | undefined, path: string | undefined, options?: SaveCommandOptions) => {
         const result = await savePackageCommand(packageName, path, options ?? {});

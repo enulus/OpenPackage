@@ -26,10 +26,15 @@
 ```
 1. Read package entry from unified openpackage.index.yml
 2. Validate source is mutable (path is not in registry/)
-3. For each mapped file in the index:
-   - Read workspace version
-   - Write to source path
-4. Update source openpackage.yml if needed
+3. Expand mappings and collect candidates:
+   - File keys map directly (workspace target → source-relative path)
+   - Directory keys expand by enumerating files under the mapped workspace directories
+4. Resolve conflicts when multiple workspace candidates map to the same source path:
+   - Platform-specific variants may override universal content (same platform override behavior as apply/install)
+   - If multiple differing candidates remain, select using existing save behavior:
+     - `--force`: pick latest by mtime
+     - otherwise: prompt for selection
+5. Write selected content back to the source tree
 ```
 
 **Example**:
@@ -57,7 +62,10 @@ opkg save my-pkg
 ```
 1. Validate source is mutable
 2. Collect files from input path
-3. Copy files to package source directory
+3. Copy files into the package source directory using destination rules:
+   - Platform files (e.g. `.cursor/rules/...`) map into universal subdirs (e.g. `rules/...`)
+   - Platform root files (e.g. `AGENTS.md`, `CLAUDE.md`) map to package root
+   - All other workspace paths map into `root/<workspace-relpath>` (copy-to-root content)
 4. Update unified openpackage.index.yml with new mappings
 5. Optionally apply to other platforms (--apply)
 ```
@@ -67,7 +75,7 @@ opkg save my-pkg
 opkg add my-pkg ./new-helpers/
 
 # Copies:
-#   ./new-helpers/utils.md → ~/.openpackage/packages/my-pkg/commands/utils.md
+#   ./new-helpers/utils.md → ~/.openpackage/packages/my-pkg/root/new-helpers/utils.md
 ```
 
 ---

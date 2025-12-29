@@ -62,6 +62,10 @@ OpenPackage CLI v0.7.0 adopts a **path-based source of truth** model, inspired b
 
 User edits files in platform directories (`.cursor/rules/`, `docs/`). These changes flow back to the package source via `save` or `add`.
 
+Notes:
+- `save` writes back based on the unified workspace index mappings (`.openpackage/openpackage.index.yml`) and resolves multi-platform conflicts using mtime + platform override rules.
+- `add` maps non-platform workspace paths into `root/<workspace-relpath>` in the package source (copy-to-root payload; prefix stripped when installed/applied).
+
 ### Source → Registry (pack)
 
 Package source is archived into an immutable directory snapshot for distribution or offline caching.

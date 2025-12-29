@@ -198,6 +198,11 @@ Todos:
 - **Enforce mutability**: if `packages[name].path` is registry (immutable), fail with a clear error.
 - **Read mapping** from unified index:
   - For each mapping entry, copy workspace content back to source path location.
+- **Conflict resolution (multi-target / multi-platform)**:
+  - When multiple workspace targets map to the same source destination and differ, resolve using the existing conflict behavior used by legacy save:
+    - Prefer the most recent by **mtime** when `--force`.
+    - Otherwise, prompt for selection.
+    - Platform-specific variants are allowed (saved as platform-specific entries) and should override universal content when applicable.
 - **Handle missing mappings**:
   - Decide: error vs hint to run `apply/install` first.
   - Recommendation: error with actionable message (“run `opkg apply <name>` or `opkg install ...` to create mappings”).
@@ -217,7 +222,10 @@ Todos:
 - **Collect input**:
   - Support adding a file or directory path from the workspace.
 - **Copy into source tree**:
-  - Decide destination within package (spec examples imply user-provided input maps to a package-relative location; likely preserve relative structure).
+  - Destination rules:
+    - If input is from a recognized platform directory (e.g. `.cursor/<subdir>/...`), map into the universal subdir (e.g. `rules/...`, `commands/...`) in the package source.
+    - Platform root files (e.g. `AGENTS.md`, `CLAUDE.md`) are stored as root files in the package source.
+    - All other workspace-relative paths are treated as **copy-to-root content** and stored under `root/<workspace-relpath>` in the package source (the `root/` prefix is stripped on apply/install).
 - **Update unified index**:
   - Add/extend `packages[name].files` to include newly tracked paths.
 - **Optional**: `--apply` behavior (if desired): after adding, immediately apply to platforms.

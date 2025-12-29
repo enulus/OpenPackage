@@ -50,6 +50,8 @@
 │           │   └── *.md
 │           └── rules/
 │               └── *.md
+│           └── root/                  # Copy-to-root payload (installed to workspace root, prefix stripped)
+│               └── ...
 │
 ├── .cursor/                           # Platform sync targets
 │   ├── rules/

@@ -1,24 +1,24 @@
 import { Command } from 'commander';
 
 import { withErrorHandling } from '../utils/errors.js';
-import { runAddPipeline, type AddPipelineOptions } from '../core/add/add-pipeline.js';
+import { runAddToSourcePipeline, type AddToSourceOptions } from '../core/add/add-to-source-pipeline.js';
 
 export function setupAddCommand(program: Command): void {
   program
     .command('add')
-    .argument('[package-or-path]', 'package name, or path when omitting package name')
-    .argument('[path]', 'file or directory to add (when first arg is a package name)')
+    .argument('<package-name>', 'package name')
+    .argument('<path>', 'file or directory to add')
     .description(
       'Copy supported workspace files or directories into a local package directory.\n' +
       'Usage examples:\n' +
       '  opkg add my-package .cursor/rules/example.md\n' +
-      '  opkg add my-package ai/helpers/\n' +
-      '  opkg add ai/helpers/\n'
+      '  opkg add my-package docs/guide.md   # stored as root/docs/guide.md in the package\n'
     )
     .option('--platform-specific', 'Save platform-specific variants for platform subdir inputs')
+    .option('--apply', 'Apply immediately after add')
     .action(
-      withErrorHandling(async (packageOrPath: string | undefined, pathArg: string | undefined, options: AddPipelineOptions) => {
-        const result = await runAddPipeline(packageOrPath, pathArg, options);
+      withErrorHandling(async (packageName: string | undefined, pathArg: string | undefined, options: AddToSourceOptions) => {
+        const result = await runAddToSourcePipeline(packageName, pathArg, options);
         if (!result.success) {
           throw new Error(result.error || 'Add operation failed');
         }
