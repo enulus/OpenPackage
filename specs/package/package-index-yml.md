@@ -1,13 +1,17 @@
-### Package Index File (`openpackage.index.yml`)
+### Workspace Index File (`.openpackage/openpackage.index.yml`)
 
-The `openpackage.index.yml` file tracks the mapping between package files and their **actually installed** workspace locations.
+The `openpackage.index.yml` file is the **unified workspace index**. It tracks:
+
+- Installed packages (by name)
+- Each package’s resolved **source path**
+- Optional resolved **version**
+- The file/directory mapping from **package-relative paths** to **workspace paths that were actually written**
 
 ---
 
 #### Location
 
-- **Root package (workspace-local metadata)**: `cwd/.openpackage/openpackage.index.yml`
-- **Nested package (cached package root)**: `cwd/.openpackage/packages/<name>/openpackage.index.yml`
+- **Workspace-local metadata**: `cwd/.openpackage/openpackage.index.yml`
 
 > **Note**: `openpackage.index.yml` is **never** included in the registry payload. It's workspace-local metadata.
 
@@ -31,15 +35,16 @@ The index only contains entries for content that is **actually synced** to works
 ```yaml
 # This file is managed by OpenPackage. Do not edit manually.
 
-workspace:
-  hash: <workspace-hash>
-  version: <installed-version>
-files:
-  <registry-key>:
-    - <installed-path>
-    - <installed-path>
-  <registry-key>:
-    - <installed-path>
+packages:
+  <package-name>:
+    path: <declared-path>        # string from openpackage.yml (relative or ~) or inferred registry path
+    version: <installed-version> # optional semver string
+    dependencies:                # optional cached direct deps (names)
+      - <dep-name>
+    files:
+      <registry-key>:
+        - <installed-path>
+        - <installed-path>
 ```
 
 ---
@@ -53,6 +58,7 @@ Registry keys are **relative to the package root**:
 | Universal content | `<subdir>/<file>` | `commands/test.md` |
 | Root files | `<filename>` | `AGENTS.md` |
 | `root/` directory (direct copy) | `root/<path>` | `root/tools/helper.sh` |
+| Directory mapping | `<dir>/` (trailing slash) | `rules/` |
 
 ---
 
@@ -65,6 +71,7 @@ Values are **relative to the workspace root (`cwd`)** and represent **paths that
 | Universal content | Platform-specific paths | `.cursor/commands/test.md`, `.opencode/commands/test.md` |
 | Root files | Same as key | `AGENTS.md` |
 | `root/` directory (direct copy) | Strip `root/` prefix | `tools/helper.sh` |
+| Directory mapping | Workspace directory paths (end with `/`) | `.claude/rules/`, `.cursor/rules/` |
 
 > **Important**: The index only records paths where files **actually exist**. If a file is only installed to one platform (e.g., `.cursor/`), only that path appears in the index—not hypothetical paths for other platforms.
 
@@ -72,35 +79,16 @@ Values are **relative to the workspace root (`cwd`)** and represent **paths that
 
 #### Index Update Behavior
 
-The index is updated differently depending on the operation:
+The unified workspace index is updated differently depending on the operation:
 
 | Operation | Behavior |
 |-----------|----------|
-| **Add** | Records only the source path that was used to add the file. If you add `.cursor/commands/test.md`, only that path is recorded. |
-| **Save** | Writes a registry snapshot; index expansion requires apply (via `save --apply` or separate `apply`). |
-| **Apply** | Expands the index to include all platform paths where files were actually created during apply. |
-| **Install** | Populates the index with all platform paths where files were installed. |
+| **Add** | Adds or extends `packages[<name>].files` for the added paths. |
+| **Apply** | Writes/updates `packages[<name>].files` based on what was actually written during apply. |
+| **Install** | Writes/updates `packages[<name>].files` based on what was installed. |
+| **Save** | Uses `packages[<name>].files` as the authoritative mapping when syncing workspace edits back to the package source. |
 
 This ensures the index reflects the **current state** of the workspace, not hypothetical future states.
 
 See `../apply/index-effects.md` for concrete before/after examples.
-
----
-
-#### Add Command Examples
-
-When adding files, the index only records the **source path that exists**:
-
-| Command | Package | Stored At | Registry Key | Values (in index) |
-|---------|---------|-----------|--------------|-------------------|
-| `opkg add foo helpers/foo.md` | Nested `foo` | `.openpackage/packages/foo/helpers/foo.md` | `helpers/foo.md` | `helpers/foo.md` |
-| `opkg add foo .cursor/commands/foo.md` | Nested `foo` | `.openpackage/packages/foo/commands/foo.md` | `commands/foo.md` | `.cursor/commands/foo.md` (source) |
-| `opkg add helpers/foo.md` | Root | `helpers/foo.md` | `helpers/foo.md` | `helpers/foo.md` |
-| `opkg add .cursor/commands/foo.md` | Root | `commands/foo.md` | `commands/foo.md` | `.cursor/commands/foo.md` (source) |
-
-**Notes**:
-- Platform-specific paths (e.g., `.cursor/commands/foo.md`) are normalized to universal registry paths (e.g., `commands/foo.md`) and stored at the package root.
-- Universal content lives directly at the package root (not under `.openpackage/<subdir>/`).
-- The index expands to include other platform paths (e.g., `.opencode/commands/foo.md`) only after an apply/sync step runs (e.g., `opkg apply` or `opkg save --apply`). See `../apply/index-effects.md`.
-
 

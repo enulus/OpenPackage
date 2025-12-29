@@ -1,85 +1,36 @@
-### Save Pipeline – Registry Writes and WIP Cleanup
+### Save – Sync to Source (mapping-driven)
 
 #### 1. Overview
 
-This document covers the final stages of the save pipeline: version/index handling, registry writes, and WIP cleanup.
+This document covers the key rules for `opkg save`: syncing workspace edits back to a package **source of truth** based on `.openpackage/openpackage.index.yml`.
 
 ---
 
-#### 2. Version and Index Handling
+#### 2. Preconditions
 
-The pipeline follows these principles (see `../save-pack-versioning.md` for full details):
+- The workspace must have `.openpackage/openpackage.index.yml`.
+- The target package must exist in the index under `packages[<name>]`.
+- The package entry must have a non-empty `files:` mapping.
 
-- The version declared in **`openpackage.yml`** is the **canonical "next stable"** version.
-- The **WIP or last stable version** recorded for this workspace lives in `openpackage.index.yml` under `workspace.version`.
-- WIP versions are always **pre‑releases derived from the stable line**, including:
-  - A time component, and
-  - A workspace hash component.
-
-##### On WIP saves
-
-- A new WIP version is computed from the current stable line.
-- `openpackage.index.yml` is updated with:
-  - `workspace.version` (the exact WIP version).
-  - `workspace.hash` (derived from `cwd`).
-
-##### On stable packs
-
-- The stable version is always exactly the value in `openpackage.yml.version`.
-- `openpackage.index.yml.workspace.version` is updated to that stable version.
-
-##### Version conflicts
-
-- When `openpackage.yml.version` and the last workspace version disagree, the **`openpackage.yml` version wins**, and the WIP stream restarts from that version.
+If these conditions are not met, `save` should fail with an actionable message instructing the user to run `opkg apply <name>` or `opkg install ...` first.
 
 ---
 
-#### 3. Registry Writes
+#### 3. Mutability enforcement
 
-For both modes, once a target version is chosen and content files are resolved:
+`save` must only write to **mutable** sources:
 
-- The pipeline creates a **full copy** of the package in the local registry under:
-
-  ```
-  ~/.openpackage/registry/<finalName>/<targetVersion>/...
-  ```
-
-- If a directory already exists for that version:
-  - It is fully cleared before writing new contents (unless stable mode is disallowed by a non‑`force` duplicate check).
+- If the resolved source path is under `~/.openpackage/registry/` (including git clones cached there), the source is **immutable** and `save` must fail.
+- If the resolved source path is a mutable packages directory (e.g. `./.openpackage/packages/...` or `~/.openpackage/packages/...`) or another user path, `save` may proceed.
 
 ---
 
-#### 4. WIP Cleanup
+#### 4. What is written
 
-##### On WIP saves
+For each mapping entry in `packages[<name>].files`:
 
-After a successful copy:
+- **Directory key** (`rules/`, `commands/`, etc.): enumerate files under each mapped workspace directory and write them back into `<source>/<key>/<relative-file>`.
+- **File key** (`AGENTS.md`, `root/docs/guide.md`, etc.): write the mapped workspace file back into `<source>/<key>`.
 
-- The pipeline scans the local registry for WIP versions of the same package that are associated with the current workspace hash.
-- All such WIP versions are removed, except the newly created one.
-
-##### On stable packs
-
-After a successful copy:
-
-- The pipeline may also remove WIP versions for this workspace to keep only the stable copy, as described in `../save-pack.md` and `../save-pack-versioning.md`.
-
----
-
-#### 5. Storage Guarantees
-
-These steps ensure that:
-
-- Stable and WIP versions are both stored as **full, independent copies**.
-- Registry storage does not accumulate unbounded, per‑workspace WIP state.
-
----
-
-#### 6. Platform Apply/Sync (optional)
-
-Save may optionally run apply/sync after writing to the registry via `opkg save --apply`.
-
-The apply/sync specification (behavior, conflicts, index updates) lives under:
-
-- `../apply/README.md`
+When multiple workspace candidates map to the same destination, conflict resolution is applied (see `save-conflict-resolution.md`).
 

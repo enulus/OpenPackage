@@ -17,11 +17,10 @@
     README.md
   .openpackage/                                # workspace-local metadata (not payload)
     openpackage.yml                            # workspace manifest (dependency intent)
-    openpackage.index.yml                      # OPTIONAL – workspace-local root index (never in registry payload)
+    openpackage.index.yml                      # workspace index (never in registry payload)
     packages/                                  # nested packages directory
       alpha/                                   # nested package (package root = .openpackage/packages/alpha/)
         openpackage.yml                        # cached payload mirror
-        openpackage.index.yml                  # workspace-local per-package index (never in registry payload)
         commands/
           alpha-command.md
         root/                                  # direct copy for nested package
@@ -31,7 +30,6 @@
           notes.md
       beta/                                    # nested package (package root = .openpackage/packages/beta/)
         openpackage.yml                        # cached payload mirror
-        openpackage.index.yml                  # workspace-local per-package index (never in registry payload)
         rules/
           beta-rule.md
 ```

@@ -4,7 +4,7 @@
 
 `opkg apply` performs a platform apply/sync pass for a package in the **effective cwd** (shell cwd or `--cwd <dir>`).
 
-It is the standalone equivalent of `opkg save --apply`, except it does not write a new registry snapshot first.
+It is the standalone way to (re)materialize package content into the workspace platforms and update the unified `.openpackage/openpackage.index.yml` mapping.
 
 ---
 

@@ -7,7 +7,7 @@
 Apply may be invoked:
 
 - explicitly via `opkg apply`, or
-- as a post-step of `opkg save --apply`.
+- as a post-step of `opkg add --apply` (when adding new files before syncing platforms).
 
 ---
 
@@ -34,8 +34,8 @@ Apply runs against the set of platforms detected for the effective cwd.
 Apply only runs after:
 
 - Package detection and name resolution are complete.
-- Version and file selection have succeeded.
-- (When invoked as `save --apply`) the registry write has completed successfully.
+- File mapping/selection has succeeded.
+- When invoked as `opkg add --apply`, the add step has completed successfully.
 
 ---
 

@@ -87,11 +87,11 @@ Other flags (`--dev`, `--remote`, `--platforms`, `--dry-run`, `--stable`, confli
 - **Behavior**:
   - **Case A – `opkg install <name>` (no version spec)**:
     - Compute **available versions** from the **local registry only** for the first resolution attempt (no remote metadata is consulted initially).
-    - **Default behavior**: Select the **latest semver version** from this local set that satisfies the internal wildcard range (`*`), **including pre-releases/WIPs**. If the selected version is a pre-release/WIP, the CLI should state that explicitly.
-    - **With `--stable` flag**: From the local set, select the **latest stable** version `S` if any exist. If only WIP or pre-releases exist locally, select the latest WIP/pre-release.
+    - **Default behavior**: Select the **latest semver version** from this local set that satisfies the internal wildcard range (`*`), including pre-releases when applicable. If the selected version is a pre-release, the CLI should state that explicitly.
+    - **With `--stable` flag**: From the local set, select the **latest stable** version `S` if any exist. If only pre-releases exist locally, select the latest pre-release.
     - If **no local versions exist** or **no local version satisfies the implicit range**:
       - In **default mode** (no `--local`), `install` MUST:
-        - Attempt resolution again including **remote versions**, following the rules in `version-resolution.md` (local+remote union and WIP/stable policies).
+        - Attempt resolution again including **remote versions**, following the rules in `version-resolution.md` (local+remote union and stable/pre-release policies).
         - Only fail if **neither local nor remote** provide a satisfying version, or remote metadata is unavailable.
       - In **`--local` mode**, this remote fallback is **disabled** and the command fails with a clear “not available locally” style error that may suggest re-running without `--local` or using `save` / `pack`.
     - **Install `<name>@<selectedVersion>`**.
@@ -220,48 +220,45 @@ Other flags (`--dev`, `--remote`, `--platforms`, `--dry-run`, `--stable`, confli
 
 ---
 
-## 6. WIP vs stable on install
+## 6. Pre-release vs stable on install
 
 High-level rules (details in `version-resolution.md`):
 
-- **Default behavior: Latest-in-range, including WIP**:
-  - For any non-exact constraint (wildcard or range), the resolver chooses the **highest semver version** that satisfies the range, regardless of whether it is stable or WIP/pre-release.
-  - This ensures that `opkg install <name>` naturally selects the newest available version, including WIPs, which is useful for development workflows.
-  - When a WIP/pre-release is selected, `opkg install` output should clearly indicate that the installed version is a pre-release/WIP.
+- **Default behavior: Latest-in-range, including pre-releases**:
+  - For any non-exact constraint (wildcard or range), the resolver chooses the **highest semver version** that satisfies the range, including pre-releases when allowed by semver range rules.
+  - When a pre-release is selected, `opkg install` output should clearly indicate that the installed version is a pre-release.
 
 - **With `--stable` flag: Stable-preferred policy**:
   - For a given base stable `S`, if both:
     - Stable `S`, and
-    - WIPs `S-<t>.<w>`
+    - Pre-releases derived from `S`
     exist and satisfy the range, **prefer `S`**.
-  - WIP/pre-release versions are only selected when **no stable versions** exist that satisfy the range.
+  - Pre-releases are only selected when **no stable versions** exist that satisfy the range.
   - This is useful for CI/production scenarios where stability is preferred over the absolute latest version.
 
 ---
 
-## 7. WIP content resolution (unified with stable)
+## 7. Pre-release content resolution (unified with stable)
 
-This section ties WIP version selection to **how content is loaded** when the selected version is a WIP prerelease, assuming both WIP and stable versions are stored as full copies in the local registry.
+This section ties pre-release version selection to **how content is loaded** when the selected version is a pre-release, assuming both stable and pre-release versions are stored as full copies in the local registry.
 
-- **Registry layout for WIP versions**:
-  - For WIP saves, the local registry contains a **full copy** of the package:
-    - Path: `~/.openpackage/registry/<pkg>/<wipVersion>/...`.
-    - Contents mirror the workspace package at the time of `save`, just like stable copies.
+- **Registry layout for pre-releases**:
+  - The local registry contains a **full copy** of the package for any version (stable or pre-release):
+    - Path: `~/.openpackage/registry/<pkg>/<version>/...`.
 
-- **Install behavior when a WIP version is selected**:
-  - When the version resolution layer selects a **WIP version** that exists locally:
+- **Install behavior when a pre-release is selected**:
+  - When the version resolution layer selects a **pre-release version** that exists locally:
     - The package loader (e.g. `packageManager.loadPackage`) MUST:
-      - Load files directly from the WIP registry directory (`~/.openpackage/registry/<pkg>/<wipVersion>/...`).
+      - Load files directly from the selected registry directory (`~/.openpackage/registry/<pkg>/<version>/...`).
       - Read the `openpackage.yml` from that directory for metadata.
       - Treat this data exactly as it would for a stable registry copy for the purposes of installation and dependency resolution.
-  - If the WIP registry directory is missing or malformed for a selected WIP version:
-    - Install MUST **fail clearly**, indicating the broken WIP copy and suggesting:
-      - Re-running `save`/`pack` to regenerate the version, or
+  - If the registry directory is missing or malformed for a selected version:
+    - Install MUST **fail clearly**, indicating the broken registry copy and suggesting:
+      - Re-running `opkg pack` (or re-pulling from remote) to regenerate the version, or
       - Using a different available version instead.
 
 - **Remote considerations**:
-  - Both WIP and stable versions exposed by remote registries are treated as **normal copied packages**.
-  - There is no link-based indirection layer in the registry layout for WIP versions.
+  - Both pre-release and stable versions exposed by remote registries are treated as **normal copied packages**.
 
 ---
 
@@ -270,7 +267,7 @@ This section ties WIP version selection to **how content is loaded** when the se
 - **Non-goal**: Emulate every nuance of npm’s `install` / `update` / `dedupe` behavior.
   - Instead, aim for a **small, orthogonal core**:
     - `openpackage.yml` declares intent.
-    - `save`/`pack` manage versions & WIPs.
+    - `pack` publishes versioned snapshots; `install` materializes versions into the workspace.
     - `install` materializes **latest-in-range** from local+remote.
 
 - **Compatibility goal**:

@@ -13,7 +13,7 @@ The documents are intended to be implementation-guiding but not tied to specific
 
 - **`install-behavior.md`**: Top-level `opkg install` UX and scenarios (CLI shapes, fresh vs existing deps, dev vs prod).
 - **`git-sources.md`**: Installing packages from git repositories (`git:` and `github:` inputs).
-- **`version-resolution.md`**: Formal rules for “latest in range from local+remote”, including WIP vs stable semantics.
+- **`version-resolution.md`**: Formal rules for “latest in range from local+remote”, including pre-release vs stable semantics.
 - **`package-yml-canonical.md`**: Rules for treating `openpackage.yml` as the canonical declaration for install.
 
 

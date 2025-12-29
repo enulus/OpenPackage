@@ -62,8 +62,8 @@ This keeps dependency intent unambiguous and aligns with modern package managers
     - Resolves **latest suitable version** from local+remote (see `version-resolution.md`).
     - Adds `<name>` to `openpackage.yml` with a **default range derived from that version**, e.g.:
       - `^S` where `S` is the selected stable version.
-      - If only WIP/pre-release exists, the policy may:
-        - Use an **exact WIP version** in `openpackage.yml`, or
+      - If only a pre-release exists, the policy may:
+        - Use an **exact pre-release version** in `openpackage.yml`, or
         - Use a range that explicitly includes that pre-release.
       - If the selected version is **unversioned** (manifest omits `version`, represented as `0.0.0` internally), persist the dependency entry **without a `version` field** (bare name), rather than writing `0.0.0`.
 

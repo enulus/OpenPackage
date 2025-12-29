@@ -5,9 +5,8 @@ This directory defines the behavior of **apply** (a.k.a. platform apply/sync): p
 Apply can be triggered in two ways:
 
 - `opkg apply` – explicit apply/sync.
-- `opkg save --apply` – save to the local registry and then apply/sync.
 
-> `opkg save` / `opkg pack` without `--apply` write registry snapshots but do not mutate platform workspaces.
+> `opkg pack` writes registry snapshots; `opkg save` syncs workspace edits back to a mutable source. Neither mutates platform workspaces unless you run `opkg apply` (or `opkg add --apply` when adding new files).
 
 ---
 

@@ -47,5 +47,6 @@ Cross-refs: [install-behavior.md] (installs to effective cwd), [save-modes-input
 
 This document primarily defines global flags, but some global-option-sensitive behavior is worth calling out:
 
-- **`opkg save` / `opkg pack`**: write a snapshot to the local registry from the effective cwd. Platform apply/sync is **opt-in** via `opkg save --apply` or `opkg apply`.
+- **`opkg save`**: sync workspace edits back to a **mutable package source** based on `.openpackage/openpackage.index.yml` mappings.
+- **`opkg pack`**: write a snapshot of a package source to the local registry (no platform apply/sync is performed as part of packing). Use `opkg apply` to materialize content into platform directories.
 - **`opkg apply`**: applies/syncs the current/root package to detected platforms from the effective cwd. Supports `--dry-run` and `--force`.

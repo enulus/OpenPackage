@@ -84,11 +84,10 @@ workspace-local metadata.
 cwd/
   .openpackage/
     openpackage.yml                        # workspace manifest (dependency intent)
-    openpackage.index.yml                  # OPTIONAL – workspace-local root index (never in registry payload)
+    openpackage.index.yml                  # workspace index (never in registry payload)
     packages/
       foo/
         openpackage.yml                    # cached payload (mirrors package root)
-        openpackage.index.yml              # workspace-local per-package index (never in registry payload)
         commands/
           test.md
         root/
