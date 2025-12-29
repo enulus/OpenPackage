@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import path from 'path';
-import os from 'os';
-import { expandTildePath, resolveDeclaredPath } from '../src/utils/path-resolution.js';
+import path from 'node:path';
+import os from 'node:os';
+import { expandTildePath, resolveDeclaredPath } from '../../src/utils/path-resolution.js';
 
 // expandTildePath
 assert.equal(expandTildePath('~/project', '/home/tester'), path.join('/home/tester', 'project'));
@@ -28,4 +28,5 @@ const resolvedAbsolute = resolveDeclaredPath('/abs/path/here', referenceDir);
 assert.equal(resolvedAbsolute.declared, '/abs/path/here');
 assert.equal(resolvedAbsolute.absolute, '/abs/path/here');
 
-console.log('phase1-path-resolution tests passed');
+console.log('path-resolution tests passed');
+

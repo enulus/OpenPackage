@@ -35,7 +35,9 @@ async function collectDirFiles(absDir: string, prefix: string): Promise<string[]
   const files: string[] = [];
   if (!(await exists(absDir))) return files;
   for await (const filePath of walkFiles(absDir)) {
-    const rel = filePath.slice(absDir.length + 1).replace(/\\/g, '/');
+    // Use path.relative instead of substring math so trailing slashes don't
+    // corrupt the first character of filenames.
+    const rel = path.relative(absDir, filePath).replace(/\\/g, '/');
     files.push(path.posix.join(prefix, rel));
   }
   return files;

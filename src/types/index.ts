@@ -193,8 +193,8 @@ export interface SaveOptions {
 }
 
 export interface PackOptions {
-  force?: boolean; // legacy flag (ignored by 0.7.0 pack)
-  rename?: string; // legacy flag (ignored by 0.7.0 pack)
+  force?: boolean; // legacy flag (ignored by pack)
+  rename?: string; // legacy flag (ignored by pack)
   output?: string;
   dryRun?: boolean;
 }

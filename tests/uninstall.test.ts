@@ -1,23 +1,9 @@
 import assert from 'node:assert/strict';
-import path from 'path';
-import os from 'os';
-import fs from 'fs/promises';
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'url';
+import path from 'node:path';
+import os from 'node:os';
+import fs from 'node:fs/promises';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const cliPath = path.resolve(__dirname, '../bin/openpackage');
-
-function runCli(args: string[], cwd: string, env?: Record<string, string | undefined>) {
-  const result = spawnSync('node', [cliPath, ...args], {
-    cwd,
-    encoding: 'utf8',
-    stdio: 'pipe',
-    env: { ...process.env, ...(env ?? {}), TS_NODE_TRANSPILE_ONLY: '1' }
-  });
-  return { code: result.status ?? 1, stdout: result.stdout.trim(), stderr: result.stderr.trim() };
-}
+import { runCli } from './test-helpers.js';
 
 async function setupWorkspace(): Promise<{ cwd: string; home: string }> {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), 'opkg-uninstall-home-'));
@@ -26,30 +12,20 @@ async function setupWorkspace(): Promise<{ cwd: string; home: string }> {
   const openpkgDir = path.join(workspace, '.openpackage');
   const pkgDir = path.join(openpkgDir, 'packages', 'my-pkg');
   await fs.mkdir(pkgDir, { recursive: true });
-  await fs.mkdir(path.join(workspace, '.cursor', 'rules'), { recursive: true });
+  await fs.mkdir(path.join(workspace, '.claude', 'rules'), { recursive: true });
   await fs.mkdir(path.join(workspace, 'docs'), { recursive: true });
 
   await fs.writeFile(
     path.join(openpkgDir, 'openpackage.yml'),
-    [
-      'name: workspace',
-      'packages:',
-      '  - name: my-pkg',
-      '    path: ./.openpackage/packages/my-pkg/',
-      ''
-    ].join('\n'),
+    ['name: workspace', 'packages:', '  - name: my-pkg', '    path: ./packages/my-pkg/', ''].join('\n'),
     'utf8'
   );
 
-  await fs.writeFile(
-    path.join(pkgDir, 'openpackage.yml'),
-    ['name: my-pkg', 'version: 1.0.0', ''].join('\n'),
-    'utf8'
-  );
+  await fs.writeFile(path.join(pkgDir, 'openpackage.yml'), ['name: my-pkg', 'version: 1.0.0', ''].join('\n'), 'utf8');
 
   await fs.writeFile(path.join(pkgDir, 'rules.md'), '# rules\n', 'utf8');
 
-  await fs.writeFile(path.join(workspace, '.cursor', 'rules', 'rules.md'), '# rules\n', 'utf8');
+  await fs.writeFile(path.join(workspace, '.claude', 'rules', 'rules.md'), '# rules\n', 'utf8');
   await fs.writeFile(path.join(workspace, 'docs', 'guide.md'), '# guide\n', 'utf8');
   await fs.writeFile(
     path.join(workspace, 'AGENTS.md'),
@@ -64,11 +40,11 @@ async function setupWorkspace(): Promise<{ cwd: string; home: string }> {
       '',
       'packages:',
       '  my-pkg:',
-      '    path: ./.openpackage/packages/my-pkg/',
+      '    path: ./packages/my-pkg/',
       '    version: 1.0.0',
       '    files:',
       '      rules/:',
-      '        - .cursor/rules/',
+      '        - .claude/rules/',
       '      root/docs/guide.md:',
       '        - docs/guide.md',
       '      AGENTS.md:',
@@ -91,7 +67,7 @@ async function cleanup(paths: string[]) {
     const res = runCli(['uninstall', 'my-pkg'], cwd, { HOME: home });
     assert.equal(res.code, 0, `uninstall should succeed: ${res.stderr}`);
 
-    const ruleExists = await fs.stat(path.join(cwd, '.cursor', 'rules', 'rules.md')).then(() => true).catch(() => false);
+    const ruleExists = await fs.stat(path.join(cwd, '.claude', 'rules', 'rules.md')).then(() => true).catch(() => false);
     const docsExists = await fs.stat(path.join(cwd, 'docs', 'guide.md')).then(() => true).catch(() => false);
     assert.equal(ruleExists, false, 'platform file should be removed');
     assert.equal(docsExists, false, 'root copy file should be removed');
@@ -104,9 +80,10 @@ async function cleanup(paths: string[]) {
 
     const manifestContent = await fs.readFile(path.join(cwd, '.openpackage', 'openpackage.yml'), 'utf8');
     assert.ok(!manifestContent.includes('my-pkg'), 'workspace manifest should remove dependency entry');
+
+    console.log('uninstall tests passed');
   } finally {
     await cleanup([cwd, home]);
   }
 }
 
-console.log('phase9-uninstall tests passed');

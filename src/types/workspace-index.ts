@@ -1,5 +1,5 @@
 /**
- * 0.7.0 unified workspace index types.
+ * Unified workspace index types.
  * Represents installed packages and their workspace file mappings.
  */
 export interface WorkspaceIndexPackage {

@@ -1,23 +1,9 @@
 import assert from 'node:assert/strict';
-import path from 'path';
-import os from 'os';
-import fs from 'fs/promises';
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'url';
+import path from 'node:path';
+import os from 'node:os';
+import fs from 'node:fs/promises';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const cliPath = path.resolve(__dirname, '../bin/openpackage');
-
-function runCli(args: string[], cwd: string, env?: Record<string, string | undefined>) {
-  const result = spawnSync('node', [cliPath, ...args], {
-    cwd,
-    encoding: 'utf8',
-    stdio: 'pipe',
-    env: { ...process.env, ...(env ?? {}), TS_NODE_TRANSPILE_ONLY: '1' }
-  });
-  return { code: result.status ?? 1, stdout: result.stdout.trim(), stderr: result.stderr.trim() };
-}
+import { runCli } from './test-helpers.js';
 
 async function setupWorkspace(): Promise<{ cwd: string; home: string }> {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), 'opkg-pack-home-'));
@@ -30,21 +16,11 @@ async function setupWorkspace(): Promise<{ cwd: string; home: string }> {
 
   await fs.writeFile(
     path.join(openpkgDir, 'openpackage.yml'),
-    [
-      'name: workspace',
-      'packages:',
-      '  - name: my-pkg',
-      '    path: ./.openpackage/packages/my-pkg/',
-      ''
-    ].join('\n'),
+    ['name: workspace', 'packages:', '  - name: my-pkg', '    path: ./packages/my-pkg/', ''].join('\n'),
     'utf8'
   );
 
-  await fs.writeFile(
-    path.join(pkgDir, 'openpackage.yml'),
-    ['name: my-pkg', 'version: 1.0.0', ''].join('\n'),
-    'utf8'
-  );
+  await fs.writeFile(path.join(pkgDir, 'openpackage.yml'), ['name: my-pkg', 'version: 1.0.0', ''].join('\n'), 'utf8');
 
   await fs.mkdir(path.join(pkgDir, 'rules'), { recursive: true });
   await fs.writeFile(path.join(pkgDir, 'rules', 'hello.md'), '# hi\n', 'utf8');
@@ -102,4 +78,5 @@ async function cleanup(paths: string[]) {
   }
 }
 
-console.log('phase8-pack tests passed');
+console.log('pack tests passed');
+

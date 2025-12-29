@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { getWorkspaceIndexPath, readWorkspaceIndex, writeWorkspaceIndex } from '../src/utils/workspace-index-yml.js';
+import { getWorkspaceIndexPath, readWorkspaceIndex, writeWorkspaceIndex } from '../../src/utils/workspace-index-yml.js';
 
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-phase1-index-'));
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-index-yml-'));
 
 try {
   const indexPath = getWorkspaceIndexPath(tmpDir);
@@ -45,7 +45,8 @@ try {
   const sanitized = await readWorkspaceIndex(tmpDir);
   assert.deepEqual(sanitized.index.packages, {});
 
-  console.log('phase1-workspace-index-yml tests passed');
+  console.log('workspace-index-yml tests passed');
 } finally {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 }
+

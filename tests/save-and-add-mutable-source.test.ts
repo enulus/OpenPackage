@@ -3,9 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { runSaveToSourcePipeline } from '../src/core/save/save-to-source-pipeline.js';
-import { runAddToSourcePipeline } from '../src/core/add/add-to-source-pipeline.js';
-import { writeWorkspaceIndex, readWorkspaceIndex, getWorkspaceIndexPath } from '../src/utils/workspace-index-yml.js';
+import { runSaveToSourcePipeline } from '../../src/core/save/save-to-source-pipeline.js';
+import { runAddToSourcePipeline } from '../../src/core/add/add-to-source-pipeline.js';
+import { writeWorkspaceIndex, readWorkspaceIndex, getWorkspaceIndexPath } from '../../src/utils/workspace-index-yml.js';
 
 const UTF8 = 'utf-8';
 
@@ -24,28 +24,32 @@ function writeWorkspaceManifest(cwd: string, pkgName: string, pkgPath: string) {
     `version: 0.0.0`,
     `packages:`,
     `  - name: ${pkgName}`,
-    `    path: ${pkgPath}`
+    `    path: ${pkgPath}`,
+    ''
   ].join('\n');
   writeFile(path.join(cwd, '.openpackage', 'openpackage.yml'), manifest);
 }
 
 function writePackageManifest(pkgDir: string, pkgName: string) {
-  const manifest = [`name: ${pkgName}`, `version: 1.0.0`].join('\n');
+  const manifest = [`name: ${pkgName}`, `version: 1.0.0`, ''].join('\n');
   writeFile(path.join(pkgDir, 'openpackage.yml'), manifest);
 }
 
 async function testSaveSyncsWorkspaceToSource(): Promise<void> {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-phase6-save-'));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-save-'));
+  const originalCwd = process.cwd();
   try {
+    process.chdir(tmp);
+
     const pkgName = 'pkg-save';
-    const pkgPath = './.openpackage/packages/pkg-save/';
+    const pkgPath = './packages/pkg-save/';
     const pkgDir = path.join(tmp, '.openpackage', 'packages', 'pkg-save');
 
     writeWorkspaceManifest(tmp, pkgName, pkgPath);
     writePackageManifest(pkgDir, pkgName);
 
-    // Workspace edit
-    const wsFile = path.join(tmp, '.cursor', 'rules', 'foo.md');
+    // Workspace edit (use a platform with no extension transformation)
+    const wsFile = path.join(tmp, '.claude', 'rules', 'foo.md');
     writeFile(wsFile, 'hello-from-workspace');
 
     // Unified index mapping
@@ -55,7 +59,7 @@ async function testSaveSyncsWorkspaceToSource(): Promise<void> {
         packages: {
           [pkgName]: {
             path: pkgPath,
-            files: { 'rules/': ['.cursor/rules/'] }
+            files: { 'rules/foo.md': ['.claude/rules/foo.md'] }
           }
         }
       }
@@ -67,17 +71,21 @@ async function testSaveSyncsWorkspaceToSource(): Promise<void> {
     const sourceFile = path.join(pkgDir, 'rules', 'foo.md');
     assert.equal(fs.readFileSync(sourceFile, UTF8), 'hello-from-workspace');
 
-    console.log('save sync test passed');
+    console.log('save-mutable-source tests passed');
   } finally {
+    process.chdir(originalCwd);
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 }
 
 async function testAddCopiesToRootAndUpdatesIndex(): Promise<void> {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-phase7-add-'));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-add-'));
+  const originalCwd = process.cwd();
   try {
+    process.chdir(tmp);
+
     const pkgName = 'pkg-add';
-    const pkgPath = './.openpackage/packages/pkg-add/';
+    const pkgPath = './packages/pkg-add/';
     const pkgDir = path.join(tmp, '.openpackage', 'packages', 'pkg-add');
 
     writeWorkspaceManifest(tmp, pkgName, pkgPath);
@@ -97,13 +105,13 @@ async function testAddCopiesToRootAndUpdatesIndex(): Promise<void> {
     assert.ok(pkgEntry, 'pkg entry should exist');
     assert.deepEqual(pkgEntry.files['root/docs/guide.md'], ['docs/guide.md']);
 
-    console.log('add copy-to-root test passed');
+    console.log('add-mutable-source tests passed');
   } finally {
+    process.chdir(originalCwd);
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 }
 
-(async () => {
-  await testSaveSyncsWorkspaceToSource();
-  await testAddCopiesToRootAndUpdatesIndex();
-})();
+await testSaveSyncsWorkspaceToSource();
+await testAddCopiesToRootAndUpdatesIndex();
+
