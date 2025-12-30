@@ -21,6 +21,7 @@ import { getPlatformRootFileNames, stripRootCopyPrefix } from './platform-root-f
 import type { Platform } from '../core/platforms.js';
 import { getAllUniversalSubdirs } from '../core/platforms.js';
 import { normalizePathForProcessing } from './path-normalization.js';
+import { toTildePath } from './path-resolution.js';
 import {
   isAllowedRegistryPath,
   isRootRegistryPath,
@@ -150,18 +151,22 @@ async function writePackageIndex(record: PackageIndexRecord, cwd?: string): Prom
   // Be defensive: older/invalid index files could sanitize to missing packages map.
   wsRecord.index.packages = wsRecord.index.packages ?? {};
   const entry = wsRecord.index.packages[record.packageName];
-  const pathToUse =
+  const rawPath =
     entry?.path ??
     record.path ??
     (record.workspace?.version
       ? join(getRegistryDirectories().packages, record.packageName, record.workspace.version, sep)
       : '');
-  if (!pathToUse) {
+  if (!rawPath) {
     logger.warn(
       `Skipping workspace index write for ${record.packageName}: source path is unknown`
     );
     return;
   }
+
+  // Convert absolute paths under ~/.openpackage/ to tilde notation
+  // (handles both ~/.openpackage/registry/ and ~/.openpackage/packages/)
+  const pathToUse = toTildePath(rawPath);
 
   wsRecord.index.packages[record.packageName] = {
     ...entry,

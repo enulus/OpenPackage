@@ -3,6 +3,7 @@ import { resolve as resolvePath, join } from 'path';
 import type { CommandResult } from '../../types/index.js';
 import { FILE_PATTERNS } from '../../constants/index.js';
 import { readWorkspaceIndex, writeWorkspaceIndex } from '../../utils/workspace-index-yml.js';
+import { toTildePath } from '../../utils/path-resolution.js';
 import { resolvePackageSource } from '../source-resolution/resolve-package-source.js';
 import { assertMutableSourceOrThrow } from '../../utils/source-mutability.js';
 import { collectSourceEntries, type SourceEntry } from './source-collector.js';
@@ -125,11 +126,13 @@ async function updateWorkspaceIndex(
   workspacePathByRegistry: Map<string, string>
 ): Promise<void> {
   const record = await readWorkspaceIndex(cwd);
+  // Convert absolute paths under ~/.openpackage/ to tilde notation
+  const pathToWrite = toTildePath(declaredPath);
   if (!record.index.packages[packageName]) {
-    record.index.packages[packageName] = { path: declaredPath, files: {} };
+    record.index.packages[packageName] = { path: pathToWrite, files: {} };
   }
   const entry = record.index.packages[packageName];
-  entry.path = entry.path || declaredPath;
+  entry.path = entry.path || pathToWrite;
   entry.files = entry.files || {};
 
   for (const file of changed) {
