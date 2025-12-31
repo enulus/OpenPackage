@@ -143,7 +143,7 @@ export async function runPathInstallPipeline(
         packageName,
         cwd,
         true,
-        new Set([packageName]),
+        new Set(),  // Empty visitedStack - resolveDependencies manages this internally
         resolvedPackages,
         packageVersion,
         new Map(),
