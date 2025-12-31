@@ -9,7 +9,8 @@ import {
   listFiles,
   remove,
   removeEmptyDirectories,
-  walkFiles
+  walkFiles,
+  readTextFile
 } from './fs.js';
 import { writeIfChanged } from '../core/install/file-updater.js';
 import { packageManager } from '../core/package.js';
@@ -53,6 +54,7 @@ import {
   type WorkspaceConflictOwner
 } from './workspace-index-ownership.js';
 import { resolvePackageContentRoot } from '../core/install/local-source-resolution.js';
+import { calculateFileHash } from './hash-utils.js';
 
 // ============================================================================
 // Types and Interfaces
@@ -117,6 +119,7 @@ interface PlannedTargetDetail {
   relPath: string;
   content: string;
   encoding?: string;
+  sourcePath?: string; // Package source path for display
 }
 
 async function readPackageIndex(
@@ -320,6 +323,75 @@ async function promptConflictResolution(
   return choice ?? 'skip';
 }
 
+/**
+ * Prompt user for action when file content differs
+ */
+async function promptContentDifferenceResolution(
+  workspacePath: string,
+  packagePath?: string
+): Promise<'overwrite' | 'skip'> {
+  // Format package path as relative to package root with leading slash
+  const formattedPackagePath = packagePath
+    ? (packagePath.startsWith('/') ? packagePath : `/${packagePath}`)
+    : undefined;
+  
+  const message = formattedPackagePath
+    ? `Package file ${formattedPackagePath} differs from workspace file ${workspacePath}`
+    : `File ${workspacePath} differs from package version`;
+
+  const response = await safePrompts({
+    type: 'select',
+    name: 'choice',
+    message,
+    choices: [
+      {
+        title: 'Overwrite (use package version)',
+        value: 'overwrite'
+      },
+      {
+        title: 'Skip (keep workspace version)',
+        value: 'skip'
+      }
+    ]
+  });
+
+  const choice = (response as any).choice as 'overwrite' | 'skip' | undefined;
+  return choice ?? 'skip';
+}
+
+/**
+ * Check if file content differs using hash comparison
+ */
+async function hasContentDifference(
+  absPath: string,
+  newContent: string
+): Promise<boolean> {
+  try {
+    if (!(await exists(absPath))) {
+      return false; // File doesn't exist, so no content difference
+    }
+    
+    const existingContent = await readTextFile(absPath, 'utf8');
+    
+    // Quick check: if content is exactly the same, no need to hash
+    if (existingContent === newContent) {
+      return false;
+    }
+    
+    // Hash comparison for definitive answer
+    const [existingHash, newHash] = await Promise.all([
+      calculateFileHash(existingContent),
+      calculateFileHash(newContent)
+    ]);
+    
+    return existingHash !== newHash;
+  } catch (error) {
+    logger.warn(`Failed to check content difference for ${absPath}: ${error}`);
+    // On error, assume content differs to be safe
+    return true;
+  }
+}
+
 async function updateOwnerIndexAfterRename(
   owner: ConflictOwner,
   oldRelPath: string,
@@ -444,23 +516,37 @@ async function resolveConflictsForPlannedFiles(
       }
 
       if (!previousOwnedPaths.has(normalizedRel) && (await exists(absTarget))) {
+        // Check if content actually differs
+        const contentDiffers = await hasContentDifference(absTarget, planned.content);
+        
+        if (!contentDiffers) {
+          // Content is the same, no conflict - just proceed
+          filteredTargets.push(target);
+          continue;
+        }
+
+        // Content differs - handle as a conflict
         let decision: ConflictResolution | undefined = perPathDecisions.get(normalizedRel);
 
         if (!decision) {
           if (options.force) {
-            decision = 'keep-both';
+            // Force flag: auto-overwrite (not keep-both)
+            decision = 'overwrite';
+            warnings.push(`Overwriting ${normalizedRel} (content differs, --force flag active).`);
           } else if (defaultStrategy && defaultStrategy !== 'ask') {
             decision = defaultStrategy as ConflictResolution;
             if (decision === 'skip') {
-              warnings.push(`Skipping ${normalizedRel} because it already exists (configured conflict strategy).`);
+              warnings.push(`Skipping ${normalizedRel} (content differs, configured conflict strategy).`);
+            } else if (decision === 'overwrite') {
+              warnings.push(`Overwriting ${normalizedRel} (content differs, configured conflict strategy).`);
             }
           } else if (!interactive) {
-            warnings.push(`Skipping ${normalizedRel} because it already exists and cannot prompt in non-interactive mode.`);
+            warnings.push(`Skipping ${normalizedRel} (content differs, cannot prompt in non-interactive mode).`);
             decision = 'skip';
           } else {
-            decision = await promptConflictResolution(
-              `File ${normalizedRel} already exists in your project. How would you like to proceed?`
-            );
+            // Interactive mode: prompt for content-modified files
+            const contentDecision = await promptContentDifferenceResolution(normalizedRel, planned.registryPath);
+            decision = contentDecision;
           }
         }
 
@@ -491,7 +577,7 @@ async function resolveConflictsForPlannedFiles(
 
         // overwrite
         if (isDryRun) {
-          warnings.push(`Would overwrite existing local file ${normalizedRel}.`);
+          warnings.push(`Would overwrite existing local file ${normalizedRel} (content modified).`);
           filteredTargets.push(target);
           continue;
         }
@@ -745,7 +831,8 @@ function buildPlannedTargetMap(
           absPath: target.absPath,
           relPath: normalizedRel,
           content,
-          encoding: planned.encoding
+          encoding: planned.encoding,
+          sourcePath: planned.registryPath
         });
       }
     }
@@ -775,7 +862,9 @@ async function applyFileOperations(
   cwd: string,
   planned: Map<string, PlannedTargetDetail>,
   deletions: string[],
-  options: InstallOptions
+  options: InstallOptions,
+  packageName?: string,
+  contentRoot?: string
 ): Promise<IndexInstallResult> {
   const result: IndexInstallResult = {
     installed: 0,
@@ -810,6 +899,55 @@ async function applyFileOperations(
 
   for (const [rel, detail] of planned.entries()) {
     const absPath = detail.absPath;
+    
+    // Check for content differences before writing
+    if (await exists(absPath)) {
+      const contentDiffers = await hasContentDifference(absPath, detail.content);
+      
+      if (contentDiffers) {
+        // Content differs - need to handle conflict
+        const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY);
+        let shouldWrite = false;
+        
+        if (isDryRun) {
+          logger.warn(`Would overwrite ${rel} (content differs from package)`);
+          result.skipped++;
+          continue;
+        }
+        
+        if (options.force) {
+          logger.warn(`Overwriting ${rel} (content differs, --force flag active)`);
+          shouldWrite = true;
+        } else if (options.conflictStrategy === 'overwrite') {
+          logger.warn(`Overwriting ${rel} (content differs, configured conflict strategy)`);
+          shouldWrite = true;
+        } else if (options.conflictStrategy === 'skip') {
+          logger.warn(`Skipping ${rel} (content differs, configured conflict strategy)`);
+          result.skipped++;
+          continue;
+        } else if (!interactive) {
+          logger.warn(`Skipping ${rel} (content differs, cannot prompt in non-interactive mode)`);
+          result.skipped++;
+          continue;
+        } else {
+          // Interactive mode: prompt user
+          // Use registry path (relative to package root)
+          const decision = await promptContentDifferenceResolution(rel, detail.sourcePath);
+          if (decision === 'skip') {
+            logger.info(`Skipped ${rel} (keeping workspace version)`);
+            result.skipped++;
+            continue;
+          }
+          shouldWrite = true;
+        }
+        
+        if (!shouldWrite) {
+          result.skipped++;
+          continue;
+        }
+      }
+    }
+    
     if (isDryRun) {
       result.skipped++;
       continue;
@@ -1039,7 +1177,7 @@ export async function installPackageByIndex(
   const plannedTargetMap = buildPlannedTargetMap(plannedFiles, cwd);
   const { planned, deletions } = computeDiff(plannedTargetMap, previousOwnedPaths);
 
-  const operationResult = await applyFileOperations(cwd, planned, deletions, options);
+  const operationResult = await applyFileOperations(cwd, planned, deletions, options, packageName, resolvedContentRoot);
 
   if (!options.dryRun) {
     const mapping = buildIndexMappingFromPlans(groupPlans);
@@ -1543,7 +1681,9 @@ export async function applyPlannedSyncForPackageFiles(
   const plannedTargetMap = buildPlannedTargetMap(plannedFiles, cwd);
   const { planned, deletions } = computeDiff(plannedTargetMap, previousOwnedPaths);
 
-  const operationResult = await applyFileOperations(cwd, planned, deletions, options);
+  // Try to get contentRoot from previous index for better messaging
+  const contentRoot = previousIndex?.path;
+  const operationResult = await applyFileOperations(cwd, planned, deletions, options, packageName, contentRoot);
 
   let mapping: Record<string, string[]> = {};
   if (!options.dryRun) {
