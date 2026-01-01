@@ -2,8 +2,7 @@ import { resolve as resolvePath, join } from 'path';
 
 import type { CommandResult } from '../../types/index.js';
 import { FILE_PATTERNS } from '../../constants/index.js';
-import { readWorkspaceIndex, writeWorkspaceIndex } from '../../utils/workspace-index-yml.js';
-import { toTildePath } from '../../utils/path-resolution.js';
+import { resolveMutableSource } from '../source-resolution/resolve-mutable-source.js';
 import { resolvePackageSource } from '../source-resolution/resolve-package-source.js';
 import { assertMutableSourceOrThrow } from '../../utils/source-mutability.js';
 import { collectSourceEntries, type SourceEntry } from './source-collector.js';
@@ -14,6 +13,7 @@ import { getAllUniversalSubdirs, getAllPlatforms } from '../platforms.js';
 import type { PackageContext } from '../package-context.js';
 import { parsePackageYml } from '../../utils/package-yml.js';
 import { exists } from '../../utils/fs.js';
+import { logger } from '../../utils/logger.js';
 
 export interface AddToSourceOptions {
   apply?: boolean;
@@ -23,6 +23,8 @@ export interface AddToSourceOptions {
 export interface AddToSourceResult {
   packageName: string;
   filesAdded: number;
+  sourcePath: string;
+  sourceType: 'workspace' | 'global';
 }
 
 export async function runAddToSourcePipeline(
@@ -44,37 +46,81 @@ export async function runAddToSourcePipeline(
     return { success: false, error: `Path not found: ${pathArg}` };
   }
 
-  const source = await resolvePackageSource(cwd, packageName);
+  // Resolve mutable package source (workspace or global, but not registry)
+  let source;
+  try {
+    source = await resolveMutableSource({ cwd, packageName });
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+  
+  // Additional safety check (should never fail given resolveMutableSource guarantees)
   assertMutableSourceOrThrow(source.absolutePath, { packageName: source.packageName, command: 'add' });
+
+  logger.info('Adding files to package source', {
+    packageName: source.packageName,
+    sourcePath: source.absolutePath,
+    sourceType: source.sourceType,
+    inputPath: pathArg
+  });
 
   const rawEntries = await collectSourceEntries(absInputPath, cwd);
   const entries = applyCopyToRootRule(rawEntries, cwd);
 
-  // Track workspace-relative paths per registry key for index updates.
-  const workspacePathByRegistry = new Map<string, string>();
-  for (const entry of entries) {
-    const workspaceRel = normalizePathForProcessing(entry.sourcePath.slice(cwd.length + 1)) || entry.sourcePath;
-    workspacePathByRegistry.set(normalizePathForProcessing(entry.registryPath) || entry.registryPath, workspaceRel);
-  }
-
   const packageContext = await buildPackageContext(source);
   const changed = await copyFilesWithConflictResolution(packageContext, entries);
 
-  if (changed.length > 0) {
-    await updateWorkspaceIndex(cwd, source.packageName, source.declaredPath, changed, workspacePathByRegistry);
-  }
+  logger.info('Files copied to package source', {
+    packageName: source.packageName,
+    filesAdded: changed.length
+  });
 
-  // Optional immediate apply: reuse existing apply pipeline.
+  // Determine source type for result
+  const sourceType = source.absolutePath.includes(`${cwd}/.openpackage/packages/`) 
+    ? 'workspace' as const
+    : 'global' as const;
+
+  // Handle --apply flag: requires package to be installed in current workspace
   if (options.apply) {
-    const { runApplyPipeline } = await import('../apply/apply-pipeline.js');
-    await runApplyPipeline(source.packageName, {});
+    logger.info('Applying changes to workspace (--apply flag)', { packageName: source.packageName });
+    
+    try {
+      // Check if package is installed in current workspace
+      await resolvePackageSource(cwd, packageName);
+      
+      // Apply changes to workspace
+      const { runApplyPipeline } = await import('../apply/apply-pipeline.js');
+      const applyResult = await runApplyPipeline(source.packageName, {});
+      
+      if (!applyResult.success) {
+        return {
+          success: false,
+          error: `Files added to package source, but apply failed:\n${applyResult.error}`
+        };
+      }
+      
+      logger.info('Changes applied to workspace', { packageName: source.packageName });
+    } catch (error) {
+      return {
+        success: false,
+        error: 
+          `Files added to package source at: ${source.absolutePath}\n\n` +
+          `However, --apply failed because package '${packageName}' is not installed in this workspace.\n\n` +
+          `To sync changes to your workspace:\n` +
+          `  1. Install the package: opkg install ${packageName}\n` +
+          `  2. Apply the changes: opkg apply ${packageName}\n\n` +
+          `Or run 'opkg add' without --apply flag to skip workspace sync.`
+      };
+    }
   }
 
   return {
     success: true,
     data: {
       packageName: source.packageName,
-      filesAdded: changed.length
+      filesAdded: changed.length,
+      sourcePath: source.absolutePath,
+      sourceType
     }
   };
 }
@@ -102,7 +148,7 @@ function applyCopyToRootRule(entries: SourceEntry[], cwd: string): SourceEntry[]
   });
 }
 
-async function buildPackageContext(source: Awaited<ReturnType<typeof resolvePackageSource>>): Promise<PackageContext> {
+async function buildPackageContext(source: Awaited<ReturnType<typeof resolveMutableSource>>): Promise<PackageContext> {
   const packageYmlPath = join(source.absolutePath, FILE_PATTERNS.OPENPACKAGE_YML);
   const config = await parsePackageYml(packageYmlPath);
 
@@ -116,34 +162,4 @@ async function buildPackageContext(source: Awaited<ReturnType<typeof resolvePack
     location: 'nested',
     isCwdPackage: false
   };
-}
-
-async function updateWorkspaceIndex(
-  cwd: string,
-  packageName: string,
-  declaredPath: string,
-  changed: Array<{ path: string }>,
-  workspacePathByRegistry: Map<string, string>
-): Promise<void> {
-  const record = await readWorkspaceIndex(cwd);
-  // Convert absolute paths under ~/.openpackage/ to tilde notation
-  const pathToWrite = toTildePath(declaredPath);
-  if (!record.index.packages[packageName]) {
-    record.index.packages[packageName] = { path: pathToWrite, files: {} };
-  }
-  const entry = record.index.packages[packageName];
-  entry.path = entry.path || pathToWrite;
-  entry.files = entry.files || {};
-
-  for (const file of changed) {
-    const key = normalizePathForProcessing(file.path) || file.path;
-    if (!entry.files[key]) entry.files[key] = [];
-    const workspaceRel = workspacePathByRegistry.get(key);
-    if (!workspaceRel) continue;
-    if (!entry.files[key].includes(workspaceRel)) {
-      entry.files[key].push(workspaceRel);
-    }
-  }
-
-  await writeWorkspaceIndex(record);
 }

@@ -7,11 +7,11 @@ This file provides high-level semantics for core commands in the path-based mode
 | Command | Direction | Purpose | Mutable Source | Immutable Source |
 |---------|-----------|---------|----------------|------------------|
 | `new` | N/A | Create package manifest | N/A | N/A |
-| `add` | Workspace → Source | Add new files | ✅ | ❌ Error |
-| `save` | Workspace → Source | Sync edits back | ✅ | ❌ Error |
+| `add` | Filesystem → Source | Add new files (source-only) | ✅ | ❌ Error |
+| `save` | Workspace → Source | Sync edits back (requires install) | ✅ | ❌ Error |
 | `pack` | Source → Registry | Create immutable snapshot | ✅ | N/A |
-| `apply` | Source/Registry → Workspace | Sync content to platforms | ✅ | ✅ |
-| `install` | Registry → Workspace | Install version (git/path too) | N/A | ✅ |
+| `apply` | Source/Registry → Workspace | Sync content to platforms + update index | ✅ | ✅ |
+| `install` | Registry → Workspace | Install version (git/path too) + update index | N/A | ✅ |
 | `status` | N/A | Report sync state | ✅ | ✅ |
 | `uninstall` | Workspace | Remove package files/mappings | ✅ | ✅ |
 | `push` | Local → Remote | Upload (deferred details) | N/A | N/A |
@@ -32,12 +32,16 @@ Sync workspace changes to mutable source via index mappings.
 
 ### `add`
 
-Add new workspace files to mutable source.
+Add new files from anywhere to mutable source (workspace or global packages).
 
-- Preconditions: Mutable.
-- Flow: Collect input → Map (platform→universal, root→root, other→root/<rel>) → Copy → Update index.
-- Options: `--apply` (sync to platforms after).
-- Example: `opkg add my-pkg ./new-files/`.
+- Preconditions: Mutable package source (workspace or global); **does not require installation**.
+- Flow: Resolve mutable source → Collect input → Map (platform→universal, root→root, other→root/<rel>) → Copy to source.
+- **No index updates**: `add` only modifies package source. To sync to workspace, use `install` + `apply` or `--apply` flag.
+- Options: `--apply` (sync to workspace immediately; requires package to be installed in current workspace).
+- Example: 
+  - `opkg add my-pkg ./new-files/` (source-only)
+  - `opkg add my-pkg ./file.md --apply` (source + workspace sync)
+- Works from any directory with any mutable package.
 - See [Add](add/).
 
 ### `pack`

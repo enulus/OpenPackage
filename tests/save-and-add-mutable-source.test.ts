@@ -77,7 +77,7 @@ async function testSaveSyncsWorkspaceToSource(): Promise<void> {
   }
 }
 
-async function testAddCopiesToRootAndUpdatesIndex(): Promise<void> {
+async function testAddCopiesToRootWithoutIndexUpdate(): Promise<void> {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-add-'));
   const originalCwd = process.cwd();
   try {
@@ -89,34 +89,27 @@ async function testAddCopiesToRootAndUpdatesIndex(): Promise<void> {
     writeWorkspaceManifest(tmp, pkgName);
     writePackageManifest(pkgDir, pkgName);
 
-    // Create workspace index with pkg-add entry
-    await writeWorkspaceIndex({
-      path: getWorkspaceIndexPath(tmp),
-      index: {
-        packages: {
-          [pkgName]: {
-            path: './.openpackage/packages/pkg-add/',
-            files: {}
-          }
-        }
-      }
-    });
-
+    // Note: No workspace index required - add works without installation
     const wsDoc = path.join(tmp, 'docs', 'guide.md');
     writeFile(wsDoc, 'doc-content');
 
     const result = await runAddToSourcePipeline(pkgName, 'docs', { apply: false });
     assert.ok(result.success, result.error);
 
+    // Verify file was added to package source
     const addedFile = path.join(pkgDir, 'root', 'docs', 'guide.md');
     assert.equal(fs.readFileSync(addedFile, UTF8), 'doc-content');
 
-    const index = await readWorkspaceIndex(tmp);
-    const pkgEntry = index.index.packages[pkgName];
-    assert.ok(pkgEntry, 'pkg entry should exist');
-    assert.deepEqual(pkgEntry.files['root/docs/guide.md'], ['docs/guide.md']);
+    // Verify index was NOT updated (new behavior)
+    const indexPath = getWorkspaceIndexPath(tmp);
+    if (fs.existsSync(indexPath)) {
+      const index = await readWorkspaceIndex(tmp);
+      const pkgEntry = index.index.packages?.[pkgName];
+      assert.ok(!pkgEntry || !pkgEntry.files || Object.keys(pkgEntry.files).length === 0, 
+        'add should not update workspace index');
+    }
 
-    console.log('add-mutable-source tests passed');
+    console.log('add-mutable-source tests passed (no index update)');
   } finally {
     process.chdir(originalCwd);
     fs.rmSync(tmp, { recursive: true, force: true });
@@ -124,5 +117,5 @@ async function testAddCopiesToRootAndUpdatesIndex(): Promise<void> {
 }
 
 await testSaveSyncsWorkspaceToSource();
-await testAddCopiesToRootAndUpdatesIndex();
+await testAddCopiesToRootWithoutIndexUpdate();
 

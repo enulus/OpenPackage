@@ -71,8 +71,8 @@ See [Package Sources](package-sources.md) for resolution details and [Registry](
 
 ### Workspace → Source (save, add)
 - User edits platform dirs or adds new files.
-- `save`: Syncs via index mappings; resolves conflicts (mtime, overrides); writes to mutable source.
-- `add`: Copies new workspace paths to source (platform → universal, root → root, other → root/<relpath>); updates index.
+- `save`: Syncs via index mappings; resolves conflicts (mtime, overrides); writes to mutable source. Requires package to be installed (reads from workspace index).
+- `add`: Copies files from filesystem to mutable package source (workspace or global). Does **not** update workspace index. Works independently of installation status. To sync to workspace, use `install` + `apply` or `--apply` flag.
 - See [Save](save/) and [Add](add/) for details.
 
 ### Source → Registry (pack)
