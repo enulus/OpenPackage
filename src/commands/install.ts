@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { resolve } from 'path';
 
 import type { CommandResult, InstallOptions } from '../types/index.js';
+import { formatPathForDisplay } from '../utils/formatters.js';
 import { DIR_PATTERNS, PACKAGE_PATHS } from '../constants/index.js';
 import { runBulkInstallPipeline } from '../core/install/bulk-install-pipeline.js';
 import { runInstallPipeline, determineResolutionMode } from '../core/install/install-pipeline.js';
@@ -78,7 +79,8 @@ async function installCommand(
         });
       } else if (existingSource.type === 'path') {
         logger.info(`Using path source from openpackage.yml for '${classification.name}': ${existingSource.path}`);
-        console.log(`✓ Using path source from openpackage.yml: ${existingSource.path}`);
+        const displayPath = formatPathForDisplay(existingSource.path, cwd);
+        console.log(`✓ Using path source from openpackage.yml: ${displayPath}`);
         
         const resolvedPath = resolve(cwd, existingSource.path);
         const sourceType = inferSourceType(existingSource.path);

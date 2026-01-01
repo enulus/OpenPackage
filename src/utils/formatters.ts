@@ -1,10 +1,55 @@
 import { PackageYml } from '../types/index.js';
 import { toTildePath } from './path-resolution.js';
-import { relative } from 'path';
+import { relative, isAbsolute } from 'path';
 
 /**
  * Formatting utilities for consistent display across commands
  */
+
+/**
+ * Format a file system path for display to the user.
+ * 
+ * This function provides a unified way to display paths across all commands:
+ * - Uses tilde notation (~) for paths under home directory (e.g., ~/.openpackage/packages/...)
+ * - Uses relative paths from cwd for paths in the workspace
+ * - Falls back to absolute path for other cases
+ * 
+ * @param path - The path to format (can be absolute or relative)
+ * @param cwd - Current working directory (defaults to process.cwd())
+ * @returns Formatted path string for display
+ * 
+ * @example
+ * formatPathForDisplay('/Users/user/.openpackage/packages/my-pkg') // => '~/.openpackage/packages/my-pkg'
+ * formatPathForDisplay('/Users/user/workspace/file.txt', '/Users/user/workspace') // => 'file.txt'
+ * formatPathForDisplay('./relative/path.txt') // => './relative/path.txt'
+ */
+export function formatPathForDisplay(path: string, cwd: string = process.cwd()): string {
+  // If path is already in tilde notation, return as-is
+  if (path.startsWith('~')) {
+    return path;
+  }
+  
+  // If path is relative, return as-is
+  if (!isAbsolute(path)) {
+    return path;
+  }
+  
+  // Try tilde notation first (for paths under ~/.openpackage/)
+  const tildePath = toTildePath(path);
+  if (tildePath.startsWith('~')) {
+    return tildePath;
+  }
+  
+  // Try relative path from cwd
+  const relativePath = relative(cwd, path);
+  if (relativePath && !relativePath.startsWith('..')) {
+    // Only use relative path if it's within cwd (doesn't start with ..)
+    return relativePath;
+  }
+  
+  // Fall back to absolute path
+  return path;
+}
 
 /**
  * Interface for package table entries
@@ -203,27 +248,7 @@ export function formatFileSize(bytes: number): string {
  */
 export function displayPackageConfig(packageConfig: PackageYml, path: string, isExisting: boolean = false): void {
   const action = isExisting ? 'already exists' : 'created';
-  const cwd = process.cwd();
-  
-  // Format path: use tilde notation for absolute paths under ~/.openpackage/,
-  // otherwise use relative path from cwd
-  let displayPath: string;
-  if (path.startsWith('~')) {
-    // Already in tilde notation
-    displayPath = path;
-  } else if (path.startsWith('/')) {
-    // Absolute path - try tilde notation first, then relative
-    const tildePath = toTildePath(path);
-    if (tildePath.startsWith('~')) {
-      displayPath = tildePath;
-    } else {
-      // Not under ~/.openpackage/, use relative path
-      displayPath = relative(cwd, path);
-    }
-  } else {
-    // Already relative
-    displayPath = path;
-  }
+  const displayPath = formatPathForDisplay(path);
   
   console.log(`✓ ${displayPath} ${action}`);
 

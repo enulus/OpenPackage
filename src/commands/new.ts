@@ -107,14 +107,12 @@ export function setupNewCommand(program: Command): void {
 
       // Additional success messaging based on scope
       if (scope === 'local') {
-        const localPath = `.openpackage/packages/${actualPackageName}/`;
         console.log(`\n💡 Next steps:`);
-        console.log(`   1. Add files to your package: cd ${localPath}`);
+        console.log(`   1. Add files to your package: cd .openpackage/packages/${actualPackageName}/`);
         console.log(`   2. Install to this workspace: opkg install ${actualPackageName}`);
       } else if (scope === 'global') {
-        const globalPath = `~/.openpackage/packages/${actualPackageName}/`;
         console.log(`\n💡 Next steps:`);
-        console.log(`   1. Add files to your package: cd ${globalPath}`);
+        console.log(`   1. Add files to your package: cd ~/.openpackage/packages/${actualPackageName}/`);
         console.log(`   2. Install to any workspace: opkg install ${actualPackageName}`);
       } else if (scope === 'root') {
         console.log(`\n💡 Next steps:`);

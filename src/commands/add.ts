@@ -2,6 +2,8 @@ import { Command } from 'commander';
 
 import { withErrorHandling } from '../utils/errors.js';
 import { runAddToSourcePipeline, type AddToSourceOptions } from '../core/add/add-to-source-pipeline.js';
+import { readWorkspaceIndex } from '../utils/workspace-index-yml.js';
+import { formatPathForDisplay } from '../utils/formatters.js';
 
 export function setupAddCommand(program: Command): void {
   program
@@ -34,16 +36,31 @@ export function setupAddCommand(program: Command): void {
         
         // Provide helpful feedback
         if (result.data) {
+          const cwd = process.cwd();
           const { filesAdded, sourcePath, sourceType, packageName: resolvedName } = result.data;
+          
+          // Format the path for display using unified formatter
+          const displayPath = formatPathForDisplay(sourcePath, cwd);
+          
           console.log(`\n✓ Added ${filesAdded} file${filesAdded !== 1 ? 's' : ''} to ${resolvedName}`);
-          console.log(`  Source: ${sourcePath}`);
+          console.log(`  Path: ${displayPath}`);
           console.log(`  Type: ${sourceType} package`);
           
           if (!options.apply) {
-            console.log(`\n💡 Changes are in the package source only.`);
-            console.log(`   To sync to your workspace, run:`);
-            console.log(`     opkg install ${resolvedName}`);
-            console.log(`     opkg apply ${resolvedName}`);
+            // Check if package is installed in workspace
+            const workspaceIndexRecord = await readWorkspaceIndex(cwd);
+            const isInstalled = !!workspaceIndexRecord.index.packages[resolvedName];
+            
+            if (isInstalled) {
+              console.log(`\n💡 Changes not synced to workspace.`);
+              console.log(`   To sync changes, run:`);
+              console.log(`     opkg apply ${resolvedName}`);
+            } else {
+              console.log(`\n💡 Package not installed in workspace.`);
+              console.log(`   To install and sync, run:`);
+              console.log(`     opkg install ${resolvedName}`);
+              console.log(`     opkg apply ${resolvedName}`);
+            }
           }
         }
       })
