@@ -8,6 +8,7 @@ This file provides high-level semantics for core commands in the path-based mode
 |---------|-----------|---------|----------------|------------------|
 | `new` | N/A | Create package manifest | N/A | N/A |
 | `add` | Filesystem → Source | Add new files (source-only) | ✅ | ❌ Error |
+| `remove` | Source → Deletion | Remove files from source (source-only) | ✅ | ❌ Error |
 | `save` | Workspace → Source | Sync edits back (requires install) | ✅ | ❌ Error |
 | `pack` | Source → Registry | Create immutable snapshot | ✅ | N/A |
 | `apply` | Source/Registry → Workspace | Sync content to platforms + update index | ✅ | ✅ |
@@ -43,6 +44,22 @@ Add new files from anywhere to mutable source (workspace or global packages).
   - `opkg add my-pkg ./file.md --apply` (source + workspace sync)
 - Works from any directory with any mutable package.
 - See [Add](add/).
+
+### `remove`
+
+Remove files from mutable source.
+
+- Preconditions: Mutable source; fails on registry.
+- Flow: Resolve source → Collect files → Confirm → Delete → Clean up empty dirs.
+- **No index updates**: `remove` only modifies package source. To sync deletions to workspace, use `apply` or `--apply` flag.
+- Options: `--apply` (sync to workspace immediately; requires package to be installed in current workspace), `--force` (skip confirmation), `--dry-run` (preview).
+- Example:
+  - `opkg remove my-pkg commands/deprecated.md` (source-only)
+  - `opkg remove my-pkg rules/old/ --apply` (source + workspace sync)
+  - `opkg remove my-pkg commands/ --dry-run` (preview)
+- Works from any directory with any mutable package.
+- Opposite of `add` command.
+- See [Remove](remove/).
 
 ### `pack`
 
@@ -106,6 +123,7 @@ Create a new package with manifest.
 | `new` | N/A | N/A | Package location (scope-dependent) |
 | `save` | ✅ Syncs to source | ❌ Error | Source path |
 | `add` | ✅ Adds to source | ❌ Error | Source path |
+| `remove` | ✅ Removes from source | ❌ Error | N/A (deletes) |
 | `pack` | ✅ Creates version | N/A | Registry |
 | `apply` | ✅ Syncs to workspace | ✅ Syncs to workspace | Workspace |
 | `install` | N/A | ✅ Syncs to workspace | Workspace |

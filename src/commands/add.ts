@@ -59,7 +59,6 @@ export function setupAddCommand(program: Command): void {
               console.log(`\n💡 Package not installed in workspace.`);
               console.log(`   To install and sync, run:`);
               console.log(`     opkg install ${resolvedName}`);
-              console.log(`     opkg apply ${resolvedName}`);
             }
           }
         }
