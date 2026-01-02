@@ -23,7 +23,7 @@ export function setupPackCommand(program: Command): void {
       '  opkg pack /absolute/path      # Pack package from absolute path\n' +
       '  opkg pack ./relative/path     # Pack package from relative path'
     )
-    .option('-f, --force', 'legacy flag (ignored by pack)')
+    .option('-f, --force', 'skip confirmation and overwrite existing packages')
     .option('--output <path>', 'write snapshot directly into the target directory instead of the registry path')
     .option('--dry-run', 'print the destination and files that would be written')
     .action(withErrorHandling(async (packageName: string | undefined, options?: PackOptions) => {

@@ -137,5 +137,92 @@ async function cleanup(paths: string[]) {
   }
 }
 
+// Pack with overwrite (should fail without --force in non-interactive mode)
+{
+  const { cwd, home } = await setupWorkspace();
+  try {
+    // First pack
+    const res1 = runCli(['pack', 'my-pkg'], cwd, { HOME: home });
+    assert.equal(res1.code, 0, `first pack should succeed: ${res1.stderr}`);
+
+    // Second pack without --force (should fail in CI/non-TTY)
+    const res2 = runCli(['pack', 'my-pkg'], cwd, { HOME: home });
+    // In non-interactive mode (which runCli simulates), it should prompt but prompts library will throw
+    // So we expect it to fail with cancellation
+    assert.notEqual(res2.code, 0, 'pack without --force should fail when destination exists');
+    assert.match(res2.stderr, /(cancelled|exists)/i, 'error should mention cancellation or existing package');
+  } finally {
+    await cleanup([cwd, home]);
+  }
+}
+
+// Pack with --force should overwrite without prompting
+{
+  const { cwd, home } = await setupWorkspace();
+  try {
+    // First pack
+    const res1 = runCli(['pack', 'my-pkg'], cwd, { HOME: home });
+    assert.equal(res1.code, 0, `first pack should succeed: ${res1.stderr}`);
+
+    const registryPath = path.join(home, '.openpackage', 'registry', 'my-pkg', '1.0.0', 'rules', 'hello.md');
+    const content1 = await fs.readFile(registryPath, 'utf8');
+    assert.equal(content1.trim(), '# hi', 'first pack should create file');
+
+    // Modify the source
+    const pkgDir = path.join(cwd, '.openpackage', 'packages', 'my-pkg');
+    await fs.writeFile(path.join(pkgDir, 'rules', 'hello.md'), '# updated\n', 'utf8');
+
+    // Second pack with --force
+    const res2 = runCli(['pack', 'my-pkg', '--force'], cwd, { HOME: home });
+    assert.equal(res2.code, 0, `pack with --force should succeed: ${res2.stderr}`);
+    assert.match(res2.stdout, /Force mode: Overwriting/i, 'should show force mode message');
+
+    // Verify file was overwritten
+    const content2 = await fs.readFile(registryPath, 'utf8');
+    assert.equal(content2.trim(), '# updated', 'file should be overwritten with new content');
+  } finally {
+    await cleanup([cwd, home]);
+  }
+}
+
+// Pack with --dry-run should show overwrite warning
+{
+  const { cwd, home } = await setupWorkspace();
+  try {
+    // First pack
+    const res1 = runCli(['pack', 'my-pkg'], cwd, { HOME: home });
+    assert.equal(res1.code, 0, `first pack should succeed: ${res1.stderr}`);
+
+    // Dry-run pack on existing package
+    const res2 = runCli(['pack', 'my-pkg', '--dry-run'], cwd, { HOME: home });
+    assert.equal(res2.code, 0, `pack --dry-run should succeed: ${res2.stderr}`);
+    assert.match(res2.stdout, /Would overwrite existing package/i, 'should show overwrite warning');
+    assert.match(res2.stdout, /\d+ file/i, 'should show existing file count');
+  } finally {
+    await cleanup([cwd, home]);
+  }
+}
+
+// Pack with --output to existing directory should also prompt
+{
+  const { cwd, home } = await setupWorkspace();
+  const outputDir = path.join(cwd, 'snapshot');
+  try {
+    // First pack to output dir
+    const res1 = runCli(['pack', 'my-pkg', '--output', outputDir], cwd, { HOME: home });
+    assert.equal(res1.code, 0, `first pack --output should succeed: ${res1.stderr}`);
+
+    // Second pack to same output dir without --force (should fail)
+    const res2 = runCli(['pack', 'my-pkg', '--output', outputDir], cwd, { HOME: home });
+    assert.notEqual(res2.code, 0, 'pack --output without --force should fail when destination exists');
+
+    // Third pack with --force should succeed
+    const res3 = runCli(['pack', 'my-pkg', '--output', outputDir, '--force'], cwd, { HOME: home });
+    assert.equal(res3.code, 0, `pack --output with --force should succeed: ${res3.stderr}`);
+  } finally {
+    await cleanup([cwd, home]);
+  }
+}
+
 console.log('pack tests passed');
 

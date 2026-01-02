@@ -193,7 +193,7 @@ export interface SaveOptions {
 }
 
 export interface PackOptions {
-  force?: boolean; // legacy flag (ignored by pack)
+  force?: boolean; // Skip overwrite confirmation prompts
   rename?: string; // legacy flag (ignored by pack)
   output?: string;
   dryRun?: boolean;

@@ -7,6 +7,7 @@ import type { PlatformDefinition } from '../core/platforms.js';
 import { normalizePackageName, validatePackageName } from './package-name.js';
 import { readTextFile } from './fs.js';
 import type { PackageScope } from './scope-resolution.js';
+import { formatPathForDisplay } from './formatters.js';
 
 /**
  * Common prompt types and utilities for user interaction
@@ -56,6 +57,31 @@ export async function promptPackageOverwrite(packageName: string, existingVersio
   return await promptConfirmation(
     `Package '${packageName}' already exists${versionSuffix}. Overwrite all files?`,
     false
+  );
+}
+
+/**
+ * Prompt for pack overwrite confirmation with detailed context
+ */
+export async function promptPackOverwrite(
+  packageName: string,
+  version: string,
+  destination: string,
+  existingFileCount: number,
+  isCustomOutput: boolean
+): Promise<boolean> {
+  const locationType = isCustomOutput ? 'output directory' : 'registry';
+  const displayPath = formatPathForDisplay(destination, process.cwd());
+  
+  console.log(''); // Spacing for readability
+  console.log(`⚠️  Package '${packageName}@${version}' already exists in ${locationType}`);
+  console.log(`   Location: ${displayPath}`);
+  console.log(`   Existing files: ${existingFileCount}`);
+  console.log('');
+  
+  return await promptConfirmation(
+    `Overwrite '${packageName}@${version}'? This action cannot be undone.`,
+    false  // Default to no
   );
 }
 

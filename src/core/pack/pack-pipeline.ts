@@ -6,11 +6,13 @@ import { FILE_PATTERNS } from '../../constants/index.js';
 import { ensureRegistryDirectories, getPackageVersionPath } from '../directory.js';
 import { readPackageFilesForRegistry, writePackageFilesToDirectory } from '../../utils/package-copy.js';
 import { parsePackageYml } from '../../utils/package-yml.js';
-import { exists, remove } from '../../utils/fs.js';
+import { exists, remove, countFilesInDirectory } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
 import { resolvePackageByName } from '../../utils/package-name-resolution.js';
 import { classifyPackageInput } from '../../utils/package-input.js';
 import { ValidationError } from '../../utils/errors.js';
+import { promptPackOverwrite } from '../../utils/prompts.js';
+import { formatPathForDisplay } from '../../utils/formatters.js';
 import { 
   createPackResultInfo, 
   displayPackSuccess, 
@@ -128,6 +130,56 @@ export interface PackPipelineResult {
   files: number;
 }
 
+/**
+ * Handle overwrite confirmation for pack operation
+ * Returns true if operation should proceed, false if cancelled
+ * Throws error if confirmation is needed but environment is non-interactive
+ */
+async function handlePackOverwrite(
+  packageName: string,
+  version: string,
+  destination: string,
+  existingFileCount: number,
+  force: boolean,
+  isCustomOutput: boolean
+): Promise<boolean> {
+  // Force mode - auto-approve with logging
+  if (force) {
+    const locationType = isCustomOutput ? 'output directory' : 'registry';
+    logger.info(
+      `Force mode: Overwriting existing ${locationType}`,
+      { packageName, version, destination, existingFileCount }
+    );
+    console.log(
+      `⚠️  Force mode: Overwriting ${packageName}@${version} ` +
+      `(${existingFileCount} existing file${existingFileCount !== 1 ? 's' : ''})`
+    );
+    return true;
+  }
+
+  // Check if we can prompt (TTY required for interactive prompts)
+  const canPrompt = Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  
+  if (!canPrompt) {
+    // Non-interactive environment - fail with clear error message
+    const locationType = isCustomOutput ? 'output directory' : 'registry';
+    const displayPath = formatPathForDisplay(destination, process.cwd());
+    throw new Error(
+      `Pack destination already exists (${locationType}: ${displayPath}).\n` +
+      `Use --force to overwrite, or specify a different version in openpackage.yml.`
+    );
+  }
+
+  // Interactive mode - prompt user
+  return await promptPackOverwrite(
+    packageName,
+    version,
+    destination,
+    existingFileCount,
+    isCustomOutput
+  );
+}
+
 export async function runPackPipeline(
   packageInput: string | undefined,
   options: PackOptions = {}
@@ -155,6 +207,12 @@ export async function runPackPipeline(
 
     const isCustomOutput = !!options.output;
 
+    // Check if destination exists and count existing files
+    const destinationExists = await exists(destination);
+    const existingFileCount = destinationExists 
+      ? await countFilesInDirectory(destination)
+      : 0;
+
     // Create result info for output display
     const resultInfo = createPackResultInfo(
       source.name,
@@ -163,7 +221,9 @@ export async function runPackPipeline(
       destination,
       files.length,
       source.manifest,
-      isCustomOutput
+      isCustomOutput,
+      destinationExists,
+      existingFileCount
     );
 
     if (options.dryRun) {
@@ -174,11 +234,31 @@ export async function runPackPipeline(
       };
     }
 
+    // Handle overwrite confirmation (unless dry-run or force)
+    if (destinationExists) {
+      const shouldOverwrite = await handlePackOverwrite(
+        source.name,
+        source.version,
+        destination,
+        existingFileCount,
+        options.force ?? false,
+        isCustomOutput
+      );
+      
+      if (!shouldOverwrite) {
+        return {
+          success: false,
+          error: 'Pack operation cancelled by user'
+        };
+      }
+    }
+
     if (!options.output) {
       await ensureRegistryDirectories();
     }
 
-    if (await exists(destination)) {
+    // Remove existing destination if present
+    if (destinationExists) {
       await remove(destination);
     }
 

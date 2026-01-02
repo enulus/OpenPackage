@@ -17,6 +17,8 @@ export interface PackResultInfo {
   destinationPath: string;
   fileCount: number;
   isCustomOutput: boolean;
+  destinationExists?: boolean;
+  existingFileCount?: number;
 }
 
 /**
@@ -56,7 +58,7 @@ export function displayPackDryRun(
   info: PackResultInfo,
   cwd: string
 ): void {
-  const { packageName, version, sourcePath, destinationPath, fileCount, isCustomOutput } = info;
+  const { packageName, version, sourcePath, destinationPath, fileCount, isCustomOutput, destinationExists, existingFileCount } = info;
   
   console.log(`(dry-run) Pack operation preview for ${packageName}@${formatVersionLabel(version)}`);
   
@@ -66,6 +68,10 @@ export function displayPackDryRun(
   const displayDestination = formatPathForDisplay(destinationPath, cwd);
   const destinationType = isCustomOutput ? 'Custom output' : 'Registry';
   console.log(`✓ ${destinationType}: ${displayDestination}`);
+  
+  if (destinationExists && existingFileCount !== undefined) {
+    console.log(`⚠️  Would overwrite existing package (${existingFileCount} file(s))`);
+  }
   
   console.log(`✓ Would pack ${fileCount} file(s)`);
 }
@@ -80,7 +86,9 @@ export function createPackResultInfo(
   destinationPath: string,
   fileCount: number,
   manifest: PackageYml,
-  isCustomOutput: boolean
+  isCustomOutput: boolean,
+  destinationExists?: boolean,
+  existingFileCount?: number
 ): PackResultInfo {
   return {
     packageName,
@@ -89,6 +97,8 @@ export function createPackResultInfo(
     sourcePath,
     destinationPath,
     fileCount,
-    isCustomOutput
+    isCustomOutput,
+    destinationExists,
+    existingFileCount
   };
 }

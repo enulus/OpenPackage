@@ -281,3 +281,22 @@ export async function getDirectorySize(dirPath: string): Promise<number> {
     throw new FileSystemError(`Failed to calculate directory size: ${dirPath}`, { dirPath, error });
   }
 }
+
+/**
+ * Count total number of files in a directory (recursive)
+ */
+export async function countFilesInDirectory(dirPath: string): Promise<number> {
+  try {
+    let count = 0;
+    
+    for await (const _ of walkFiles(dirPath)) {
+      count++;
+    }
+    
+    return count;
+  } catch (error) {
+    // If directory doesn't exist or can't be read, return 0
+    logger.debug(`Failed to count files in directory: ${dirPath}`, { error });
+    return 0;
+  }
+}
