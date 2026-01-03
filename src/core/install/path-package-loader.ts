@@ -8,6 +8,8 @@ import { isJunk } from 'junk';
 import { logger } from '../../utils/logger.js';
 import { ValidationError } from '../../utils/errors.js';
 import { FILE_PATTERNS, PACKAGE_PATHS } from '../../constants/index.js';
+import { detectPluginType } from './plugin-detector.js';
+import { transformPluginToPackage } from './plugin-transformer.js';
 
 export type PathSourceType = 'directory' | 'tarball';
 
@@ -21,16 +23,33 @@ export function inferSourceType(path: string): PathSourceType {
 /**
  * Load a package from a local directory.
  * Reads all files from the directory and loads openpackage.yml.
+ * 
+ * If the directory is a Claude Code plugin, transforms it to OpenPackage format.
  */
 export async function loadPackageFromDirectory(dirPath: string): Promise<Package> {
   logger.debug(`Loading package from directory: ${dirPath}`);
   
-  // Load openpackage.yml
+  // Check if this is a Claude Code plugin
+  const pluginDetection = await detectPluginType(dirPath);
+  if (pluginDetection.isPlugin && pluginDetection.type === 'individual') {
+    logger.info('Detected Claude Code plugin, transforming to OpenPackage format', { dirPath });
+    return await transformPluginToPackage(dirPath);
+  }
+  
+  // If it's a marketplace, we need to handle plugin selection (done upstream in install command)
+  if (pluginDetection.isPlugin && pluginDetection.type === 'marketplace') {
+    throw new ValidationError(
+      `Directory '${dirPath}' is a Claude Code plugin marketplace. ` +
+      `Marketplace installation requires plugin selection and should be handled by the install command.`
+    );
+  }
+  
+  // Load openpackage.yml for regular packages
   const config = await loadPackageConfig(dirPath);
   if (!config) {
     throw new ValidationError(
-      `Directory '${dirPath}' is not a valid OpenPackage directory. ` +
-      `Missing ${FILE_PATTERNS.OPENPACKAGE_YML}`
+      `Directory '${dirPath}' is not a valid OpenPackage directory or Claude Code plugin. ` +
+      `Missing ${FILE_PATTERNS.OPENPACKAGE_YML} or .claude-plugin/plugin.json`
     );
   }
 

@@ -87,6 +87,11 @@ export interface PackageDependency {
    */
   ref?: string;
   /**
+   * Optional subdirectory within git repository (for plugin marketplaces).
+   * Example: plugins/commit-commands
+   */
+  subdirectory?: string;
+  /**
    * Optional list of registry-relative paths to install for this dependency.
    * When provided (non-empty), installs are partial and limited to these paths.
    * When omitted, installs include the full package payload.

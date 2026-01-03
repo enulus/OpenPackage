@@ -31,6 +31,7 @@ export interface PathInstallPipelineOptions extends InstallOptions {
   targetDir: string;
   gitUrl?: string;
   gitRef?: string;
+  gitSubdirectory?: string;
 }
 
 export interface PathInstallPipelineResult {
@@ -67,7 +68,16 @@ export async function runPathInstallPipeline(
   // Load package from path
   logger.debug(`Loading package from ${options.sourceType}: ${options.sourcePath}`);
   let sourcePackage;
+  let isPlugin = false;
   try {
+    // Check if this is a Claude Code plugin
+    const { detectPluginType } = await import('./plugin-detector.js');
+    const pluginDetection = await detectPluginType(options.sourcePath);
+    if (pluginDetection.isPlugin && pluginDetection.type === 'individual') {
+      isPlugin = true;
+      console.log(`\n🔌 Detected Claude Code plugin`);
+    }
+    
     sourcePackage = await loadPackageFromPath(options.sourcePath);
   } catch (error) {
     return {
@@ -78,6 +88,10 @@ export async function runPathInstallPipeline(
 
   const packageName = sourcePackage.metadata.name;
   const packageVersion = sourcePackage.metadata.version || '0.0.0';
+  
+  if (isPlugin) {
+    console.log(`📦 Installing plugin: ${packageName}@${packageVersion}`);
+  }
 
   // Check for root package conflict
   if (await isRootPackage(cwd, packageName)) {
@@ -284,7 +298,8 @@ export async function runPathInstallPipeline(
       undefined,  // No include filter
       options.gitUrl ? undefined : pathToStore,  // Store the path when not git
       options.gitUrl,
-      options.gitRef
+      options.gitRef,
+      options.gitSubdirectory
     );
   }
 

@@ -370,7 +370,143 @@ This section ties pre-release version selection to **how content is loaded** whe
 
 ---
 
-## 8. Compatibility and non-goals
+## 8. Claude Code plugin support
+
+OpenPackage supports installing **Claude Code plugins** directly from git repositories and local paths. Plugin detection and transformation happens automatically during the install flow.
+
+### 8.1 Plugin detection
+
+After cloning a git repository or resolving a local path, the install pipeline checks for Claude Code plugin manifests:
+
+- **Individual plugin**: `.claude-plugin/plugin.json` at the package root
+- **Plugin marketplace**: `.claude-plugin/marketplace.json` at the package root
+
+If either manifest is found, special plugin handling is triggered instead of treating the source as a standard OpenPackage.
+
+### 8.2 Individual plugin install flow
+
+When an individual plugin is detected:
+
+1. **Read and validate** `.claude-plugin/plugin.json`
+   - Required fields: `name`, `version`
+   - Optional fields: `description`, `author`, `repository`, `license`, `keywords`
+
+2. **Transform to OpenPackage format (in-memory only)**
+   - Plugin metadata is converted to OpenPackage `PackageYml` structure
+   - No registry copy is created (git/path remains source of truth)
+
+3. **Collect plugin files**
+   - All files except `.claude-plugin/` directory are collected
+   - Original directory structure is preserved (commands/, agents/, skills/, hooks/, etc.)
+   - Junk files (`.DS_Store`, `.git/`, etc.) are filtered out
+
+4. **Install via platform mapping**
+   - Plugin files are installed using the standard platform mapping system
+   - Universal subdirs map to platform-specific directories:
+     - `commands/` → `.claude/commands/`, `.cursor/commands/`, etc.
+     - `agents/` → `.claude/agents/`, `.cursor/agents/`, etc.
+     - `skills/` → `.claude/skills/`, `.cursor/skills/`, etc.
+     - `hooks/` → `.claude/hooks/`, `.cursor/hooks/`, etc.
+   - Root files (`.mcp.json`, `.lsp.json`) install to platform roots
+
+5. **Track as git dependency**
+   - Persisted in `openpackage.yml` with git source:
+     ```yaml
+     packages:
+       - name: commit-commands
+         git: https://github.com/anthropics/claude-code.git
+         subdirectory: plugins/commit-commands  # If from subdirectory
+     ```
+
+**Example:**
+```bash
+# Install individual plugin from subdirectory
+opkg install github:anthropics/claude-code#subdirectory=plugins/commit-commands
+
+# Install plugin from dedicated repo
+opkg install github:user/my-claude-plugin
+```
+
+### 8.3 Marketplace install flow
+
+When a plugin marketplace is detected:
+
+1. **Parse marketplace manifest** (`.claude-plugin/marketplace.json`)
+   - Required fields: `name`, `plugins[]`
+   - Each plugin entry must have: `name`, `subdirectory` (or `source`)
+
+2. **Display interactive selection prompt**
+   - Lists all available plugins with descriptions
+   - User selects plugin(s) via multiselect (space to toggle, enter to confirm)
+   - Canceling (no selection) exits without installing
+
+3. **Install each selected plugin**
+   - For each selected plugin:
+     - Resolve plugin subdirectory within the cloned/resolved marketplace directory
+     - Validate subdirectory contains `.claude-plugin/plugin.json`
+     - Install following individual plugin flow (§8.2)
+     - Each plugin gets its own entry in `openpackage.yml`
+
+4. **Display installation summary**
+   - Shows which plugins succeeded/failed
+   - Reports errors for any plugins that failed validation or install
+
+**Example:**
+```bash
+# Install from marketplace (prompts for selection)
+opkg install github:anthropics/claude-code
+
+📦 Marketplace: claude-code-plugins
+   Example plugins demonstrating Claude Code plugin capabilities
+
+3 plugins available:
+
+❯ ◯ commit-commands
+  ◯ pr-review-toolkit
+  ◯ explanatory-output-style
+
+Select plugins to install (space to select, enter to confirm):
+```
+
+Result in `openpackage.yml`:
+```yaml
+packages:
+  - name: commit-commands
+    git: https://github.com/anthropics/claude-code.git
+    subdirectory: plugins/commit-commands
+  - name: pr-review-toolkit
+    git: https://github.com/anthropics/claude-code.git
+    subdirectory: plugins/pr-review-toolkit
+```
+
+### 8.4 Path-based plugin install
+
+Plugins can also be installed from local paths (useful for development/testing):
+
+```bash
+# Install from local plugin directory
+opkg install ./my-plugin
+
+# Install from local marketplace (prompts for selection)
+opkg install ./my-marketplace
+```
+
+Path-based plugin dependencies are tracked in `openpackage.yml` with `path:` source:
+```yaml
+packages:
+  - name: my-plugin
+    path: ./my-plugin
+```
+
+**Notes:**
+- Plugins are **not converted to registry packages** - git/path source remains authoritative
+- Plugin manifest is validated but transformation is **in-memory only**
+- Standard OpenPackage operations (`save`, `add`, `apply`) work on path-sourced plugins if the source is mutable
+- See [Git Sources](git-sources.md) for complete git install behavior including subdirectory syntax
+
+---
+
+## 9. Compatibility and non-goals
 
 - **Non-goal**: Emulate every nuance of npm’s `install` / `update` / `dedupe` behavior.
   - Instead, aim for a **small, orthogonal core**:

@@ -1,0 +1,233 @@
+import { join, relative } from 'path';
+import { readTextFile, walkFiles } from '../../utils/fs.js';
+import { logger } from '../../utils/logger.js';
+import { ValidationError } from '../../utils/errors.js';
+import { isJunk } from 'junk';
+import type { Package, PackageFile, PackageYml } from '../../types/index.js';
+
+/**
+ * In-memory cache for transformed plugin packages.
+ * Key: `${packageName}@${version}`
+ */
+const transformedPluginCache = new Map<string, Package>();
+
+/**
+ * Cache a transformed plugin package for later retrieval.
+ */
+export function cacheTransformedPlugin(pkg: Package): void {
+  const key = `${pkg.metadata.name}@${pkg.metadata.version}`;
+  transformedPluginCache.set(key, pkg);
+  logger.debug('Cached transformed plugin', { name: pkg.metadata.name, version: pkg.metadata.version });
+}
+
+/**
+ * Retrieve a cached transformed plugin package.
+ */
+export function getTransformedPlugin(name: string, version: string): Package | undefined {
+  const key = `${name}@${version}`;
+  return transformedPluginCache.get(key);
+}
+
+/**
+ * Clear the plugin cache (useful for testing).
+ */
+export function clearPluginCache(): void {
+  transformedPluginCache.clear();
+}
+
+/**
+ * Claude Code plugin manifest schema.
+ * See: https://code.claude.com/docs/en/plugins-reference
+ */
+export interface ClaudePluginManifest {
+  name: string;
+  version: string;
+  description?: string;
+  author?: {
+    name?: string;
+    email?: string;
+    url?: string;
+  };
+  homepage?: string;
+  repository?: {
+    type?: string;
+    url?: string;
+  };
+  license?: string;
+  keywords?: string[];
+}
+
+/**
+ * Transform a Claude Code plugin to an OpenPackage Package.
+ * 
+ * Reads the plugin manifest (.claude-plugin/plugin.json), converts it to
+ * OpenPackage format, and collects all plugin files.
+ * 
+ * @param pluginDir - Absolute path to plugin directory
+ * @returns Package object ready for installation
+ */
+export async function transformPluginToPackage(pluginDir: string): Promise<Package> {
+  logger.debug('Transforming Claude Code plugin to OpenPackage format', { pluginDir });
+  
+  // Read and parse plugin manifest
+  const manifestPath = join(pluginDir, '.claude-plugin', 'plugin.json');
+  let pluginManifest: ClaudePluginManifest;
+  
+  try {
+    const content = await readTextFile(manifestPath);
+    pluginManifest = JSON.parse(content);
+  } catch (error) {
+    throw new ValidationError(
+      `Failed to parse plugin manifest at ${manifestPath}: ${error}`
+    );
+  }
+  
+  // Validate required fields
+  if (!pluginManifest.name) {
+    throw new ValidationError(
+      `Plugin manifest at ${manifestPath} is missing required field: name`
+    );
+  }
+  if (!pluginManifest.version) {
+    throw new ValidationError(
+      `Plugin manifest at ${manifestPath} is missing required field: version`
+    );
+  }
+  
+  // Transform to OpenPackage metadata
+  const metadata: PackageYml = {
+    name: pluginManifest.name,
+    version: pluginManifest.version,
+    description: pluginManifest.description,
+    keywords: pluginManifest.keywords,
+    license: pluginManifest.license,
+    homepage: pluginManifest.homepage
+  };
+  
+  // Extract author name
+  if (pluginManifest.author?.name) {
+    metadata.author = pluginManifest.author.name;
+  }
+  
+  // Extract repository
+  if (pluginManifest.repository?.url) {
+    metadata.repository = {
+      type: pluginManifest.repository.type || 'git',
+      url: pluginManifest.repository.url
+    };
+  }
+  
+  // Collect all plugin files (preserve entire directory structure)
+  const files = await extractPluginFiles(pluginDir);
+  
+  const pkg: Package = {
+    metadata,
+    files
+  };
+  
+  // Cache the transformed plugin for later retrieval
+  cacheTransformedPlugin(pkg);
+  
+  logger.info('Transformed Claude Code plugin', {
+    name: metadata.name,
+    version: metadata.version,
+    fileCount: files.length
+  });
+  
+  return pkg;
+}
+
+/**
+ * Extract all files from a plugin directory, preserving structure.
+ * 
+ * Plugin files are kept with their original paths (commands/, agents/, etc.)
+ * The OpenPackage platform system will handle installing them to the correct
+ * platform-specific directories (.claude/commands/, .cursor/commands/, etc.)
+ * 
+ * Special handling for plugin-specific files:
+ * - .claude-plugin/ → skipped (plugin metadata, not needed in workspace)
+ * - .mcp.json, .lsp.json → kept as root files
+ * - commands/, agents/, skills/, hooks/ → universal subdirs
+ * 
+ * @param pluginDir - Absolute path to plugin directory
+ * @returns Array of package files with original paths
+ */
+export async function extractPluginFiles(pluginDir: string): Promise<PackageFile[]> {
+  const files: PackageFile[] = [];
+  
+  try {
+    for await (const fullPath of walkFiles(pluginDir)) {
+      const relativePath = relative(pluginDir, fullPath);
+      
+      // Skip junk files (e.g., .DS_Store, Thumbs.db)
+      const pathParts = relativePath.split('/');
+      if (pathParts.some(part => isJunk(part))) {
+        continue;
+      }
+      
+      // Skip git metadata
+      if (relativePath.startsWith('.git/') || relativePath === '.git') {
+        continue;
+      }
+      
+      // Skip .claude-plugin directory (plugin metadata, not needed in workspace)
+      if (relativePath.startsWith('.claude-plugin/')) {
+        continue;
+      }
+      
+      const content = await readTextFile(fullPath);
+      
+      files.push({
+        path: relativePath,
+        content,
+        encoding: 'utf8'
+      });
+    }
+    
+    logger.debug(`Extracted ${files.length} files from plugin`, { pluginDir });
+    return files;
+    
+  } catch (error) {
+    throw new ValidationError(
+      `Failed to extract files from plugin directory ${pluginDir}: ${error}`
+    );
+  }
+}
+
+/**
+ * Validate plugin structure by checking for expected directories.
+ * This is a soft validation - missing directories are warnings, not errors.
+ */
+export function validatePluginStructure(files: PackageFile[]): {
+  valid: boolean;
+  warnings: string[];
+} {
+  const warnings: string[] = [];
+  const paths = files.map(f => f.path);
+  
+  // Check for .claude-plugin directory
+  const hasManifest = paths.some(p => p.startsWith('.claude-plugin/'));
+  if (!hasManifest) {
+    warnings.push('Plugin is missing .claude-plugin/ directory');
+  }
+  
+  // Warn if no commands, agents, or skills (but this is valid)
+  const hasCommands = paths.some(p => p.startsWith('commands/'));
+  const hasAgents = paths.some(p => p.startsWith('agents/'));
+  const hasSkills = paths.some(p => p.startsWith('skills/'));
+  const hasHooks = paths.some(p => p.startsWith('hooks/'));
+  const hasMcp = paths.some(p => p === '.mcp.json');
+  const hasLsp = paths.some(p => p === '.lsp.json');
+  
+  if (!hasCommands && !hasAgents && !hasSkills && !hasHooks && !hasMcp && !hasLsp) {
+    warnings.push(
+      'Plugin does not contain any commands, agents, skills, hooks, MCP, or LSP configurations. ' +
+      'It may be empty or incomplete.'
+    );
+  }
+  
+  return {
+    valid: true,
+    warnings
+  };
+}

@@ -57,6 +57,16 @@ export class PackageManager {
     
     validatePackageName(packageName);
     
+    // Check if this is a cached transformed plugin
+    if (version) {
+      const { getTransformedPlugin } = await import('./install/plugin-transformer.js');
+      const cachedPlugin = getTransformedPlugin(packageName, version);
+      if (cachedPlugin) {
+        logger.debug(`Using cached transformed plugin: ${packageName}@${version}`);
+        return cachedPlugin;
+      }
+    }
+    
     let targetVersion: string | null = opts?.packageRootDir ? version ?? null : null;
     
     if (opts?.packageRootDir) {

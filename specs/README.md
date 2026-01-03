@@ -13,7 +13,7 @@ For full philosophy, data flows, and layered model, see [Architecture](architect
 
 #### Key Concepts
 
-- **Path-Based Source of Truth**: All packages resolve to a filesystem path. Dependencies use explicit `path:` or infer from `version:` (registry) or `git:` (cloned path).
+- **Path-Based Source of Truth**: All packages resolve to a filesystem path. Dependencies use explicit `path:` or infer from `version:` (registry) or `git:` (cloned path). Git sources support subdirectory navigation for monorepos and Claude Code plugins.
 - **Mutable vs. Immutable Sources**: 
   - Mutable (e.g., local/global packages dirs): Support editing via `save`/`add`.
   - Immutable (e.g., registry dirs): Read-only; `save`/`add` fail.
@@ -64,9 +64,9 @@ Consult git history (e.g., commit 9d23bf2) for prior version details. See [Archi
     - Scope behavior: `scope-behavior.md`
   - `add` (new files to source): `add/`
   - `apply`/`sync`: `apply/`
-  - `install` (from registry/git): `install/`
-    - Behavior/scenarios: `install-behavior.md`
-    - Git sources: `git-sources.md`
+  - `install` (from registry/git/plugins): `install/`
+    - Behavior/scenarios: `install-behavior.md` (includes Claude Code plugin support in §8)
+    - Git sources: `git-sources.md` (includes subdirectory syntax and plugin detection)
   - `pack` (to registry): `pack/`
   - `save` (edits to source; WIP versioning): `save/`
     - Versioning details: `save-versioning.md`

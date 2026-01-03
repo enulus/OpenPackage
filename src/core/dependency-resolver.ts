@@ -256,11 +256,16 @@ export async function resolveDependencies(
         // Git-based dependency
         if (dep.git) {
           try {
-            const { pkg: depPkg, sourcePath } = await loadPackageFromGit({
+            const result = await loadPackageFromGit({
               url: dep.git,
               ref: dep.ref
             });
-            await resolveLocalPackage(depPkg, 'git', sourcePath, dep.version);
+            if (result.isMarketplace) {
+              logger.error(`Dependency '${dep.name}' points to a Claude Code plugin marketplace, which cannot be used as a dependency`);
+              missing.add(dep.name);
+              return;
+            }
+            await resolveLocalPackage(result.pkg!, 'git', result.sourcePath, dep.version);
           } catch (error) {
             logger.error(`Failed to load git-based dependency '${dep.name}' from '${dep.git}': ${error}`);
             missing.add(dep.name);
@@ -740,11 +745,16 @@ export async function resolveDependencies(
       // Git-based dependency
       if (dep.git) {
         try {
-          const { pkg, sourcePath } = await loadPackageFromGit({
+          const result = await loadPackageFromGit({
             url: dep.git,
             ref: dep.ref
           });
-          await resolveLocalPackage(pkg, 'git', sourcePath, dep.version);
+          if (result.isMarketplace) {
+            logger.error(`Dependency '${dep.name}' points to a Claude Code plugin marketplace, which cannot be used as a dependency`);
+            missing.add(dep.name);
+            return;
+          }
+          await resolveLocalPackage(result.pkg!, 'git', result.sourcePath, dep.version);
         } catch (error) {
           logger.error(`Failed to load git-based dependency '${dep.name}' from '${dep.git}': ${error}`);
           missing.add(dep.name);

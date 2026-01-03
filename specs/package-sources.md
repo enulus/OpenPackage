@@ -54,12 +54,15 @@ packages:
   - name: git-pkg
     git: https://github.com/user/repo.git
     ref: main  # Branch/tag/commit optional
+    subdirectory: packages/my-package  # Optional (for monorepos/plugins)
 ```
 
 - Cloned to `~/.openpackage/registry/...` (current impl; thus immutable).
 - Ops: `apply`/`install` ok; `save`/`add` fail if in registry.
 - Future: Could clone to mutable dir for editability.
-- See [Git Sources](install/git-sources.md) for install details.
+- **Subdirectory support**: Allows installing from monorepo subdirectories or Claude Code plugin marketplaces.
+- **Claude Code plugins**: Automatically detected via `.claude-plugin/plugin.json` or `.claude-plugin/marketplace.json`.
+- See [Git Sources](install/git-sources.md) for install details including subdirectory syntax and plugin support.
 
 Other: Absolute/custom paths treated by resolved location.
 

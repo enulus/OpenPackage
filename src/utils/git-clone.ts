@@ -14,6 +14,7 @@ const execFileAsync = promisify(execFile);
 export interface GitCloneOptions {
   url: string;
   ref?: string; // branch/tag/sha
+  subdirectory?: string; // subdirectory within repository
 }
 
 function isSha(ref: string): boolean {
@@ -31,7 +32,7 @@ async function runGit(args: string[], cwd?: string): Promise<void> {
 
 export async function cloneRepoToTempDir(options: GitCloneOptions): Promise<string> {
   const tempDir = await mkdtemp(join(tmpdir(), 'opkg-git-'));
-  const { url, ref } = options;
+  const { url, ref, subdirectory } = options;
 
   if (ref && isSha(ref)) {
     // SHA: shallow clone default branch, then fetch the sha
@@ -46,14 +47,41 @@ export async function cloneRepoToTempDir(options: GitCloneOptions): Promise<stri
     await runGit(['clone', '--depth', '1', url, tempDir]);
   }
 
-  // Validate OpenPackage root (v2 layout: openpackage.yml at repository root)
-  const manifestPath = join(tempDir, FILE_PATTERNS.OPENPACKAGE_YML);
-  if (!(await exists(manifestPath))) {
+  // Resolve final path (repository root or subdirectory)
+  let finalPath = tempDir;
+  if (subdirectory) {
+    finalPath = join(tempDir, subdirectory);
+    if (!(await exists(finalPath))) {
+      throw new ValidationError(
+        `Subdirectory '${subdirectory}' does not exist in cloned repository ${url}`
+      );
+    }
+    logger.debug(`Resolved subdirectory within repository`, { subdirectory, finalPath });
+  }
+
+  // Validate OpenPackage root (v2 layout: openpackage.yml at repository root or subdirectory root)
+  // Note: For plugins, this validation will be skipped since plugins use .claude-plugin/plugin.json
+  const manifestPath = join(finalPath, FILE_PATTERNS.OPENPACKAGE_YML);
+  const hasManifest = await exists(manifestPath);
+  
+  // Check for plugin manifest as alternative
+  const pluginManifestPath = join(finalPath, DIR_PATTERNS.CLAUDE_PLUGIN, 'plugin.json');
+  const hasPluginManifest = await exists(pluginManifestPath);
+  
+  // Check for marketplace manifest as alternative
+  const marketplaceManifestPath = join(finalPath, DIR_PATTERNS.CLAUDE_PLUGIN, 'marketplace.json');
+  const hasMarketplaceManifest = await exists(marketplaceManifestPath);
+  
+  if (!hasManifest && !hasPluginManifest && !hasMarketplaceManifest) {
     throw new ValidationError(
-      `Cloned repository is not an OpenPackage (missing ${FILE_PATTERNS.OPENPACKAGE_YML} at repository root)`
+      `Cloned repository is not an OpenPackage or Claude Code plugin ` +
+      `(missing ${FILE_PATTERNS.OPENPACKAGE_YML}, .claude-plugin/plugin.json, or .claude-plugin/marketplace.json ` +
+      `at ${subdirectory ? `subdirectory '${subdirectory}'` : 'repository root'})`
     );
   }
 
-  logger.debug(`Cloned git repository ${url}${ref ? `#${ref}` : ''} to ${tempDir}`);
-  return tempDir;
+  const refPart = ref ? `#${ref}` : '';
+  const subdirPart = subdirectory ? `&subdirectory=${subdirectory}` : '';
+  logger.debug(`Cloned git repository ${url}${refPart}${subdirPart} to ${finalPath}`);
+  return finalPath;
 }

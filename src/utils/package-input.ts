@@ -24,6 +24,7 @@ export interface PackageInputClassification {
   // For 'git' type
   gitUrl?: string;
   gitRef?: string;
+  gitSubdirectory?: string;
   
   // For 'directory' or 'tarball' types
   resolvedPath?: string;  // Absolute path
@@ -57,7 +58,8 @@ export async function classifyPackageInput(
     return {
       type: 'git',
       gitUrl: gitSpec.url,
-      gitRef: gitSpec.ref
+      gitRef: gitSpec.ref,
+      gitSubdirectory: gitSpec.subdirectory
     };
   }
 
@@ -84,15 +86,20 @@ export async function classifyPackageInput(
       // (will error later with "file not found" or "package not found")
     }
     
-    if (await isValidPackageDirectory(resolvedPath)) {
+    // Check if it's a valid package directory OR a plugin
+    const isValid = await isValidPackageDirectory(resolvedPath);
+    const { detectPluginType } = await import('../core/install/plugin-detector.js');
+    const pluginDetection = await detectPluginType(resolvedPath);
+    
+    if (isValid || pluginDetection.isPlugin) {
       return { type: 'directory', resolvedPath };
     }
     
     // Path exists but isn't a valid package? Error
     if (await exists(resolvedPath)) {
       throw new ValidationError(
-        `Path '${raw}' exists but is not a valid OpenPackage directory. ` +
-        `Valid packages must contain openpackage.yml`
+        `Path '${raw}' exists but is not a valid OpenPackage directory or Claude Code plugin. ` +
+        `Valid packages must contain openpackage.yml or .claude-plugin/plugin.json`
       );
     }
   }

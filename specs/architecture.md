@@ -4,7 +4,7 @@ OpenPackage CLI adopts a **path-based source of truth** model, inspired by Git (
 
 ## Core Philosophy
 
-- **Path-Centric**: All packages resolve to a concrete filesystem path. Dependencies declare `path:` or infer from `version:` (registry) / `git:` (cloned to path).
+- **Path-Centric**: All packages resolve to a concrete filesystem path. Dependencies declare `path:` or infer from `version:` (registry) / `git:` (cloned to path). Git sources support subdirectory navigation for monorepos and Claude Code plugin marketplaces.
 - **Mutable vs. Immutable Distinction**: Guards against accidental mutation of published artifacts.
   - Mutable: Editable sources (e.g., `./.openpackage/packages/` or `~/.openpackage/packages/`) support `save`, `add`, `pack`, `apply`.
   - Immutable: Registry snapshots (e.g., `~/.openpackage/registry/<name>/<version>/`) support only `apply`, `install`; `save`/`add` fail with errors.

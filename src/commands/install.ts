@@ -9,7 +9,13 @@ import { runInstallPipeline, determineResolutionMode } from '../core/install/ins
 import { runPathInstallPipeline } from '../core/install/path-install-pipeline.js';
 import { loadPackageFromGit } from '../core/install/git-package-loader.js';
 import { inferSourceType } from '../core/install/path-package-loader.js';
-import { withErrorHandling } from '../utils/errors.js';
+import { detectPluginType } from '../core/install/plugin-detector.js';
+import { 
+  parseMarketplace, 
+  promptPluginSelection, 
+  installMarketplacePlugins 
+} from '../core/install/marketplace-handler.js';
+import { withErrorHandling, ValidationError } from '../utils/errors.js';
 import { normalizePlatforms } from '../utils/platform-mapper.js';
 import { classifyPackageInput } from '../utils/package-input.js';
 import { findExistingPathOrGitSource } from '../utils/install-helpers.js';
@@ -62,20 +68,32 @@ async function installCommand(
     
     if (existingSource) {
       if (existingSource.type === 'git') {
+        const subdirPart = existingSource.subdirectory ? `&subdirectory=${existingSource.subdirectory}` : '';
         logger.info(`Using git source from openpackage.yml for '${classification.name}': ${existingSource.url}`);
-        console.log(`✓ Using git source from openpackage.yml: ${existingSource.url}${existingSource.ref ? `#${existingSource.ref}` : ''}`);
+        console.log(`✓ Using git source from openpackage.yml: ${existingSource.url}${existingSource.ref ? `#${existingSource.ref}` : ''}${subdirPart}`);
         
-        const { sourcePath } = await loadPackageFromGit({
+        const result = await loadPackageFromGit({
           url: existingSource.url,
-          ref: existingSource.ref
+          ref: existingSource.ref,
+          subdirectory: existingSource.subdirectory
         });
+        
+        if (result.isMarketplace) {
+          throw new ValidationError(
+            `Package '${classification.name}' is declared as a git source in openpackage.yml, ` +
+            `but the repository is a Claude Code plugin marketplace. ` +
+            `Marketplaces cannot be used as dependencies via openpackage.yml.`
+          );
+        }
+        
         return await runPathInstallPipeline({
           ...options,
-          sourcePath,
+          sourcePath: result.sourcePath,
           sourceType: 'directory',
           targetDir,
           gitUrl: existingSource.url,
-          gitRef: existingSource.ref
+          gitRef: existingSource.ref,
+          gitSubdirectory: existingSource.subdirectory
         });
       } else if (existingSource.type === 'path') {
         logger.info(`Using path source from openpackage.yml for '${classification.name}': ${existingSource.path}`);
@@ -95,17 +113,52 @@ async function installCommand(
   }
   
   if (classification.type === 'git') {
-    const { sourcePath } = await loadPackageFromGit({
+    const result = await loadPackageFromGit({
       url: classification.gitUrl!,
-      ref: classification.gitRef
+      ref: classification.gitRef,
+      subdirectory: classification.gitSubdirectory
     });
+    
+    // Check if this is a marketplace
+    if (result.isMarketplace) {
+      logger.info('Detected Claude Code marketplace, prompting for plugin selection', { 
+        url: classification.gitUrl 
+      });
+      
+      const pluginDetection = await detectPluginType(result.sourcePath);
+      if (!pluginDetection.manifestPath) {
+        throw new ValidationError('Marketplace manifest not found');
+      }
+      
+      // Parse marketplace and prompt for selection
+      const marketplace = await parseMarketplace(pluginDetection.manifestPath);
+      const selectedPlugins = await promptPluginSelection(marketplace);
+      
+      if (selectedPlugins.length === 0) {
+        console.log('No plugins selected. Installation cancelled.');
+        return { success: true };
+      }
+      
+      // Install selected plugins
+      return await installMarketplacePlugins(
+        result.sourcePath,
+        marketplace,
+        selectedPlugins,
+        classification.gitUrl!,
+        classification.gitRef,
+        options
+      );
+    }
+    
+    // Not a marketplace, install as regular package/plugin
     return await runPathInstallPipeline({
       ...options,
-      sourcePath,
+      sourcePath: result.sourcePath,
       sourceType: 'directory',
       targetDir,
       gitUrl: classification.gitUrl,
-      gitRef: classification.gitRef
+      gitRef: classification.gitRef,
+      gitSubdirectory: classification.gitSubdirectory
     });
   }
 
@@ -113,6 +166,35 @@ async function installCommand(
     // Display source comparison info if available
     if (classification.sourceComparisonInfo) {
       displayPackageSourceResolution(classification.sourceComparisonInfo);
+    }
+    
+    // Check if this is a marketplace (only for directories, not tarballs)
+    if (classification.type === 'directory') {
+      const pluginDetection = await detectPluginType(classification.resolvedPath!);
+      if (pluginDetection.isPlugin && pluginDetection.type === 'marketplace') {
+        logger.info('Detected Claude Code marketplace from local path, prompting for plugin selection', { 
+          path: classification.resolvedPath 
+        });
+        
+        // Parse marketplace and prompt for selection
+        const marketplace = await parseMarketplace(pluginDetection.manifestPath!);
+        const selectedPlugins = await promptPluginSelection(marketplace);
+        
+        if (selectedPlugins.length === 0) {
+          console.log('No plugins selected. Installation cancelled.');
+          return { success: true };
+        }
+        
+        // Install selected plugins (no git URL for local paths)
+        return await installMarketplacePlugins(
+          classification.resolvedPath!,
+          marketplace,
+          selectedPlugins,
+          classification.resolvedPath!, // Use path as "url" for tracking
+          undefined, // No git ref for local paths
+          options
+        );
+      }
     }
     
     return await runPathInstallPipeline({

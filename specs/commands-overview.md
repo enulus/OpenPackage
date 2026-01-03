@@ -103,7 +103,12 @@ Resolve/install from registry/git/path to workspace.
 
 - Flow: Resolve ver/source → Apply files → Update yml (constraint) / index (path/ver/mappings).
 - Partial via `files:` supported.
-- Example: `opkg install community-pkg@^1.0.0`.
+- **Claude Code plugin support**: Automatically detects and transforms plugins from git sources (individual plugins or marketplaces with interactive selection).
+- Subdirectory support: `git:url#ref&subdirectory=path` for monorepos and plugin marketplaces.
+- Example: 
+  - `opkg install community-pkg@^1.0.0` (registry)
+  - `opkg install github:anthropics/claude-code#subdirectory=plugins/commit-commands` (plugin)
+  - `opkg install github:anthropics/claude-code` (marketplace with interactive selection)
 - See [Install](install/).
 
 ### `status`

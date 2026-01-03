@@ -5,7 +5,8 @@
  */
 
 export const DIR_PATTERNS = {
-  OPENPACKAGE: '.openpackage'
+  OPENPACKAGE: '.openpackage',
+  CLAUDE_PLUGIN: '.claude-plugin'
 } as const;
 
 export const FILE_PATTERNS = {

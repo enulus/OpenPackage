@@ -135,7 +135,7 @@ export async function findExistingPathOrGitSource(
   packageName: string
 ): Promise<
   | { type: 'path'; path: string }
-  | { type: 'git'; url: string; ref?: string }
+  | { type: 'git'; url: string; ref?: string; subdirectory?: string }
   | null
 > {
   const packageYmlPath = getLocalPackageYmlPath(cwd);
@@ -152,7 +152,7 @@ export async function findExistingPathOrGitSource(
   }
 
   if (dep.git) {
-    return { type: 'git', url: dep.git, ref: dep.ref };
+    return { type: 'git', url: dep.git, ref: dep.ref, subdirectory: dep.subdirectory };
   }
 
   if (dep.path) {
