@@ -874,6 +874,167 @@ Result: { "servers": { "db": { "host": "localhost", "port": 5432 } } }
 Warning: "Package B merging with Package A in .cursor/mcp.json"
 ```
 
+## Key Tracking for Uninstall
+
+When flows use `merge: 'deep'` or `merge: 'shallow'`, the system automatically tracks which keys each package contributes to the target file. This enables precise removal during uninstall.
+
+### How It Works
+
+**During installation:**
+1. Flow executes and merges content into target file
+2. System extracts all top-level and nested keys written
+3. Keys stored in workspace index with dot notation
+4. Keys represent **transformed** paths (after `map` operations)
+
+**During uninstall:**
+1. Read tracked keys from workspace index
+2. Load target file
+3. Remove only the tracked keys
+4. Clean up empty parent objects
+5. Delete file if empty, otherwise save updated content
+
+### Example: Key Transformation
+
+Flow with key transformation:
+
+```jsonc
+{
+  "from": "mcp.jsonc",
+  "to": ".opencode/opencode.json",
+  "map": {
+    "mcpServers.*": "mcp.*"  // Transform keys!
+  },
+  "merge": "deep"
+}
+```
+
+**Package source:**
+```json
+{
+  "mcpServers": {
+    "server1": { "url": "http://localhost:3000" },
+    "server2": { "url": "http://localhost:4000" }
+  }
+}
+```
+
+**Workspace index (after install):**
+```yaml
+files:
+  mcp.jsonc:
+    - target: .opencode/opencode.json
+      merge: deep
+      keys:
+        - mcp.server1    # Note: transformed key, not mcpServers.server1
+        - mcp.server2
+```
+
+**Target file after install:**
+```json
+{
+  "mcp": {
+    "server1": { "url": "http://localhost:3000" },
+    "server2": { "url": "http://localhost:4000" }
+  }
+}
+```
+
+**On uninstall:**
+- Keys `mcp.server1` and `mcp.server2` are removed
+- If no other packages contributed to `mcp`, the entire object is removed
+- Other top-level keys in the file are preserved
+
+### Why Track Transformed Keys?
+
+**The challenge:** Flows can transform keys using `map`:
+- `servers.*` → `database.*`
+- `config.*` → `settings.*`
+- `mcpServers.*` → `mcp.*`
+
+**The solution:** Track the **output** keys (after transformation), not the input keys. This works regardless of transformation complexity and allows precise removal without needing the original source.
+
+### When Keys Are Tracked
+
+**Keys tracked when:**
+- ✅ Flow uses `merge: 'deep'`
+- ✅ Flow uses `merge: 'shallow'`
+- ✅ Target file will be shared by multiple packages
+
+**Keys NOT tracked when:**
+- ❌ `merge: 'replace'` - entire file owned by one package
+- ❌ `merge: 'composite'` - delimiter-based tracking used
+- ❌ Simple file copy - no merge involved
+
+### Key Notation
+
+Keys use dot notation for nested paths:
+
+```
+mcp.server1          → { mcp: { server1: {...} } }
+editor.fontSize      → { editor: { fontSize: 14 } }
+servers.db.host      → { servers: { db: { host: "..." } } }
+```
+
+### Parent Cleanup
+
+When removing keys, empty parent objects are automatically cleaned up:
+
+```json
+// Before uninstall
+{
+  "mcp": {
+    "server1": { "url": "..." },
+    "server2": { "url": "..." }
+  },
+  "other": { "config": "..." }
+}
+
+// After uninstalling package with keys [mcp.server1, mcp.server2]
+{
+  "other": { "config": "..." }
+}
+// Note: entire "mcp" object removed because it became empty
+```
+
+### Multi-Package Scenarios
+
+When multiple packages contribute to the same file:
+
+**Package A installed:**
+```json
+{ "mcp": { "server1": {...}, "server2": {...} } }
+```
+
+**Package B installed (same file, different keys):**
+```json
+{ "mcp": { "server1": {...}, "server2": {...}, "server3": {...} } }
+```
+
+**Uninstall Package A:**
+- Only removes keys tracked for Package A
+- Package B's keys remain intact
+- File not deleted because content remains
+
+**Index tracking:**
+```yaml
+packages:
+  package-a:
+    files:
+      mcp.jsonc:
+        - target: .opencode/opencode.json
+          merge: deep
+          keys: [mcp.server1, mcp.server2]
+  
+  package-b:
+    files:
+      mcp.jsonc:
+        - target: .opencode/opencode.json
+          merge: deep
+          keys: [mcp.server3]
+```
+
+See [Uninstall](../uninstall/README.md) for complete uninstall behavior.
+
 ## Conditional Execution
 
 Execute flows based on conditions:

@@ -12,6 +12,7 @@ import { writeResolution } from './save-write-coordinator.js';
 import { buildSaveReport, createCommandResult, createSuccessResult, createErrorResult } from './save-result-reporter.js';
 import type { ConflictAnalysis } from './save-conflict-analyzer.js';
 import type { WriteResult } from './save-types.js';
+import type { WorkspaceIndexFileMapping } from '../../types/workspace-index.js';
 
 /**
  * Orchestrates the entire save pipeline
@@ -26,7 +27,7 @@ interface ValidationResult {
   valid: boolean;
   cwd?: string;
   packageRoot?: string;
-  filesMapping?: Record<string, string[]>;
+  filesMapping?: Record<string, (string | WorkspaceIndexFileMapping)[]>;
   error?: string;
 }
 

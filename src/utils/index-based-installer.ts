@@ -56,6 +56,8 @@ import {
 import { resolvePackageContentRoot } from '../core/install/local-source-resolution.js';
 import { calculateFileHash } from './hash-utils.js';
 import { installPackageWithFlows, type FlowInstallResult } from '../core/install/flow-based-installer.js';
+import { getTargetPath } from './workspace-index-helpers.js';
+import type { WorkspaceIndexFileMapping } from '../types/workspace-index.js';
 
 // ============================================================================
 // Types and Interfaces
@@ -70,7 +72,7 @@ interface PackageIndexRecord {
     version: string;
     hash?: string;
   };
-  files: Record<string, string[]>;
+  files: Record<string, (string | WorkspaceIndexFileMapping)[]>;
 }
 
 interface RegistryFileEntry {
@@ -408,9 +410,18 @@ async function updateOwnerIndexAfterRename(
   if (owner.type === 'file') {
     const values = record.files[owner.key];
     if (!values) return;
-    const idx = values.findIndex(value => normalizePathForProcessing(value) === normalizedOld);
+    const idx = values.findIndex(mapping => {
+      const target = getTargetPath(mapping);
+      return normalizePathForProcessing(target) === normalizedOld;
+    });
     if (idx === -1) return;
-    values[idx] = normalizedNew;
+    // Update the mapping (preserve keys if it was a complex mapping)
+    const oldMapping = values[idx];
+    if (typeof oldMapping === 'string') {
+      values[idx] = normalizedNew;
+    } else {
+      values[idx] = { ...oldMapping, target: normalizedNew };
+    }
     await writePackageIndex(record, cwd);
   } else {
     // Directory key still valid; nothing to change.
@@ -640,8 +651,8 @@ export async function loadOtherPackageIndexes(
   return results;
 }
 
-async function collectFilesUnderDirectory(cwd: string, dirRel: string): Promise<string[]> {
-  const directoryRel = ensureTrailingSlash(normalizePathForProcessing(dirRel));
+async function collectFilesUnderDirectory(cwd: string, dirRelPath: string): Promise<string[]> {
+  const directoryRel = ensureTrailingSlash(normalizePathForProcessing(dirRelPath));
   const absDir = join(cwd, directoryRel);
   if (!(await exists(absDir))) {
     return [];
@@ -667,31 +678,33 @@ async function buildExpandedIndexesContext(
   const installedPathOwners = new Map<string, ConflictOwner>();
 
   for (const record of indexes) {
-    for (const [rawKey, values] of Object.entries(record.files)) {
-      const key = normalizePathForProcessing(rawKey);
-      const owner: ConflictOwner = {
-        packageName: record.packageName,
-        key,
-        type: key.endsWith('/') ? 'dir' : 'file'
-      };
+  for (const [rawKey, values] of Object.entries(record.files)) {
+    const key = normalizePathForProcessing(rawKey);
+    const owner: ConflictOwner = {
+      packageName: record.packageName,
+      key,
+      type: key.endsWith('/') ? 'dir' : 'file'
+    };
 
-      if (owner.type === 'dir') {
-        if (!dirKeyOwners.has(key)) {
-          dirKeyOwners.set(key, []);
-        }
-        dirKeyOwners.get(key)!.push(owner);
+    if (owner.type === 'dir') {
+      if (!dirKeyOwners.has(key)) {
+        dirKeyOwners.set(key, []);
+      }
+      dirKeyOwners.get(key)!.push(owner);
 
-        for (const dirRel of values) {
-          const files = await collectFilesUnderDirectory(cwd, dirRel);
+      for (const mapping of values) {
+        const dirRel = getTargetPath(mapping);
+        const files = await collectFilesUnderDirectory(cwd, dirRel);
           for (const filePath of files) {
             if (!installedPathOwners.has(filePath)) {
               installedPathOwners.set(filePath, owner);
             }
           }
-        }
-      } else {
-        for (const fileRel of values) {
-          const normalizedValue = normalizePathForProcessing(fileRel);
+      }
+    } else {
+      for (const mapping of values) {
+        const fileRel = getTargetPath(mapping);
+        const normalizedValue = normalizePathForProcessing(fileRel);
           if (!installedPathOwners.has(normalizedValue)) {
             installedPathOwners.set(normalizedValue, owner);
           }
@@ -1224,14 +1237,16 @@ async function expandIndexToFilePaths(
 
   for (const [key, values] of Object.entries(index.files)) {
     if (isDirKey(key)) {
-      for (const dirRel of values) {
+      for (const mapping of values) {
+        const dirRel = getTargetPath(mapping);
         const files = await collectFilesUnderDirectory(cwd, dirRel);
         for (const rel of files) {
           owned.add(normalizePathForProcessing(rel));
         }
       }
     } else {
-      for (const value of values) {
+      for (const mapping of values) {
+        const value = getTargetPath(mapping);
         owned.add(normalizePathForProcessing(value));
       }
     }
@@ -1423,7 +1438,8 @@ function hadPreviousDirForPlatform(
 
   const rootDir = normalizePathForProcessing(getPlatformDefinition(platform).rootDir);
 
-  for (const value of prevValues) {
+  for (const mapping of prevValues) {
+    const value = getTargetPath(mapping);
     const normalizedValue = normalizePathForProcessing(value);
     if (
       normalizedValue === rootDir ||

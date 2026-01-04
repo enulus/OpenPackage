@@ -43,13 +43,31 @@ export function ensureTrailingSlash(value: string): string {
   return value.endsWith('/') ? value : `${value}/`;
 }
 
-export function sortMapping(record: Record<string, string[]>): Record<string, string[]> {
+export function sortMapping(record: Record<string, any[]>): Record<string, any[]> {
   const sortedKeys = Object.keys(record).sort();
-  const normalized: Record<string, string[]> = {};
+  const normalized: Record<string, any[]> = {};
   for (const key of sortedKeys) {
     const values = record[key] || [];
-    const sortedValues = [...new Set(values)].sort();
-    normalized[key] = sortedValues;
+    if (values.length > 0 && typeof values[0] === 'object') {
+      // Complex mappings - sort by target path
+      const sorted = [...values].sort((a, b) => {
+        const targetA = typeof a === 'string' ? a : a.target;
+        const targetB = typeof b === 'string' ? b : b.target;
+        return targetA.localeCompare(targetB);
+      });
+      // Dedupe by target
+      const seen = new Set<string>();
+      normalized[key] = sorted.filter(item => {
+        const target = typeof item === 'string' ? item : item.target;
+        if (seen.has(target)) return false;
+        seen.add(target);
+        return true;
+      });
+    } else {
+      // Simple string array
+      const sortedValues = [...new Set(values)].sort();
+      normalized[key] = sortedValues;
+    }
   }
   return normalized;
 }

@@ -48,6 +48,31 @@ packages:
       # Note: openpackage.yml is NOT included (it's the manifest, not synced content)
 ```
 
+**Example with merged file and key tracking:**
+
+After `opkg install my-mcp-package` where the package has a flow with `merge: deep`:
+
+```yaml
+packages:
+  my-mcp-package:
+    path: ~/.openpackage/packages/my-mcp-package/1.0.0/
+    version: 1.0.0
+    files:
+      # Simple file mapping
+      commands/test.md:
+        - .cursor/commands/test.md
+      
+      # Complex mapping with key tracking (from flow with merge: deep)
+      mcp.jsonc:
+        - target: .opencode/opencode.json
+          merge: deep
+          keys:
+            - mcp.server1
+            - mcp.server2
+```
+
+The `keys` array tracks which specific keys this package contributed to `.opencode/opencode.json` after any key transformations. This enables precise removal during uninstall.
+
 ---
 
 #### 4. Notes

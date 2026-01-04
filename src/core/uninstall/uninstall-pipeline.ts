@@ -14,6 +14,9 @@ import { getAllPlatformDirs } from '../../utils/platform-utils.js';
 import { getPlatformRootFileNames } from '../../utils/platform-root-files.js';
 import { getAllPlatforms } from '../platforms.js';
 import { logger } from '../../utils/logger.js';
+import { removeFileMapping } from './flow-aware-uninstaller.js';
+import { getTargetPath } from '../../utils/workspace-index-helpers.js';
+import type { WorkspaceIndexFileMapping } from '../../types/workspace-index.js';
 
 interface FileRemoval {
   workspacePath: string;
@@ -27,7 +30,7 @@ function isRootFileKey(key: string, rootNames: Set<string>): boolean {
 
 async function expandFilesFromIndex(
   cwd: string,
-  filesMapping: Record<string, string[]>,
+  filesMapping: Record<string, (string | WorkspaceIndexFileMapping)[]>,
   rootNames: Set<string>
 ): Promise<FileRemoval[]> {
   const removals: FileRemoval[] = [];
@@ -37,7 +40,8 @@ async function expandFilesFromIndex(
 
     const isDir = isDirKey(rawKey);
     if (isDir) {
-      for (const targetDir of targets) {
+      for (const mapping of targets) {
+        const targetDir = getTargetPath(mapping);
         const absDir = path.join(cwd, targetDir);
         if (!(await exists(absDir))) continue;
         for await (const filePath of walkFiles(absDir)) {
@@ -52,7 +56,8 @@ async function expandFilesFromIndex(
       continue; // handled by root-file uninstaller
     }
 
-    for (const targetPath of targets) {
+    for (const mapping of targets) {
+      const targetPath = getTargetPath(mapping);
       removals.push({ workspacePath: path.join(cwd, targetPath), key: rawKey });
     }
   }
@@ -144,11 +149,14 @@ export async function runUninstallPipeline(
   }
 
   const deleted: string[] = [];
+  const updated: string[] = [];
 
-  for (const removal of plannedRemovals) {
-    if (await exists(removal.workspacePath)) {
-      await remove(removal.workspacePath);
-      deleted.push(removal.workspacePath);
+  // Process file mappings using flow-aware removal
+  for (const [sourceKey, mappings] of Object.entries(pkgEntry.files || {})) {
+    for (const mapping of mappings) {
+      const result = await removeFileMapping(cwd, mapping, packageName);
+      deleted.push(...result.removed);
+      updated.push(...result.updated);
     }
   }
 
@@ -165,13 +173,13 @@ export async function runUninstallPipeline(
   const platformRoots = new Set(getAllPlatformDirs().map(dir => path.join(cwd, dir)));
   await cleanupEmptyParents(cwd, deleted, platformRoots);
 
-  logger.info(`Uninstalled ${packageName}: removed ${deleted.length} files`);
+  logger.info(`Uninstalled ${packageName}: removed ${deleted.length} files, updated ${updated.length} merged files`);
 
   return {
     success: true,
     data: {
       removedFiles: deleted,
-      rootFilesUpdated: rootResult.updated
+      rootFilesUpdated: [...rootResult.updated, ...updated]
     }
   };
 }

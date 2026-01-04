@@ -336,7 +336,87 @@ Other flags (`--dev`, `--remote`, `--platforms`, `--dry-run`, conflicts) keep th
 
 ---
 
-## 6. Pre-release vs stable on install
+## 6. Workspace Index and Key Tracking
+
+### 6.1 Workspace Index Updates
+
+`opkg install` updates the workspace index (`openpackage.index.yml`) to reflect installed files:
+
+- **Simple file mappings**: Direct string paths for files owned by one package
+  ```yaml
+  files:
+    commands/test.md:
+      - .cursor/commands/test.md
+  ```
+
+- **Complex mappings with key tracking**: Object format for merged files
+  ```yaml
+  files:
+    mcp.jsonc:
+      - target: .opencode/opencode.json
+        merge: deep
+        keys:
+          - mcp.server1
+          - mcp.server2
+  ```
+
+### 6.2 Key Tracking for Flow-Based Merges
+
+When packages use platform flows with merge strategies (`deep` or `shallow`), the install system automatically tracks which keys each package contributes to merged files.
+
+**Purpose:** Enables precise removal during uninstall without affecting other packages' content.
+
+**When keys are tracked:**
+- ✅ Flow uses `merge: 'deep'` or `merge: 'shallow'`
+- ✅ Target file will be shared by multiple packages
+
+**When keys are NOT tracked:**
+- ❌ `merge: 'replace'` - entire file owned by one package
+- ❌ `merge: 'composite'` - delimiter-based tracking used
+- ❌ Simple file copy - no merge involved
+
+**Example flow with key transformation:**
+
+```jsonc
+{
+  "from": "mcp.jsonc",
+  "to": ".opencode/opencode.json",
+  "map": {
+    "mcpServers.*": "mcp.*"  // Transform keys
+  },
+  "merge": "deep"
+}
+```
+
+**Package source:**
+```json
+{
+  "mcpServers": {
+    "server1": { "url": "http://localhost:3000" }
+  }
+}
+```
+
+**Workspace index after install:**
+```yaml
+packages:
+  my-mcp-package:
+    files:
+      mcp.jsonc:
+        - target: .opencode/opencode.json
+          merge: deep
+          keys:
+            - mcp.server1  # Transformed key tracked
+```
+
+**Key features:**
+- Tracks **output** keys (after transformations), not input keys
+- Uses dot notation for nested paths: `mcp.server1` → `{ mcp: { server1: {...} } }`
+- Enables clean uninstall without reverse-applying transformations
+
+See [Platforms → Flows](../platforms/flows.md#key-tracking-for-uninstall) for complete details on key tracking behavior.
+
+## 7. Pre-release vs stable on install
 
 High-level rules (details in `version-resolution.md`):
 
@@ -346,7 +426,7 @@ High-level rules (details in `version-resolution.md`):
 
 ---
 
-## 7. Pre-release content resolution (unified with stable)
+## 8. Pre-release content resolution (unified with stable)
 
 This section ties pre-release version selection to **how content is loaded** when the selected version is a pre-release, assuming both stable and pre-release versions are stored as full copies in the local registry.
 
@@ -370,11 +450,11 @@ This section ties pre-release version selection to **how content is loaded** whe
 
 ---
 
-## 8. Claude Code plugin support
+## 9. Claude Code plugin support
 
 OpenPackage supports installing **Claude Code plugins** directly from git repositories and local paths. Plugin detection and transformation happens automatically during the install flow.
 
-### 8.1 Plugin detection
+### 9.1 Plugin detection
 
 After cloning a git repository or resolving a local path, the install pipeline checks for Claude Code plugin manifests:
 
@@ -383,7 +463,7 @@ After cloning a git repository or resolving a local path, the install pipeline c
 
 If either manifest is found, special plugin handling is triggered instead of treating the source as a standard OpenPackage.
 
-### 8.2 Individual plugin install flow
+### 9.2 Individual plugin install flow
 
 When an individual plugin is detected:
 
@@ -427,7 +507,7 @@ opkg install github:anthropics/claude-code#subdirectory=plugins/commit-commands
 opkg install github:user/my-claude-plugin
 ```
 
-### 8.3 Marketplace install flow
+### 9.3 Marketplace install flow
 
 When a plugin marketplace is detected:
 
@@ -479,7 +559,7 @@ packages:
     subdirectory: plugins/pr-review-toolkit
 ```
 
-### 8.4 Path-based plugin install
+### 9.4 Path-based plugin install
 
 Plugins can also be installed from local paths (useful for development/testing):
 
@@ -506,7 +586,7 @@ packages:
 
 ---
 
-## 9. Compatibility and non-goals
+## 10. Compatibility and non-goals
 
 - **Non-goal**: Emulate every nuance of npm’s `install` / `update` / `dedupe` behavior.
   - Instead, aim for a **small, orthogonal core**:

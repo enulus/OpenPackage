@@ -22,11 +22,23 @@ function sortAndDedupeStrings(values: string[]): string[] {
   return Array.from(new Set(values)).sort();
 }
 
-function sortFilesMapping(files: Record<string, string[]>): Record<string, string[]> {
-  const sorted: Record<string, string[]> = {};
+function sortFilesMapping(files: Record<string, any[]>): Record<string, any[]> {
+  const sorted: Record<string, any[]> = {};
   const keys = Object.keys(files).sort();
   for (const key of keys) {
-    sorted[key] = sortAndDedupeStrings(files[key] ?? []);
+    const values = files[key] ?? [];
+    // Handle both string[] and (string | WorkspaceIndexFileMapping)[]
+    if (values.length > 0 && typeof values[0] === 'object') {
+      // Complex mappings - sort by target path
+      sorted[key] = values.sort((a, b) => {
+        const targetA = typeof a === 'string' ? a : a.target;
+        const targetB = typeof b === 'string' ? b : b.target;
+        return targetA.localeCompare(targetB);
+      });
+    } else {
+      // Simple string array
+      sorted[key] = sortAndDedupeStrings(values as string[]);
+    }
   }
   return sorted;
 }

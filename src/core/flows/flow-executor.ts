@@ -48,6 +48,7 @@ import {
   deleteNestedValue,
   validateKeyMap
 } from './flow-key-mapper.js';
+import { extractAllKeys } from './flow-key-extractor.js';
 
 /**
  * Default flow executor implementation
@@ -410,11 +411,19 @@ export class DefaultFlowExecutor implements FlowExecutor {
         await this.writeTargetFile(targetPath, data, sourceContent.format);
       }
 
+      // Track keys for merged files (for precise uninstall)
+      let contributedKeys: string[] | undefined;
+      if (flow.merge && flow.merge !== 'replace' && flow.merge !== 'composite') {
+        contributedKeys = extractAllKeys(data);
+      }
+
       return {
         source: flow.from,
         target: targetPath,
         success: true,
         transformed,
+        keys: contributedKeys,
+        merge: flow.merge,
         warnings: warnings.length > 0 ? warnings : undefined,
         conflicts: conflicts.length > 0 ? conflicts : undefined,
         pipeline: this.getPipeline(flow),

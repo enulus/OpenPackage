@@ -6,6 +6,8 @@ import { inferPlatformFromWorkspaceFile } from '../platforms.js';
 import { logger } from '../../utils/logger.js';
 import { splitFrontmatter } from '../../utils/markdown-frontmatter.js';
 import type { SaveCandidate, SaveCandidateSource } from './save-types.js';
+import { getTargetPath } from '../../utils/workspace-index-helpers.js';
+import type { WorkspaceIndexFileMapping } from '../../types/workspace-index.js';
 
 /**
  * Core responsibility: Transform file system state into SaveCandidate objects
@@ -16,7 +18,7 @@ import type { SaveCandidate, SaveCandidateSource } from './save-types.js';
 export interface CandidateBuilderOptions {
   packageRoot: string;
   workspaceRoot: string;
-  filesMapping: Record<string, string[]>;
+  filesMapping: Record<string, (string | WorkspaceIndexFileMapping)[]>;
 }
 
 export interface CandidateBuildResult {
@@ -123,7 +125,7 @@ async function buildLocalCandidates(
 async function buildWorkspaceCandidates(
   workspaceRoot: string,
   packageRoot: string,
-  filesMapping: Record<string, string[]>
+  filesMapping: Record<string, (string | WorkspaceIndexFileMapping)[]>
 ): Promise<{ candidates: SaveCandidate[]; errors: CandidateBuildError[] }> {
   const candidates: SaveCandidate[] = [];
   const errors: CandidateBuildError[] = [];
@@ -134,7 +136,8 @@ async function buildWorkspaceCandidates(
     
     const isDirectoryMapping = registryKey.endsWith('/');
     
-    for (const workspaceRel of targets) {
+    for (const mapping of targets) {
+      const workspaceRel = getTargetPath(mapping);
       const normalizedTargetPath = normalizePathForProcessing(workspaceRel);
       if (!normalizedTargetPath) continue;
       

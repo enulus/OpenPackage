@@ -43,9 +43,33 @@ packages:
       - <dep-name>
     files:
       <registry-key>:
-        - <installed-path>
-        - <installed-path>
+        - <installed-path>       # Simple mapping (string)
+        - target: <installed-path>  # Complex mapping (object)
+          merge: deep            # Merge strategy (if applicable)
+          keys:                  # Tracked keys (if applicable)
+            - key.path.1
+            - key.path.2
 ```
+
+**File mapping formats:**
+
+1. **Simple mapping** (string): For files owned entirely by one package
+   ```yaml
+   rules/typescript.md:
+     - .cursor/rules/typescript.md
+   ```
+
+2. **Complex mapping** (object): For merged files with key-level tracking
+   ```yaml
+   mcp.jsonc:
+     - target: .opencode/opencode.json
+       merge: deep
+       keys:
+         - mcp.server1
+         - mcp.server2
+   ```
+
+The index can contain both formats mixed, depending on how each file was installed.
 
 ---
 
@@ -74,6 +98,51 @@ Values are **relative to the workspace root (`cwd`)** and represent **paths that
 | Directory mapping | Workspace directory paths (end with `/`) | `.claude/rules/`, `.cursor/rules/` |
 
 > **Important**: The index only records paths where files **actually exist**. If a file is only installed to one platform (e.g., `.cursor/`), only that path appears in the index—not hypothetical paths for other platforms.
+
+---
+
+#### Key Tracking for Merged Files
+
+When packages use flow-based transformations with merge strategies, the index tracks the specific keys each package contributes:
+
+**When keys are tracked:**
+- Flow uses `merge: 'deep'` or `merge: 'shallow'`
+- Target file will be shared by multiple packages
+
+**When keys are NOT tracked:**
+- `merge: 'replace'` - whole file owned by one package (simple string mapping)
+- `merge: 'composite'` - delimiter-based tracking used instead
+- Simple file copy - no merge (simple string mapping)
+
+**Example with key tracking:**
+
+```yaml
+packages:
+  my-mcp-package:
+    path: ~/.openpackage/packages/my-mcp-package/1.0.0/
+    version: 1.0.0
+    files:
+      # Simple file mapping (no merge)
+      rules/typescript.md:
+        - .cursor/rules/typescript.md
+      
+      # Complex mapping with key tracking
+      mcp.jsonc:
+        - target: .opencode/opencode.json
+          merge: deep
+          keys:
+            - mcp.server1
+            - mcp.server2
+```
+
+**Key notation:** Dot-notation represents nested object paths:
+- `mcp.server1` → `{ mcp: { server1: {...} } }`
+- `editor.fontSize` → `{ editor: { fontSize: 14 } }`
+- `servers.db.host` → `{ servers: { db: { host: "..." } } }`
+
+**Purpose:** Enables precise removal during uninstall. Only the tracked keys are removed from the target file, preserving content from other packages.
+
+See [Uninstall](../uninstall/README.md) for details on key-based removal.
 
 ---
 

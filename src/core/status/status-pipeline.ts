@@ -10,6 +10,7 @@ import { exists, readTextFile, walkFiles } from '../../utils/fs.js';
 import { isDirKey } from '../../utils/package-index-yml.js';
 import type { WorkspaceIndexPackage } from '../../types/workspace-index.js';
 import { logger } from '../../utils/logger.js';
+import { getTargetPath } from '../../utils/workspace-index-helpers.js';
 
 export type PackageSyncState = 'synced' | 'modified' | 'missing';
 
@@ -83,7 +84,8 @@ async function comparePackage(
       const sourceDir = path.join(sourceRoot, rawKey);
       const sourceFiles = await collectDirFiles(sourceDir, rawKey.replace(/\/$/, ''));
       for (const rel of sourceFiles) {
-        for (const targetDir of targets) {
+        for (const targetMapping of targets) {
+          const targetDir = getTargetPath(targetMapping);
           const workspacePath = path.join(cwd, targetDir, rel.slice(rawKey.length));
           const sourcePath = path.join(sourceRoot, rel);
           const [sourceHash, workspaceHash] = await Promise.all([
@@ -101,7 +103,8 @@ async function comparePackage(
       }
     } else {
       const sourcePath = path.join(sourceRoot, rawKey);
-      for (const targetPath of targets) {
+      for (const targetMapping of targets) {
+        const targetPath = getTargetPath(targetMapping);
         const workspacePath = path.join(cwd, targetPath);
         const [sourceHash, workspaceHash] = await Promise.all([
           hashOrNull(sourcePath),

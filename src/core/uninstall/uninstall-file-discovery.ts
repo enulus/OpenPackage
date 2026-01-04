@@ -7,6 +7,7 @@ import { isDirKey } from '../../utils/package-index-yml.js';
 import { readWorkspaceIndex } from '../../utils/workspace-index-yml.js';
 import type { WorkspaceIndexPackage } from '../../types/workspace-index.js';
 import { normalizePathForProcessing } from '../../utils/path-normalization.js';
+import { getTargetPath } from '../../utils/workspace-index-helpers.js';
 
 async function collectFilesUnderDirectory(cwd: string, dirRel: string): Promise<string[]> {
   const rel = normalizePathForProcessing(dirRel.endsWith('/') ? dirRel : `${dirRel}/`);
@@ -29,14 +30,16 @@ async function expandIndexToFilePaths(
 
   for (const [key, values] of Object.entries(index.files ?? {})) {
     if (isDirKey(key)) {
-      for (const dirRel of values) {
+      for (const mapping of values) {
+        const dirRel = getTargetPath(mapping);
         const files = await collectFilesUnderDirectory(cwd, dirRel);
         for (const rel of files) {
           owned.add(normalizePathForProcessing(rel));
         }
       }
     } else {
-      for (const value of values) {
+      for (const mapping of values) {
+        const value = getTargetPath(mapping);
         owned.add(normalizePathForProcessing(value));
       }
     }

@@ -1,4 +1,5 @@
 import { join } from 'path';
+import { getTargetPath } from './workspace-index-helpers.js';
 
 import type { WorkspaceIndex, WorkspaceIndexPackage } from '../types/workspace-index.js';
 import { normalizePathForProcessing } from './path-normalization.js';
@@ -88,8 +89,10 @@ export async function buildWorkspaceOwnershipContext(
         }
         dirKeyOwners.get(normalizedKey)!.push(owner);
 
-        for (const rawDir of rawValues) {
-          const dirRel = normalizePathForProcessing(rawDir);
+        for (const rawMapping of rawValues) {
+          // Handle both simple string and WorkspaceIndexFileMapping
+          const targetPath = typeof rawMapping === 'string' ? rawMapping : rawMapping.target;
+          const dirRel = normalizePathForProcessing(targetPath);
           if (!dirRel) continue;
           const expanded = await collectFilesUnderDirectory(cwd, dirRel);
           for (const relFile of expanded) {
@@ -102,8 +105,10 @@ export async function buildWorkspaceOwnershipContext(
       }
 
       // file key
-      for (const rawPath of rawValues) {
-        const relPath = normalizePathForProcessing(rawPath);
+      for (const rawMapping of rawValues) {
+        // Handle both simple string and WorkspaceIndexFileMapping
+        const targetPath = typeof rawMapping === 'string' ? rawMapping : rawMapping.target;
+        const relPath = normalizePathForProcessing(targetPath);
         if (!relPath) continue;
         if (!installedPathOwners.has(relPath)) {
           installedPathOwners.set(relPath, owner);

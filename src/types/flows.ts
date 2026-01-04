@@ -255,6 +255,17 @@ export interface FlowResult {
   /** Whether content was transformed (vs. simple copy) */
   transformed: boolean;
 
+  /** 
+   * Keys contributed by this flow (after transformations)
+   * Used for precise removal during uninstall of merged files
+   * Example: ["mcp.server1", "mcp.server2"]
+   * Only populated when merge strategy is used
+   */
+  keys?: string[];
+
+  /** Merge strategy used (if applicable) */
+  merge?: 'deep' | 'shallow' | 'replace' | 'composite';
+
   /** Error if execution failed */
   error?: Error;
 
