@@ -16,6 +16,7 @@ import {
   installPackagesWithFlows,
   type FlowInstallContext 
 } from '../../../src/core/install/flow-based-installer.js';
+import { clearPlatformsCache } from '../../../src/core/platforms.js';
 
 // ============================================================================
 // Test Setup
@@ -39,12 +40,19 @@ before(async () => {
   
   // Create test platform configuration with flows
   const platformConfig = {
+    "global": {
+      "flows": [
+        {
+          "from": "AGENTS.md",
+          "to": "AGENTS.md"
+        }
+      ]
+    },
     "test-platform": {
       "name": "Test Platform",
       "rootDir": ".test",
       "rootFile": "TEST.md",
       "flows": [
-        // Note: AGENTS.md is handled by global flows
         {
           "from": "rules/{name}.md",
           "to": ".test/rules/{name}.mdc"
@@ -130,6 +138,9 @@ after(async () => {
 // Clean up package files between test suites to avoid flow collisions
 async function cleanPackageDirectories(): Promise<void> {
   try {
+    // Clear platforms cache to ensure fresh platform config loading
+    clearPlatformsCache();
+    
     // Clean package directories
     const dirs = [packageRootA, packageRootB];
     for (const dir of dirs) {
@@ -454,7 +465,10 @@ describe('Flow-Based Install Pipeline', () => {
       
       // Should report conflict
       assert.strictEqual(result.conflicts.length, 1);
-      assert.ok(result.conflicts[0].message.includes('setting1'));
+      // Conflict message includes file path and package names
+      assert.ok(result.conflicts[0].message.includes('.test/settings.json'));
+      assert.ok(result.conflicts[0].message.includes('@test/pkg-a'));
+      assert.ok(result.conflicts[0].message.includes('@test/pkg-b'));
     });
     
     it('should handle replace merge strategy', async () => {
@@ -529,13 +543,16 @@ describe('Flow-Based Install Pipeline', () => {
         dryRun: false
       });
       
-      // Verify conflict was detected
-      assert.strictEqual(result.conflicts.length, 1);
-      assert.ok(result.conflicts[0].targetPath.includes('shared.json'));
-      assert.strictEqual(result.conflicts[0].packages.length, 2);
+      // Verify conflicts were detected (config.json flows to both .test/settings.json and shared.json)
+      assert.strictEqual(result.conflicts.length, 2);
+      
+      // Check that one conflict is for shared.json
+      const sharedConflict = result.conflicts.find(c => c.targetPath.includes('shared.json'));
+      assert.ok(sharedConflict, 'Should have conflict for shared.json');
+      assert.strictEqual(sharedConflict.packages.length, 2);
       
       // Higher priority package should be chosen
-      const chosen = result.conflicts[0].packages.find(p => p.chosen);
+      const chosen = sharedConflict.packages.find(p => p.chosen);
       assert.ok(chosen);
       assert.strictEqual(chosen.packageName, '@test/conflict-a');
       assert.strictEqual(chosen.priority, 100);

@@ -45,48 +45,60 @@ describe('Dynamic Subdirectories Feature', () => {
     assert.ok(platPaths.subdirs.rules.startsWith(process.cwd()), 'Full absolute path');
   });
 
-  it('mergePlatformsConfig correctly merges with subdir overrides and additions', () => {
+  it('mergePlatformsConfig correctly merges with flow overrides and additions', () => {
     const baseConfig = {
       testPlat: {
         name: 'Test Base',
         rootDir: '.test',
-        subdirs: [
-          { universalDir: 'rules', platformDir: 'old-rules' }
+        rootFile: 'TEST.md',
+        flows: [
+          { from: 'rules/{name}.md', to: '.test/rules/{name}.md' }
         ]
       }
     } as any;
 
     const overrideConfig = {
       testPlat: {
-        subdirs: [
-          { universalDir: 'rules', platformDir: 'new-rules', exts: ['.new'] },
-          { universalDir: 'custom', platformDir: 'custom-path' }
+        flows: [
+          { from: 'rules/{name}.md', to: '.test/rules/{name}.mdc' }, // Override
+          { from: 'custom/{name}.txt', to: '.test/custom/{name}.txt' } // New flow
         ]
       }
     } as any;
 
     const merged = mergePlatformsConfig(baseConfig, overrideConfig);
-    const testSubdirs = merged.testPlat.subdirs as any[];
-    assert.equal(testSubdirs.length, 2);
-    const rulesEntry = testSubdirs.find(s => s.universalDir === 'rules');
-    assert.equal(rulesEntry.platformDir, 'new-rules');
-    assert.deepStrictEqual(rulesEntry.exts, ['.new']);
-    const customEntry = testSubdirs.find(s => s.universalDir === 'custom');
-    assert.equal(customEntry.platformDir, 'custom-path');
+    const testFlows = merged.testPlat.flows as any[];
+    assert.equal(testFlows.length, 2, 'Should have 2 flows after merge');
+    const rulesFlow = testFlows.find(f => f.from === 'rules/{name}.md');
+    assert.equal(rulesFlow.to, '.test/rules/{name}.mdc', 'Rules flow should be overridden');
+    const customFlow = testFlows.find(f => f.from === 'custom/{name}.txt');
+    assert.ok(customFlow, 'Custom flow should be added');
   });
 
   it('validatePlatformsConfig detects invalid configs', () => {
-    const validConfig = { cursor: { name: 'Cursor', rootDir: '.cursor', subdirs: [{universalDir: 'rules', platformDir: 'rules'}] } } as any;
+    // Valid config with flows
+    const validConfig = { 
+      cursor: { 
+        name: 'Cursor', 
+        rootDir: '.cursor', 
+        flows: [{from: 'rules/{name}.md', to: '.cursor/rules/{name}.mdc'}] 
+      } 
+    } as any;
     assert.deepStrictEqual(validatePlatformsConfig(validConfig), []);
 
-    const invalid1 = { test: { rootDir: '', subdirs: [{universalDir: '', platformDir: 'rules'}] } } as any;
+    // Invalid: empty rootDir
+    const invalid1 = { test: { rootDir: '', flows: [{from: 'test.md', to: 'test.md'}] } } as any;
     const errors1 = validatePlatformsConfig(invalid1);
     assert.ok(errors1.some(e => e.includes('rootDir')), 'Detects empty rootDir');
-    assert.ok(errors1.some(e => e.includes('universalDir')), 'Detects empty universalDir');
 
-    const invalid2 = { test: { rootDir: '.test', subdirs: [{universalDir: 'rules'}, {universalDir: 'rules'}] } } as any; // missing platformDir, duplicate
+    // Invalid: missing flows and rootFile
+    const invalid2 = { test: { name: 'Test', rootDir: '.test' } } as any;
     const errors2 = validatePlatformsConfig(invalid2);
-    assert.ok(errors2.some(e => e.includes('platformDir')), 'Detects missing platformDir');
-    assert.ok(errors2.some(e => e.includes('Duplicate')), 'Detects duplicate universalDir');
+    assert.ok(errors2.some(e => e.includes("Must define either 'flows' or 'rootFile'")), 'Detects missing flows/rootFile');
+    
+    // Invalid: flow missing required fields
+    const invalid3 = { test: { rootDir: '.test', flows: [{from: 'test.md'}] } } as any; // missing 'to'
+    const errors3 = validatePlatformsConfig(invalid3);
+    assert.ok(errors3.some(e => e.includes('to')), 'Detects missing flow.to field');
   });
 });

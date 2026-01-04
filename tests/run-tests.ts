@@ -33,6 +33,7 @@ const testFiles: string[] = [
   'tests/uninstall.test.ts',
   'tests/immutable-save-add-errors.test.ts',
   'tests/flows/integration/flow-install-pipeline.test.ts',
+  'tests/flows/integration/flow-save-apply-pipeline.test.ts',
   'tests/save-apply-flows.test.ts'
 ];
 

@@ -136,12 +136,12 @@ console.log('platform-flows-config tests starting')
   const errors = validatePlatformsConfig(config)
   assert.ok(errors.length > 0, 'should have validation errors')
   assert.ok(
-    errors.some(e => e.includes("Must define either 'subdirs', 'flows', or 'rootFile'")),
-    'should reject platform without subdirs/flows/rootFile'
+    errors.some(e => e.includes("Must define either 'flows' or 'rootFile'")),
+    'should reject platform without flows/rootFile'
   )
 }
 
-// Test 7: Accept platform with only subdirs (legacy)
+// Test 7: Reject platform with only subdirs (subdirs support removed)
 {
   const config = {
     'test-platform': {
@@ -157,7 +157,11 @@ console.log('platform-flows-config tests starting')
   }
   
   const errors = validatePlatformsConfig(config)
-  assert.equal(errors.length, 0, 'legacy subdirs platform should be valid')
+  assert.ok(errors.length > 0, 'subdirs without flows/rootFile should be rejected')
+  assert.ok(
+    errors.some(e => e.includes("Must define either 'flows' or 'rootFile'")),
+    'should require flows or rootFile even with subdirs'
+  )
 }
 
 // Test 8: Accept platform with only flows

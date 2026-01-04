@@ -66,7 +66,7 @@ function findReverseFlow(
   cwd: string
 ): { flow: Flow; registryPath: string } | null {
   try {
-    const definition = getPlatformDefinition(platform);
+    const definition = getPlatformDefinition(platform, cwd);
     if (!definition.flows || definition.flows.length === 0) {
       return null;
     }
@@ -76,7 +76,7 @@ function findReverseFlow(
     return null;
   }
 
-  const definition = getPlatformDefinition(platform);
+  const definition = getPlatformDefinition(platform, cwd);
 
   // Get all applicable flows (global + platform)
   const globalFlows = getGlobalFlows(cwd) ?? [];
@@ -154,9 +154,9 @@ function matchWorkspacePathToPattern(
     }
 
     // Check for inline variable {name}.ext
-    const inlineVarMatch = patternPart.match(/^(.*)?\{(\w+)\}(.*)$/);
+    const inlineVarMatch = patternPart.match(/^(.*)\{(\w+)\}(.*)$/);
     if (inlineVarMatch) {
-      const [, prefix, varName, suffix] = inlineVarMatch;
+      const [, prefix = '', varName, suffix = ''] = inlineVarMatch;
       if (pathPart.startsWith(prefix) && pathPart.endsWith(suffix)) {
         const value = pathPart.slice(prefix.length, pathPart.length - suffix.length);
         variables[varName] = value;
@@ -208,21 +208,28 @@ async function executeReverseFlow(
   const executor = createFlowExecutor();
 
   try {
+    // Get relative path from workspace root
+    const relativeWorkspacePath = workspaceFilePath.startsWith(cwd)
+      ? workspaceFilePath.slice(cwd.length + 1).replace(/\\/g, '/')
+      : workspaceFilePath;
+
     // Create reverse flow
     // For now, we'll do a simple copy - full reverse transformation coming later
     const reverseFlow: Flow = {
-      from: workspaceFilePath,
-      to: join(packageRoot, registryPath),
+      from: relativeWorkspacePath,
+      to: registryPath,
       // TODO: Implement full reverse transformation
       // - Reverse key mapping
       // - Reverse format conversion
       // - Reverse embed/extract
     };
 
-    // Create flow context
+    // Create flow context for save (reverse of install)
+    // For save: source is workspace, target is package
+    // So we swap the roots compared to install
     const context: FlowContext = {
-      workspaceRoot: cwd,
-      packageRoot,
+      workspaceRoot: packageRoot, // Target for save (writes to package)
+      packageRoot: cwd, // Source for save (reads from workspace)
       platform: '', // Not needed for reverse flow
       packageName: basename(packageRoot),
       variables: {},

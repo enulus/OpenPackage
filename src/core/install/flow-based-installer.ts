@@ -108,14 +108,47 @@ async function discoverFlowSources(
 
 /**
  * Resolve pattern placeholders like {name}
+ * Note: {name} is reserved for pattern matching and is NOT replaced
+ * unless explicitly provided in the context variables
  */
-function resolvePattern(pattern: string, context: FlowContext): string {
+function resolvePattern(pattern: string, context: FlowContext, capturedName?: string): string {
   return pattern.replace(/{(\w+)}/g, (match, key) => {
+    // If capturedName is provided and this is {name}, use the captured value
+    if (key === 'name' && capturedName !== undefined) {
+      return capturedName;
+    }
+    
+    // Otherwise, reserve {name} for pattern matching - don't substitute it
+    if (key === 'name') {
+      return match;
+    }
+    
     if (key in context.variables) {
       return String(context.variables[key]);
     }
     return match;
   });
+}
+
+/**
+ * Extract the captured {name} value from a source path that matched a pattern
+ * For example: sourcePath="rules/typescript.md", pattern="rules/{name}.md" → "typescript"
+ */
+function extractCapturedName(sourcePath: string, pattern: string): string | undefined {
+  // Convert pattern to regex with capture group for {name}
+  const regexPattern = pattern
+    .replace(/\{name\}/g, '([^/]+)')
+    .replace(/\*/g, '.*')
+    .replace(/\./g, '\\.');
+  
+  const regex = new RegExp('^' + regexPattern + '$');
+  const match = sourcePath.match(regex);
+  
+  if (match && match[1]) {
+    return match[1];
+  }
+  
+  return undefined;
 }
 
 /**
@@ -136,7 +169,7 @@ async function matchPattern(pattern: string, baseDir: string): Promise<string[]>
     return matches;
   }
   
-  // Handle simple patterns
+  // Handle simple patterns (no wildcards or placeholders)
   if (!filePattern.includes('*') && !filePattern.includes('{')) {
     // Exact file match
     const exactPath = join(searchDir, filePattern);
@@ -146,18 +179,23 @@ async function matchPattern(pattern: string, baseDir: string): Promise<string[]>
     return matches;
   }
   
-  // Handle wildcard patterns
-  if (filePattern.includes('*')) {
-    const files = await fs.readdir(searchDir);
-    const regex = new RegExp('^' + filePattern.replace(/\*/g, '.*') + '$');
-    
-    for (const file of files) {
-      if (regex.test(file)) {
-        const fullPath = join(searchDir, file);
-        const stat = await fs.stat(fullPath);
-        if (stat.isFile()) {
-          matches.push(relative(baseDir, fullPath));
-        }
+  // Handle patterns with wildcards or placeholders
+  const files = await fs.readdir(searchDir);
+  
+  // Convert pattern to regex
+  // Replace {name} with capture group, * with .*
+  let regexPattern = filePattern
+    .replace(/\{name\}/g, '([^/]+)')
+    .replace(/\*/g, '.*');
+  
+  const regex = new RegExp('^' + regexPattern + '$');
+  
+  for (const file of files) {
+    if (regex.test(file)) {
+      const fullPath = join(searchDir, file);
+      const stat = await fs.stat(fullPath);
+      if (stat.isFile()) {
+        matches.push(relative(baseDir, fullPath));
       }
     }
   }
@@ -239,6 +277,9 @@ export async function installPackageWithFlows(
     for (const [flow, sources] of flowSources) {
       for (const sourcePath of sources) {
         try {
+          // Extract captured {name} from source path for use in target path
+          const capturedName = extractCapturedName(sourcePath, flow.from);
+          
           // Update context with current source
           const sourceContext: FlowContext = {
             ...flowContext,
@@ -246,7 +287,9 @@ export async function installPackageWithFlows(
               ...flowContext.variables,
               sourcePath,
               sourceDir: dirname(sourcePath),
-              sourceFile: basename(sourcePath)
+              sourceFile: basename(sourcePath),
+              // Override name with captured value if it exists
+              ...(capturedName ? { capturedName } : {})
             }
           };
           

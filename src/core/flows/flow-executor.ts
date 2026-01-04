@@ -793,8 +793,16 @@ export class DefaultFlowExecutor implements FlowExecutor {
   private resolvePattern(pattern: string, context: FlowContext): string {
     let resolved = pattern;
 
-    // Replace variables
+    // If capturedName is available, use it for {name} placeholder
+    if ('capturedName' in context.variables) {
+      resolved = resolved.replace(/\{name\}/g, String(context.variables.capturedName));
+    }
+
+    // Replace other variables
     for (const [key, value] of Object.entries(context.variables)) {
+      // Skip capturedName and name as they're handled above
+      if (key === 'capturedName' || key === 'name') continue;
+      
       resolved = resolved.replace(new RegExp(`\\{${key}\\}`, 'g'), String(value));
     }
 

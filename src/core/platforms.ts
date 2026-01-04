@@ -320,6 +320,18 @@ const GLOBAL_DIR = join(os.homedir(), ".openpackage")
 
 const stateCache = new Map<string | null, PlatformsState>()
 
+/**
+ * Clear the platforms cache. Useful for testing.
+ * @param cwd Optional path to clear cache for. If not provided, clears all cache.
+ */
+export function clearPlatformsCache(cwd?: string): void {
+  if (cwd !== undefined) {
+    stateCache.delete(cwd)
+  } else {
+    stateCache.clear()
+  }
+}
+
 function getPlatformsState(cwd?: string | null): PlatformsState {
   const key = cwd ?? null
   if (stateCache.has(key)) {
