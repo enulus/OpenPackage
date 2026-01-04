@@ -212,6 +212,9 @@ export async function installPackageWithFlows(
     // Create flow executor
     const executor = createFlowExecutor();
     
+    // Get platform definition for accessing rootFile and other metadata
+    const platformDef = getPlatformDefinition(platform, workspaceRoot);
+    
     // Build flow context
     const flowContext: FlowContext = {
       workspaceRoot,
@@ -222,7 +225,9 @@ export async function installPackageWithFlows(
       variables: {
         name: packageName,
         version: packageVersion,
-        priority
+        priority,
+        rootFile: platformDef.rootFile,
+        rootDir: platformDef.rootDir
       },
       dryRun
     };
@@ -248,10 +253,16 @@ export async function installPackageWithFlows(
           // Execute flow
           const flowResult = await executor.executeFlow(flow, sourceContext);
           
-          result.filesProcessed++;
+          // Check if flow was skipped due to condition
+          const wasSkipped = flowResult.warnings?.includes('Flow skipped due to condition');
           
-          if (flowResult.success) {
-            // Count as written if not dry run and file was processed
+          // Only count as processed if the flow wasn't skipped
+          if (!wasSkipped) {
+            result.filesProcessed++;
+          }
+          
+          if (flowResult.success && !wasSkipped) {
+            // Count as written if not dry run
             if (!dryRun) {
               result.filesWritten++;
             }
@@ -285,15 +296,17 @@ export async function installPackageWithFlows(
                 });
               }
             }
-          } else {
+          } else if (!flowResult.success) {
+            // Flow failed with an error
             result.success = false;
             result.errors.push({
               flow,
               sourcePath,
               error: flowResult.error || new Error('Unknown error'),
-              message: `Failed to execute flow for ${sourcePath}: ${flowResult.error?.message}`
+              message: `Failed to execute flow for ${sourcePath}: ${flowResult.error?.message || 'Unknown error'}`
             });
           }
+          // Note: Skipped flows (wasSkipped=true) are not errors, just log at debug level
         } catch (error) {
           result.success = false;
           result.errors.push({
@@ -366,8 +379,11 @@ export async function installPackagesWithFlows(
   
   const dryRun = options?.dryRun ?? false;
   
-  // Sort packages by priority (higher priority first)
-  const sortedPackages = [...packages].sort((a, b) => b.priority - a.priority);
+  // Sort packages by priority (LOWER priority first, so higher priority writes last and wins)
+  const sortedPackages = [...packages].sort((a, b) => a.priority - b.priority);
+  
+  // Track files written by each package for conflict detection
+  const fileTargets = new Map<string, Array<{ packageName: string; priority: number }>>();
   
   // Install each package
   for (const pkg of sortedPackages) {
@@ -381,16 +397,70 @@ export async function installPackagesWithFlows(
       dryRun
     };
     
+    // Get flows and discover target files to track conflicts
+    const flows = getApplicableFlows(platform, workspaceRoot);
+    const flowContext: FlowContext = {
+      workspaceRoot,
+      packageRoot: pkg.packageRoot,
+      platform,
+      packageName: pkg.packageName,
+      direction: 'install',
+      variables: {
+        name: pkg.packageName,
+        version: pkg.packageVersion,
+        priority: pkg.priority
+      },
+      dryRun
+    };
+    
+    // Discover target paths for this package
+    const flowSources = await discoverFlowSources(flows, pkg.packageRoot, flowContext);
+    for (const [flow, sources] of flowSources) {
+      if (sources.length > 0) {
+        // Determine target path from flow
+        const targetPath = typeof flow.to === 'string' 
+          ? resolvePattern(flow.to, flowContext)
+          : Object.keys(flow.to)[0]; // For multi-target, use first target
+        
+        // Track this package writing to this target
+        if (!fileTargets.has(targetPath)) {
+          fileTargets.set(targetPath, []);
+        }
+        fileTargets.get(targetPath)!.push({
+          packageName: pkg.packageName,
+          priority: pkg.priority
+        });
+      }
+    }
+    
     const result = await installPackageWithFlows(installContext, options);
     
     // Aggregate results
     aggregatedResult.filesProcessed += result.filesProcessed;
     aggregatedResult.filesWritten += result.filesWritten;
-    aggregatedResult.conflicts.push(...result.conflicts);
     aggregatedResult.errors.push(...result.errors);
     
     if (!result.success) {
       aggregatedResult.success = false;
+    }
+  }
+  
+  // Detect conflicts: files written by multiple packages
+  for (const [targetPath, writers] of fileTargets) {
+    if (writers.length > 1) {
+      // Sort by priority to determine winner
+      const sortedWriters = [...writers].sort((a, b) => b.priority - a.priority);
+      const winner = sortedWriters[0];
+      
+      aggregatedResult.conflicts.push({
+        targetPath,
+        packages: sortedWriters.map((w, i) => ({
+          packageName: w.packageName,
+          priority: w.priority,
+          chosen: i === 0 // First in sorted list (highest priority) is chosen
+        })),
+        message: `Conflict in ${targetPath}: ${winner.packageName} (priority ${winner.priority}) overwrites ${sortedWriters.slice(1).map(w => w.packageName).join(', ')}`
+      });
     }
   }
   

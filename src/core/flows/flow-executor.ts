@@ -13,8 +13,10 @@
  */
 
 import { promises as fs } from 'fs';
+import fsSync from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
+import * as TOML from '@iarna/toml';
 import { JSONPath } from 'jsonpath-plus';
 import * as fsUtils from '../../utils/fs.js';
 import type {
@@ -440,8 +442,6 @@ export class DefaultFlowExecutor implements FlowExecutor {
           return yaml.load(content);
 
         case 'toml':
-          // Import toml dynamically when needed
-          const TOML = require('@iarna/toml');
           return TOML.parse(content);
 
         case 'markdown':
@@ -473,7 +473,6 @@ export class DefaultFlowExecutor implements FlowExecutor {
           return yaml.dump(content, { indent: 2, lineWidth: -1 });
 
         case 'toml':
-          const TOML = require('@iarna/toml');
           return TOML.stringify(content);
 
         case 'markdown':
@@ -762,7 +761,6 @@ export class DefaultFlowExecutor implements FlowExecutor {
     if (condition.exists) {
       const testPath = path.join(context.workspaceRoot, condition.exists);
       // Use existsSync for synchronous condition evaluation
-      const fsSync = require('fs');
       return fsSync.existsSync(testPath);
     }
 
