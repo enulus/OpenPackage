@@ -174,8 +174,11 @@
       },
       {
         "from": "mcp.jsonc",
-        "to": ".opencode/mcp.json",
+        "to": ".opencode/opencode.json",
         "pipe": ["filter-comments"],
+        "map": {
+          "mcpServers.*": "mcp.*"
+        },
         "merge": "deep"
       }
     ]
