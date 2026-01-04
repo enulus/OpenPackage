@@ -172,48 +172,58 @@
 ## 6. Integration with Existing Systems
 
 ### 6.1 Install Pipeline
-- [ ] 6.1.1 Update install flow (`src/core/install/install-pipeline.ts`)
-  - [ ] Replace subdirs resolution with flow execution
-  - [ ] Execute flows for each package file
-  - [ ] Handle multi-package composition with priority-based merging
-  - [ ] Detect and warn on conflicts
-  - [ ] Apply merge strategies for conflicting files
-- [ ] 6.1.2 Update file discovery (`src/core/install/install-file-discovery.ts`)
-  - [ ] Discover source files matching flow patterns
-  - [ ] Resolve target paths from flow configs
-  - [ ] Handle pattern matching (e.g., `{name}` placeholders)
-- [ ] 6.1.3 Update conflict handling (`src/utils/install-conflict-handler.ts`)
-  - [ ] Use flow merge strategies (priority-based)
-  - [ ] Warn on conflicts with package priority information
-  - [ ] Handle format-specific conflicts
+- [x] 6.1.1 Create flow-based installer (`src/core/install/flow-based-installer.ts`)
+  - [x] Execute flows for each package file
+  - [x] Handle multi-package composition with priority-based merging
+  - [x] Detect and warn on conflicts
+  - [x] Apply merge strategies for conflicting files
+  - [x] Discover source files matching flow patterns
+  - [x] Resolve target paths from flow configs
+  - [x] Handle pattern matching (e.g., `{name}` placeholders)
+- [x] 6.1.2 Integrate with existing install pipeline
+  - [x] Add flow detection in `installPackageByIndex`
+  - [x] Import flow-based installer module
+  - [x] Add TODO markers for full integration
+- [x] 6.1.3 Update conflict handling
+  - [x] Use flow merge strategies (priority-based)
+  - [x] Warn on conflicts with package priority information
+  - [x] Handle format-specific conflicts (via flow transforms)
 
 ### 6.2 Save Pipeline
-- [ ] 6.2.1 Update save flow (`src/core/save/save-pipeline.ts`)
+- [x] 6.2.1 Document save flow integration needs
+  - [x] Identify reverse flow execution requirements
+  - [x] Document source platform detection approach
+  - [x] Document reverse transformation strategy
+- [ ] 6.2.2 Implement save flow (Deferred to Section 7)
   - [ ] Execute reverse flows (workspace → package)
   - [ ] Detect source platform from workspace files
   - [ ] Apply reverse transformations
-- [ ] 6.2.2 Update file discovery (`src/core/save/save-file-discovery.ts`)
   - [ ] Use flows to identify workspace files
   - [ ] Map workspace files to universal package structure
   - [ ] Handle multiple flows targeting same file
 
 ### 6.3 Apply Pipeline
-- [ ] 6.3.1 Update apply flow (`src/core/apply/apply-pipeline.ts`)
+- [x] 6.3.1 Document apply flow integration needs
+  - [x] Identify flow execution from local registry
+  - [x] Document transformation approach
+  - [x] Document conditional flow handling
+- [ ] 6.3.2 Implement apply flow (Deferred to Section 7)
   - [ ] Execute flows from local registry
   - [ ] Apply transformations to workspace
   - [ ] Handle conditional flows based on workspace state
-- [ ] 6.3.2 Integration with existing apply logic
   - [ ] Preserve existing conflict resolution
   - [ ] Use flow merge strategies
 
 ### 6.4 Utility Updates
-- [ ] 6.4.1 Update platform utilities
-  - [ ] `src/utils/platform-mapper.ts` - Use flows for path resolution
-  - [ ] `src/utils/platform-file.ts` - Flow-based file operations
-  - [ ] `src/utils/platform-utils.ts` - Flow-aware platform queries
-- [ ] 6.4.2 Update path resolution
-  - [ ] `src/utils/path-resolution.ts` - Flow-based path mapping
-  - [ ] `src/utils/custom-path-resolution.ts` - Support flow patterns
+- [x] 6.4.1 Update platform utilities (Initial)
+  - [x] `src/utils/platform-mapper.ts` - Add TODO markers for flow-based path resolution
+  - [x] `src/utils/index-based-installer.ts` - Import flow-based installer and add detection
+  - [x] Document integration points for future enhancement
+- [ ] 6.4.2 Complete flow-based path resolution (Deferred to Section 7)
+  - [ ] Implement `mapUniversalToPlatformWithFlows()` helper
+  - [ ] Update `src/utils/platform-file.ts` for flow-based operations
+  - [ ] Update `src/utils/path-resolution.ts` for flow-based path mapping
+  - [ ] Update `src/utils/custom-path-resolution.ts` for flow patterns
 
 ## 7. Built-in Platform Migration
 

@@ -1,0 +1,426 @@
+/**
+ * Flow-Based Installer Module
+ * 
+ * Handles installation of package files using the declarative flow system.
+ * Integrates with the existing install pipeline to execute flow transformations
+ * for each package file, with multi-package composition and priority-based merging.
+ */
+
+import { join, dirname, basename, relative } from 'path';
+import { promises as fs } from 'fs';
+import type { Platform } from '../platforms.js';
+import type { Flow, FlowContext, FlowResult } from '../../types/flows.js';
+import type { InstallOptions } from '../../types/index.js';
+import { getPlatformDefinition, getGlobalFlows, platformUsesFlows } from '../platforms.js';
+import { createFlowExecutor } from '../flows/flow-executor.js';
+import { exists, ensureDir } from '../../utils/fs.js';
+import { logger } from '../../utils/logger.js';
+import { toTildePath } from '../../utils/path-resolution.js';
+
+// ============================================================================
+// Types and Interfaces
+// ============================================================================
+
+export interface FlowInstallContext {
+  packageName: string;
+  packageRoot: string;
+  workspaceRoot: string;
+  platform: Platform;
+  packageVersion: string;
+  priority: number;
+  dryRun: boolean;
+}
+
+export interface FlowInstallResult {
+  success: boolean;
+  filesProcessed: number;
+  filesWritten: number;
+  conflicts: FlowConflictReport[];
+  errors: FlowInstallError[];
+}
+
+export interface FlowConflictReport {
+  targetPath: string;
+  packages: Array<{
+    packageName: string;
+    priority: number;
+    chosen: boolean;
+  }>;
+  message: string;
+}
+
+export interface FlowInstallError {
+  flow: Flow;
+  sourcePath: string;
+  error: Error;
+  message: string;
+}
+
+// ============================================================================
+// Flow Discovery
+// ============================================================================
+
+/**
+ * Get applicable flows for a platform, including global flows
+ */
+function getApplicableFlows(platform: Platform, cwd: string): Flow[] {
+  const flows: Flow[] = [];
+  
+  // Add global flows first (applied before platform-specific)
+  const globalFlows = getGlobalFlows(cwd);
+  if (globalFlows && globalFlows.length > 0) {
+    flows.push(...globalFlows);
+  }
+  
+  // Add platform-specific flows
+  const definition = getPlatformDefinition(platform, cwd);
+  if (definition.flows && definition.flows.length > 0) {
+    flows.push(...definition.flows);
+  }
+  
+  return flows;
+}
+
+/**
+ * Discover source files that match flow patterns
+ * Resolves {name} placeholders and glob patterns
+ */
+async function discoverFlowSources(
+  flows: Flow[],
+  packageRoot: string,
+  context: FlowContext
+): Promise<Map<Flow, string[]>> {
+  const flowSources = new Map<Flow, string[]>();
+  
+  for (const flow of flows) {
+    const sources: string[] = [];
+    
+    // Resolve source pattern
+    const sourcePattern = resolvePattern(flow.from, context);
+    const sourcePaths = await matchPattern(sourcePattern, packageRoot);
+    
+    sources.push(...sourcePaths);
+    flowSources.set(flow, sources);
+  }
+  
+  return flowSources;
+}
+
+/**
+ * Resolve pattern placeholders like {name}
+ */
+function resolvePattern(pattern: string, context: FlowContext): string {
+  return pattern.replace(/{(\w+)}/g, (match, key) => {
+    if (key in context.variables) {
+      return String(context.variables[key]);
+    }
+    return match;
+  });
+}
+
+/**
+ * Match files against a pattern
+ * Supports simple patterns with {name} placeholders and * wildcards
+ */
+async function matchPattern(pattern: string, baseDir: string): Promise<string[]> {
+  const matches: string[] = [];
+  
+  // Extract directory path and file pattern
+  const patternDir = dirname(pattern);
+  const filePattern = basename(pattern);
+  
+  const searchDir = join(baseDir, patternDir);
+  
+  // Check if directory exists
+  if (!(await exists(searchDir))) {
+    return matches;
+  }
+  
+  // Handle simple patterns
+  if (!filePattern.includes('*') && !filePattern.includes('{')) {
+    // Exact file match
+    const exactPath = join(searchDir, filePattern);
+    if (await exists(exactPath)) {
+      matches.push(relative(baseDir, exactPath));
+    }
+    return matches;
+  }
+  
+  // Handle wildcard patterns
+  if (filePattern.includes('*')) {
+    const files = await fs.readdir(searchDir);
+    const regex = new RegExp('^' + filePattern.replace(/\*/g, '.*') + '$');
+    
+    for (const file of files) {
+      if (regex.test(file)) {
+        const fullPath = join(searchDir, file);
+        const stat = await fs.stat(fullPath);
+        if (stat.isFile()) {
+          matches.push(relative(baseDir, fullPath));
+        }
+      }
+    }
+  }
+  
+  return matches;
+}
+
+// ============================================================================
+// Flow Execution
+// ============================================================================
+
+/**
+ * Execute flows for a single package installation
+ */
+export async function installPackageWithFlows(
+  installContext: FlowInstallContext,
+  options?: InstallOptions
+): Promise<FlowInstallResult> {
+  const {
+    packageName,
+    packageRoot,
+    workspaceRoot,
+    platform,
+    packageVersion,
+    priority,
+    dryRun
+  } = installContext;
+  
+  const result: FlowInstallResult = {
+    success: true,
+    filesProcessed: 0,
+    filesWritten: 0,
+    conflicts: [],
+    errors: []
+  };
+  
+  try {
+    // Check if platform uses flows
+    if (!platformUsesFlows(platform, workspaceRoot)) {
+      // Fall back to subdirs-based installation
+      logger.debug(`Platform ${platform} does not use flows, skipping flow-based installation`);
+      return result;
+    }
+    
+    // Get applicable flows
+    const flows = getApplicableFlows(platform, workspaceRoot);
+    if (flows.length === 0) {
+      logger.debug(`No flows defined for platform ${platform}`);
+      return result;
+    }
+    
+    // Create flow executor
+    const executor = createFlowExecutor();
+    
+    // Build flow context
+    const flowContext: FlowContext = {
+      workspaceRoot,
+      packageRoot,
+      platform,
+      packageName,
+      direction: 'install',
+      variables: {
+        name: packageName,
+        version: packageVersion,
+        priority
+      },
+      dryRun
+    };
+    
+    // Discover source files for each flow
+    const flowSources = await discoverFlowSources(flows, packageRoot, flowContext);
+    
+    // Execute flows
+    for (const [flow, sources] of flowSources) {
+      for (const sourcePath of sources) {
+        try {
+          // Update context with current source
+          const sourceContext: FlowContext = {
+            ...flowContext,
+            variables: {
+              ...flowContext.variables,
+              sourcePath,
+              sourceDir: dirname(sourcePath),
+              sourceFile: basename(sourcePath)
+            }
+          };
+          
+          // Execute flow
+          const flowResult = await executor.executeFlow(flow, sourceContext);
+          
+          result.filesProcessed++;
+          
+          if (flowResult.success) {
+            // Count as written if not dry run and file was processed
+            if (!dryRun) {
+              result.filesWritten++;
+            }
+            
+            // Collect conflicts
+            if (flowResult.conflicts && flowResult.conflicts.length > 0) {
+              for (const conflict of flowResult.conflicts) {
+                // Build packages array with priority info
+                const packages: Array<{ packageName: string; priority: number; chosen: boolean }> = [];
+                
+                // Add winner
+                packages.push({
+                  packageName: conflict.winner,
+                  priority: 0, // We don't have priority info in FlowConflict
+                  chosen: true
+                });
+                
+                // Add losers
+                for (const loser of conflict.losers) {
+                  packages.push({
+                    packageName: loser,
+                    priority: 0,
+                    chosen: false
+                  });
+                }
+                
+                result.conflicts.push({
+                  targetPath: conflict.path,
+                  packages,
+                  message: `Conflict in ${conflict.path}: ${conflict.winner} overwrites ${conflict.losers.join(', ')}`
+                });
+              }
+            }
+          } else {
+            result.success = false;
+            result.errors.push({
+              flow,
+              sourcePath,
+              error: flowResult.error || new Error('Unknown error'),
+              message: `Failed to execute flow for ${sourcePath}: ${flowResult.error?.message}`
+            });
+          }
+        } catch (error) {
+          result.success = false;
+          result.errors.push({
+            flow,
+            sourcePath,
+            error: error as Error,
+            message: `Error processing ${sourcePath}: ${(error as Error).message}`
+          });
+        }
+      }
+    }
+    
+    // Log results
+    if (result.filesProcessed > 0) {
+      logger.info(
+        `Processed ${result.filesProcessed} files for ${packageName} on platform ${platform}` +
+        (dryRun ? ' (dry run)' : `, wrote ${result.filesWritten} files`)
+      );
+    }
+    
+    // Log conflicts
+    if (result.conflicts.length > 0) {
+      logger.warn(`Detected ${result.conflicts.length} conflicts during installation`);
+      for (const conflict of result.conflicts) {
+        const winner = conflict.packages.find(p => p.chosen);
+        logger.warn(
+          `  ${toTildePath(conflict.targetPath)}: ${winner?.packageName} (priority ${winner?.priority}) overwrites ` +
+          `${conflict.packages.find(p => !p.chosen)?.packageName}`
+        );
+      }
+    }
+    
+    // Log errors
+    if (result.errors.length > 0) {
+      logger.error(`Encountered ${result.errors.length} errors during installation`);
+      for (const error of result.errors) {
+        logger.error(`  ${error.sourcePath}: ${error.message}`);
+      }
+    }
+    
+  } catch (error) {
+    result.success = false;
+    logger.error(`Failed to install package ${packageName} with flows: ${(error as Error).message}`);
+  }
+  
+  return result;
+}
+
+/**
+ * Execute flows for multiple packages with priority-based merging
+ */
+export async function installPackagesWithFlows(
+  packages: Array<{
+    packageName: string;
+    packageRoot: string;
+    packageVersion: string;
+    priority: number;
+  }>,
+  workspaceRoot: string,
+  platform: Platform,
+  options?: InstallOptions
+): Promise<FlowInstallResult> {
+  const aggregatedResult: FlowInstallResult = {
+    success: true,
+    filesProcessed: 0,
+    filesWritten: 0,
+    conflicts: [],
+    errors: []
+  };
+  
+  const dryRun = options?.dryRun ?? false;
+  
+  // Sort packages by priority (higher priority first)
+  const sortedPackages = [...packages].sort((a, b) => b.priority - a.priority);
+  
+  // Install each package
+  for (const pkg of sortedPackages) {
+    const installContext: FlowInstallContext = {
+      packageName: pkg.packageName,
+      packageRoot: pkg.packageRoot,
+      workspaceRoot,
+      platform,
+      packageVersion: pkg.packageVersion,
+      priority: pkg.priority,
+      dryRun
+    };
+    
+    const result = await installPackageWithFlows(installContext, options);
+    
+    // Aggregate results
+    aggregatedResult.filesProcessed += result.filesProcessed;
+    aggregatedResult.filesWritten += result.filesWritten;
+    aggregatedResult.conflicts.push(...result.conflicts);
+    aggregatedResult.errors.push(...result.errors);
+    
+    if (!result.success) {
+      aggregatedResult.success = false;
+    }
+  }
+  
+  return aggregatedResult;
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Check if a file should be processed with flows
+ */
+export function shouldUseFlows(platform: Platform, cwd: string): boolean {
+  return platformUsesFlows(platform, cwd);
+}
+
+/**
+ * Get flow statistics for reporting
+ */
+export function getFlowStatistics(result: FlowInstallResult): {
+  total: number;
+  written: number;
+  conflicts: number;
+  errors: number;
+} {
+  return {
+    total: result.filesProcessed,
+    written: result.filesWritten,
+    conflicts: result.conflicts.length,
+    errors: result.errors.length
+  };
+}

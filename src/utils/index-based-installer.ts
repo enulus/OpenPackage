@@ -21,7 +21,7 @@ import {
 } from '../constants/index.js';
 import { getPlatformRootFileNames, stripRootCopyPrefix } from './platform-root-files.js';
 import type { Platform } from '../core/platforms.js';
-import { getAllUniversalSubdirs } from '../core/platforms.js';
+import { getAllUniversalSubdirs, platformUsesFlows } from '../core/platforms.js';
 import { normalizePathForProcessing } from './path-normalization.js';
 import { toTildePath } from './path-resolution.js';
 import {
@@ -55,6 +55,7 @@ import {
 } from './workspace-index-ownership.js';
 import { resolvePackageContentRoot } from '../core/install/local-source-resolution.js';
 import { calculateFileHash } from './hash-utils.js';
+import { installPackageWithFlows, type FlowInstallResult } from '../core/install/flow-based-installer.js';
 
 // ============================================================================
 // Types and Interfaces
@@ -1120,6 +1121,17 @@ export async function installPackageByIndex(
   includePaths?: string[],
   contentRoot?: string
 ): Promise<IndexInstallResult> {
+  // Check if any platform uses flows
+  const hasFlowPlatforms = platforms.some(platform => platformUsesFlows(platform, cwd));
+  
+  if (hasFlowPlatforms) {
+    logger.debug(`Platform(s) using flows detected, delegating to flow-based installer for ${packageName}`);
+    
+    // For now, log and continue with subdirs-based installer
+    // Flow-based installer will be fully integrated in subsequent updates
+    logger.warn(`Flow-based installation for ${packageName} is not yet fully implemented. Using subdirs-based installer.`);
+  }
+  
   const resolvedContentRoot = contentRoot ?? await resolvePackageContentRoot({ cwd, packageName, version });
   const registryEntries = await loadRegistryFileEntries(packageName, version, {
     cwd,

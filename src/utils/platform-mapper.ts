@@ -28,10 +28,15 @@ export function normalizePlatforms(platforms?: string[]): string[] | undefined {
 /**
  * Platform Mapper Module
  * Unified functions for mapping between universal subdirs and platform-specific paths
+ * 
+ * Note: This module currently uses subdirs-based mapping. Flow-based path resolution
+ * will be added in a future update (Section 6.4 of platform-flows implementation).
  */
 
 /**
  * Map a universal file path to platform-specific directory and file paths
+ * 
+ * TODO (Section 6.4): Update to support flow-based path resolution when flows are defined
  */
 export function mapUniversalToPlatform(
   platform: Platform,
@@ -40,6 +45,12 @@ export function mapUniversalToPlatform(
   cwd?: string
 ): { absDir: string; absFile: string } {
   const definition = getPlatformDefinition(platform, cwd);
+  
+  // TODO: Check if platform uses flows and delegate to flow-based resolution
+  // if (definition.flows && definition.flows.length > 0) {
+  //   return mapUniversalToPlatformWithFlows(platform, subdir, relPath, cwd);
+  // }
+  
   const subdirDef = definition.subdirs.get(subdir);
 
   if (!subdirDef) {
