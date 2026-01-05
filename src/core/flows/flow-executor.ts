@@ -1049,6 +1049,9 @@ export class DefaultFlowExecutor implements FlowExecutor {
    * Serialize markdown with frontmatter
    */
   private serializeMarkdown(content: any): string {
+    if (typeof content === 'string') {
+      return content;
+    }
     if (content.frontmatter) {
       const frontmatterStr = yaml.dump(content.frontmatter, { indent: 2 });
       return `---\n${frontmatterStr}---\n${content.body || ''}`;

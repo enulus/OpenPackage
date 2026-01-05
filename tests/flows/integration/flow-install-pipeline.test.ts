@@ -17,6 +17,9 @@ import {
   type FlowInstallContext 
 } from '../../../src/core/install/flow-based-installer.js';
 import { clearPlatformsCache } from '../../../src/core/platforms.js';
+import { installPackageByIndexWithFlows } from '../../../src/utils/flow-index-installer.js';
+import { readWorkspaceIndex } from '../../../src/utils/workspace-index-yml.js';
+import { removeFileMapping } from '../../../src/core/uninstall/flow-aware-uninstaller.js';
 
 // ============================================================================
 // Test Setup
@@ -56,6 +59,11 @@ before(async () => {
         {
           "from": "rules/{name}.md",
           "to": ".test/rules/{name}.mdc"
+        },
+        {
+          "from": "mcp.jsonc",
+          "to": ".cursor/mcp.json",
+          "merge": "deep"
         },
         {
           "from": "config.yaml",
@@ -642,6 +650,99 @@ describe('Flow-Based Install Pipeline', () => {
       // File should not exist
       const exists = await fileExists('dryrun-output.json');
       assert.strictEqual(exists, false);
+    });
+  });
+
+  describe('Workspace Index + Uninstall Key Tracking', () => {
+    it('should track only package-contributed keys for deep merge and preserve pre-existing keys on uninstall', async () => {
+      await cleanPackageDirectories();
+
+      await fs.mkdir(join(workspaceRoot, '.cursor'), { recursive: true });
+
+      const existingMcp = {
+        mcpServers: {
+          'existing-server': {
+            url: 'https://api.example.com/mcp',
+            headers: {
+              Authorization: 'Bearer ${env:MY_SERVICE_TOKEN}'
+            }
+          }
+        }
+      };
+
+      await fs.writeFile(
+        join(workspaceRoot, '.cursor', 'mcp.json'),
+        JSON.stringify(existingMcp, null, 2),
+        'utf8'
+      );
+
+      const techMcp = {
+        mcpServers: {
+          'tech-server': {
+            url: 'https://api.example.com/mcp',
+            headers: {
+              Authorization: 'Bearer ${env:MY_SERVICE_TOKEN}'
+            }
+          }
+        }
+      };
+
+      await createPackageFile(
+        packageRootA,
+        'mcp.jsonc',
+        JSON.stringify(techMcp, null, 2)
+      );
+
+      // Install via index installer (this is the path that writes openpackage.index.yml)
+      await installPackageByIndexWithFlows(
+        workspaceRoot,
+        'tech',
+        '0.0.0',
+        ['test-platform'],
+        { dryRun: false },
+        undefined,
+        packageRootA
+      );
+
+      // Verify merged output file contains both servers
+      const mergedMcp = JSON.parse(
+        await fs.readFile(join(workspaceRoot, '.cursor', 'mcp.json'), 'utf8')
+      );
+      assert.deepStrictEqual(mergedMcp, {
+        mcpServers: {
+          'existing-server': existingMcp.mcpServers['existing-server'],
+          'tech-server': techMcp.mcpServers['tech-server']
+        }
+      });
+
+      // Verify workspace index tracks ONLY package keys (not pre-existing keys)
+      const wsIndex = await readWorkspaceIndex(workspaceRoot);
+      const techEntry = wsIndex.index.packages?.tech;
+      assert.ok(techEntry, 'workspace index should include tech');
+
+      const mappings = techEntry.files?.['mcp.jsonc'];
+      assert.ok(Array.isArray(mappings) && mappings.length === 1, 'tech should have mcp.jsonc mapping');
+      const mapping = mappings[0];
+      assert.ok(typeof mapping === 'object' && mapping !== null && 'target' in mapping, 'mcp.jsonc mapping should be complex');
+
+      const complex = mapping as any;
+      assert.strictEqual(complex.target, '.cursor/mcp.json');
+      assert.strictEqual(complex.merge, 'deep');
+
+      const expectedKeys = [
+        'mcpServers.tech-server.url',
+        'mcpServers.tech-server.headers.Authorization'
+      ].sort();
+      const actualKeys = Array.isArray(complex.keys) ? [...complex.keys].sort() : [];
+      assert.deepStrictEqual(actualKeys, expectedKeys);
+
+      // Simulate uninstall removal using the mapping entry (same logic uninstall pipeline uses)
+      await removeFileMapping(workspaceRoot, complex, 'tech');
+
+      const afterUninstall = JSON.parse(
+        await fs.readFile(join(workspaceRoot, '.cursor', 'mcp.json'), 'utf8')
+      );
+      assert.deepStrictEqual(afterUninstall, existingMcp);
     });
   });
 });

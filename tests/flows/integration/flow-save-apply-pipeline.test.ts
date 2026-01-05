@@ -114,7 +114,7 @@ before(async () => {
       packages: {},
       sources: []
     },
-    path: join(workspaceRoot, '.openpackage', 'workspace-index.yml')
+    path: join(workspaceRoot, '.openpackage', 'openpackage.index.yml')
   });
 });
 
@@ -523,6 +523,10 @@ describe('Flow-Based Apply Pipeline', () => {
       
       // Create package with AGENTS.md (matching global flow condition)
       await createPackageFile(packageRootA, 'AGENTS.md', '# Test Agent\n\nAgent description.');
+
+      // Global flow condition is `when: { exists: "AGENTS.md" }` (workspace-relative),
+      // so create a placeholder file so the conditional flow applies.
+      await fs.writeFile(join(workspaceRoot, 'AGENTS.md'), '# Placeholder\n', 'utf8');
       
       // Create workspace index entry
       await writeWorkspaceIndex({
@@ -536,7 +540,7 @@ describe('Flow-Based Apply Pipeline', () => {
           },
           sources: []
         },
-        path: join(workspaceRoot, '.openpackage', 'workspace-index.yml')
+        path: join(workspaceRoot, '.openpackage', 'openpackage.index.yml')
       });
       
       // Install first to create workspace files
@@ -717,7 +721,7 @@ describe('Flow-Based Apply Pipeline', () => {
           },
           sources: []
         },
-        path: join(workspaceRoot, '.openpackage', 'workspace-index.yml')
+        path: join(workspaceRoot, '.openpackage', 'openpackage.index.yml')
       });
       
       // Apply with force should restore original
@@ -787,7 +791,7 @@ describe('Flow-Based Apply Pipeline', () => {
           },
           sources: []
         },
-        path: join(workspaceRoot, '.openpackage', 'workspace-index.yml')
+        path: join(workspaceRoot, '.openpackage', 'openpackage.index.yml')
       });
       
       // Apply all packages

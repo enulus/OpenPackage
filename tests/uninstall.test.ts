@@ -72,8 +72,12 @@ async function cleanup(paths: string[]) {
     assert.equal(ruleExists, false, 'platform file should be removed');
     assert.equal(docsExists, false, 'root copy file should be removed');
 
-    const agentsContent = await fs.readFile(path.join(cwd, 'AGENTS.md'), 'utf8');
-    assert.ok(!agentsContent.includes('owned'), 'root file section should be removed');
+    // Root file may be updated in-place or deleted entirely if it becomes empty after removals.
+    const agentsPath = path.join(cwd, 'AGENTS.md');
+    const agentsContent = await fs.readFile(agentsPath, 'utf8').catch(() => null);
+    if (agentsContent !== null) {
+      assert.ok(!agentsContent.includes('owned'), 'root file section should be removed');
+    }
 
     const indexContent = await fs.readFile(path.join(cwd, '.openpackage', 'openpackage.index.yml'), 'utf8');
     assert.ok(!indexContent.includes('my-pkg'), 'workspace index should remove package entry');

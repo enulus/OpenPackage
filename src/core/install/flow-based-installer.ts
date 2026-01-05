@@ -384,8 +384,9 @@ export async function installPackageWithFlows(
           };
 
           // Resolve a concrete target path so flow-executor doesn't need glob expansion.
-          const toPattern = typeof flow.to === 'string' ? flow.to : Object.keys(flow.to)[0] ?? '';
-          const targetAbs = resolveTargetFromGlob(sourceAbs, flow.from, toPattern, sourceContext);
+          const rawToPattern = typeof flow.to === 'string' ? flow.to : Object.keys(flow.to)[0] ?? '';
+          const resolvedToPattern = resolvePattern(rawToPattern, sourceContext, capturedName);
+          const targetAbs = resolveTargetFromGlob(sourceAbs, flow.from, resolvedToPattern, sourceContext);
           const targetRel = relative(workspaceRoot, targetAbs);
 
           const concreteFlow: Flow = {
