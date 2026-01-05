@@ -185,13 +185,13 @@ async function buildExactFileMapping(
     const normalized = normalizeRegistryPath(file.path);
     if (isRootCopyPath(normalized)) continue;
     if (isRootRegistryPath(normalized) || rootFileNames.has(normalized)) continue;
-    if (isSkippableRegistryPath(normalized)) continue;
-    if (!isAllowedRegistryPath(normalized)) continue;
+    if (isSkippableRegistryPath(normalized, cwd)) continue;
+    if (!isAllowedRegistryPath(normalized, cwd)) continue;
 
     const parsed = parseUniversalPath(normalized);
     if (parsed && parsed.platformSuffix && isPlatformId(parsed.platformSuffix)) {
       try {
-        const { absFile } = mapUniversalToPlatform(
+        const { relFile } = mapUniversalToPlatform(
           parsed.platformSuffix,
           parsed.universalSubdir as any,
           parsed.relPath,
@@ -199,7 +199,7 @@ async function buildExactFileMapping(
         );
         const baseKey = `${parsed.universalSubdir}/${parsed.relPath}`;
         const set = platformSpecificTargetsByBase.get(baseKey) ?? new Set<string>();
-        set.add(absFile.replace(/\\/g, '/'));
+        set.add(relFile.replace(/\\/g, '/'));
         platformSpecificTargetsByBase.set(baseKey, set);
       } catch {
         // Ignore unsupported subdir/platform combinations
@@ -210,7 +210,7 @@ async function buildExactFileMapping(
   // Second pass: build exact mappings, only including paths that actually exist
   for (const file of packageFiles) {
     const normalized = normalizeRegistryPath(file.path);
-    if (isSkippableRegistryPath(normalized)) continue;
+    if (isSkippableRegistryPath(normalized, cwd)) continue;
 
     const key = normalized.replace(/\\/g, '/');
     const values = new Set<string>();
@@ -235,20 +235,20 @@ async function buildExactFileMapping(
       continue;
     }
 
-    if (!isAllowedRegistryPath(normalized)) continue;
+    if (!isAllowedRegistryPath(normalized, cwd)) continue;
 
     const parsed = parseUniversalPath(key);
     if (parsed) {
       if (parsed.platformSuffix && isPlatformId(parsed.platformSuffix)) {
         // Platform-specific registry key → only that platform target if it exists
         try {
-          const { absFile } = mapUniversalToPlatform(
+          const { relFile } = mapUniversalToPlatform(
             parsed.platformSuffix,
             parsed.universalSubdir as any,
             parsed.relPath,
             cwd
           );
-          const relPath = absFile.replace(/\\/g, '/');
+          const relPath = relFile.replace(/\\/g, '/');
           if (await checkExists(relPath)) {
             values.add(relPath);
           }
@@ -259,8 +259,8 @@ async function buildExactFileMapping(
         // Universal registry key → only include platform paths that actually exist
         for (const platform of platforms) {
           try {
-            const { absFile } = mapUniversalToPlatform(platform, parsed.universalSubdir as any, parsed.relPath, cwd);
-            const relPath = absFile.replace(/\\/g, '/');
+            const { relFile } = mapUniversalToPlatform(platform, parsed.universalSubdir as any, parsed.relPath, cwd);
+            const relPath = relFile.replace(/\\/g, '/');
             if (await checkExists(relPath)) {
               values.add(relPath);
             }
@@ -325,8 +325,8 @@ export async function buildMappingAndWriteIndex(
     // These are manifest/metadata files that are NOT synced to workspace locations
     const indexEligibleFiles = packageFiles.filter(f => {
       const normalized = normalizeRegistryPath(f.path);
-      if (isSkippableRegistryPath(normalized)) return false;
-      if (isAllowedRegistryPath(normalized)) return true;
+      if (isSkippableRegistryPath(normalized, cwd)) return false;
+      if (isAllowedRegistryPath(normalized, cwd)) return true;
       if (isRootRegistryPath(normalized)) return true;
       if (isRootCopyPath(normalized)) return true;
       return false;

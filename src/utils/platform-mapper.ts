@@ -16,6 +16,22 @@ import { type UniversalSubdir } from '../constants/index.js';
 import { normalizePathForProcessing, findSubpathIndex } from './path-normalization.js';
 
 /**
+ * Result of mapping a universal path to a platform path.
+ *
+ * IMPORTANT CONTRACT:
+ * - `relDir` / `relFile` are **workspace-relative** paths (to be joined with the workspace `cwd`)
+ *
+ * Do NOT return absolute paths from this mapper: most call sites treat mapping outputs as
+ * relative and prefix them with `cwd` (via `path.join`), which would create duplicated roots.
+ */
+export interface PlatformPathMapping {
+  /** Workspace-relative directory path (e.g. `.cursor/rules`) */
+  relDir: string;
+  /** Workspace-relative file path (e.g. `.cursor/rules/foo.mdc`) */
+  relFile: string;
+}
+
+/**
  * Normalize platform names from command line input
  */
 export function normalizePlatforms(platforms?: string[]): string[] | undefined {
@@ -44,7 +60,7 @@ export function mapUniversalToPlatform(
   subdir: string,
   relPath: string,
   cwd?: string
-): { absDir: string; absFile: string } {
+): PlatformPathMapping {
   const definition = getPlatformDefinition(platform, cwd);
   
   // Use flow-based resolution
@@ -136,11 +152,11 @@ export async function resolveInstallTargets(
 
   for (const platform of detectedPlatforms) {
     try {
-      const { absDir, absFile } = mapUniversalToPlatform(platform, file.universalSubdir, file.relPath, cwd);
+      const { relDir, relFile } = mapUniversalToPlatform(platform, file.universalSubdir, file.relPath, cwd);
       targets.push({
         platform,
-        absDir: join(cwd, absDir),
-        absFile: join(cwd, absFile)
+        absDir: join(cwd, relDir),
+        absFile: join(cwd, relFile)
       });
     } catch (error) {
       // Skip platforms that don't support this subdir
@@ -183,20 +199,20 @@ function mapUniversalToPlatformWithFlows(
   definition: PlatformDefinition,
   subdir: string,
   relPath: string
-): { absDir: string; absFile: string } {
+): PlatformPathMapping {
   const flows = definition.flows || [];
   
   // Construct the full source path for matching
   const sourcePath = `${subdir}/${relPath}`;
   
+  const candidateFlows = flows.filter(flow => flow.from.startsWith(`${subdir}/`));
+  if (candidateFlows.length === 0) {
+    throw new Error(`Platform ${definition.id} does not support subdir ${subdir}`);
+  }
+
   // Find a flow that matches this source path
-  const matchingFlow = flows.find(flow => {
+  const matchingFlow = candidateFlows.find(flow => {
     const fromPattern = flow.from;
-    
-    // Simple pattern matching: check if flow starts with subdir
-    if (!fromPattern.startsWith(`${subdir}/`)) {
-      return false;
-    }
     
     // Check if the source path matches the pattern
     // Handle glob patterns with ** and *
@@ -221,7 +237,26 @@ function mapUniversalToPlatformWithFlows(
   });
   
   if (!matchingFlow) {
-    throw new Error(`Platform ${definition.id} does not support subdir ${subdir}`);
+    const sourceExt = extname(sourcePath);
+    const expectedExts = Array.from(
+      new Set(
+        candidateFlows
+          .map(flow => extname(flow.from))
+          .filter(ext => typeof ext === 'string' && ext.length > 0)
+      )
+    );
+
+    if (sourceExt && expectedExts.length > 0 && !expectedExts.includes(sourceExt)) {
+      logger.warn(
+        `Skipped ${relPath} for platform ${definition.id}: extension ${sourceExt} does not match flow pattern`,
+        { subdir, expectedExts }
+      );
+      throw new Error(
+        `File extension ${sourceExt} is not allowed for subdir ${subdir} on platform ${definition.id}`
+      );
+    }
+
+    throw new Error(`Platform ${definition.id} does not support path ${sourcePath}`);
   }
   
   const fromPattern = matchingFlow.from;
@@ -245,8 +280,7 @@ function mapUniversalToPlatformWithFlows(
   // Resolve the target path from the glob pattern
   const targetPath = resolveTargetPathFromGlob(sourcePath, fromPattern, targetPathPattern);
 
-  // Normalize: callers expect paths relative to the workspace root (cwd),
-  // and will join them to an absolute root themselves.
+  // Normalize: callers expect workspace-relative paths and will join them with `cwd`.
   const workspaceRoot = normalizePathForProcessing(process.cwd());
   let relTarget = normalizePathForProcessing(targetPath);
   const workspaceRootNoLeading = workspaceRoot.replace(/^\/+/, '');
@@ -263,10 +297,10 @@ function mapUniversalToPlatformWithFlows(
   // Ensure it's relative (no leading slash), but keep leading dot dirs like ".claude".
   relTarget = relTarget.replace(/^\/+/, '');
 
-  const absFile = relTarget;
-  const absDir = dirname(absFile);
+  const relFile = relTarget;
+  const relDir = dirname(relFile);
 
-  return { absDir, absFile };
+  return { relDir, relFile };
 }
 
 /**

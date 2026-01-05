@@ -30,7 +30,7 @@ try {
   const warningCount = warnings.length;
   const mapped = mapUniversalToPlatform('claude', 'agents', 'foo.md');
   assert.ok(
-    mapped.absFile.endsWith('.claude/agents/foo.md'),
+    mapped.relFile.endsWith('.claude/agents/foo.md'),
     'allowed extensions should map to platform directory'
   );
   assert.equal(

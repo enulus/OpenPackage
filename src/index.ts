@@ -108,6 +108,10 @@ program
       output += 'opkg show <pkg>        show package details\n';
       output += 'opkg <command> -h      help on <command>\n\n';
       
+      // Global options (must stay visible even with custom root help)
+      output += 'Global options:\n\n';
+      output += '    --cwd <dir>        set working directory\n\n';
+      
       // All commands section - ultra compact
       output += 'All commands:\n\n';
       output += '    new, add, remove, save, set, pack, apply, status,\n';

@@ -12,7 +12,7 @@ import { discoverPlatformFilesUnified } from '../discovery/platform-files-discov
 import { inferPlatformFromWorkspaceFile } from '../platforms.js';
 import type { SaveCandidate } from './save-types.js';
 
-function isValidLocalCandidatePath(normalizedPath: string): boolean {
+function isValidLocalCandidatePath(normalizedPath: string, cwd?: string): boolean {
   if (
     normalizedPath === FILE_PATTERNS.OPENPACKAGE_INDEX_YML ||
     normalizedPath === PACKAGE_PATHS.INDEX_RELATIVE ||
@@ -20,10 +20,10 @@ function isValidLocalCandidatePath(normalizedPath: string): boolean {
   ) {
     return false;
   }
-  return isAllowedRegistryPath(normalizedPath);
+  return isAllowedRegistryPath(normalizedPath, cwd);
 }
 
-export async function loadLocalCandidates(packageDir: string): Promise<SaveCandidate[]> {
+export async function loadLocalCandidates(packageDir: string, cwd?: string): Promise<SaveCandidate[]> {
   const entries = await findFilesByExtension(packageDir, [], packageDir);
 
   const candidates: SaveCandidate[] = [];
@@ -31,7 +31,7 @@ export async function loadLocalCandidates(packageDir: string): Promise<SaveCandi
   for (const entry of entries) {
     const normalizedPath = normalizeRegistryPath(entry.relativePath);
 
-    if (!isValidLocalCandidatePath(normalizedPath)) {
+    if (!isValidLocalCandidatePath(normalizedPath, cwd)) {
       continue;
     }
 
@@ -74,7 +74,7 @@ export async function discoverWorkspaceCandidates(
   for (const file of discovered) {
     const normalizedPath = normalizeRegistryPath(file.registryPath);
 
-    if (!isAllowedRegistryPath(normalizedPath)) {
+    if (!isAllowedRegistryPath(normalizedPath, cwd)) {
       continue;
     }
 

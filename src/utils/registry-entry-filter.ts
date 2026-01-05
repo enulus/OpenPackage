@@ -1,14 +1,13 @@
 import {
-  DIR_PATTERNS,
   FILE_PATTERNS
 } from '../constants/index.js';
 import { isRootCopyPath } from './platform-root-files.js';
-import {
-  getFirstPathComponent,
-  getPathAfterFirstComponent,
-  normalizePathForProcessing
-} from './path-normalization.js';
-import { getPlatformRootFiles, getAllUniversalSubdirs, isPlatformId } from '../core/platforms.js';
+import { normalizePathForProcessing } from './path-normalization.js';
+import { 
+  getPlatformRootFiles, 
+  matchesUniversalPattern,
+  isPlatformId 
+} from '../core/platforms.js';
 import { isManifestPath } from './manifest-paths.js';
 
 const ROOT_REGISTRY_FILE_NAMES = getPlatformRootFiles();
@@ -23,7 +22,7 @@ export function isRootRegistryPath(registryPath: string): boolean {
   );
 }
 
-export function isSkippableRegistryPath(registryPath: string): boolean {
+export function isSkippableRegistryPath(registryPath: string, cwd?: string): boolean {
   const normalized = normalizeRegistryPath(registryPath);
   
   // Handle openpackage.yml at any level
@@ -31,17 +30,12 @@ export function isSkippableRegistryPath(registryPath: string): boolean {
     return true;
   }
 
-  const universalInfo = extractUniversalSubdirInfo(normalized);
-  if (!universalInfo) {
+  // Check if it's a platform-specific YML file (e.g., rules.cursor.yml)
+  if (!normalized.endsWith(FILE_PATTERNS.YML_FILE)) {
     return false;
   }
 
-  const normalizedRel = normalizePathForProcessing(universalInfo.relPath);
-  if (!normalizedRel.endsWith(FILE_PATTERNS.YML_FILE)) {
-    return false;
-  }
-
-  const fileName = normalizedRel.split('/').pop();
+  const fileName = normalized.split('/').pop();
   if (!fileName) {
     return false;
   }
@@ -55,39 +49,64 @@ export function isSkippableRegistryPath(registryPath: string): boolean {
   return isPlatformId(possiblePlatform);
 }
 
-export function isAllowedRegistryPath(registryPath: string): boolean {
+/**
+ * Check if a registry path is allowed to be included in a package.
+ * Uses flow-based pattern matching to determine if a file is universal content.
+ * 
+ * @param registryPath - Path to validate
+ * @param cwd - Optional cwd for local platform config overrides
+ * @returns true if path should be included in package
+ */
+export function isAllowedRegistryPath(registryPath: string, cwd?: string): boolean {
   const normalized = normalizeRegistryPath(registryPath);
 
+  // Exclude root files (handled separately)
   if (isRootRegistryPath(normalized)) return false;
-  if (isSkippableRegistryPath(normalized)) return false;
+  
+  // Exclude platform-specific YML files
+  if (isSkippableRegistryPath(normalized, cwd)) return false;
 
-  // Reject copy-to-root entries here; they are handled explicitly elsewhere
+  // Exclude copy-to-root entries (handled explicitly elsewhere)
   if (isRootCopyPath(normalized)) return false;
 
-  // Strict v2: only accept paths whose first component is a universal subdir
-  const universalInfo = extractUniversalSubdirInfo(normalized);
-  return Boolean(universalInfo);
+  // Flow-based validation: path must match at least one universal pattern
+  return matchesUniversalPattern(normalized, cwd);
 }
 
+/**
+ * Extract universal subdirectory info from a registry path if it starts with a known subdir.
+ * Returns null for root-level files that match universal patterns.
+ * 
+ * @param registryPath - Registry path to analyze
+ * @param cwd - Optional cwd for local platform config overrides
+ * @returns Subdirectory info or null
+ * 
+ * @deprecated This function exists for backward compatibility with code that needs
+ * to extract subdirectory information for path mapping. New code should use
+ * matchesUniversalPattern() for validation.
+ */
 export function extractUniversalSubdirInfo(
   registryPath: string,
   cwd?: string
 ): { universalSubdir: string; relPath: string } | null {
   const normalized = normalizeRegistryPath(registryPath);
 
-  // Strict v2: do not accept legacy .openpackage/ prefix
-  if (normalized.startsWith(`${DIR_PATTERNS.OPENPACKAGE}/`)) {
+  // Must match a universal pattern
+  if (!matchesUniversalPattern(normalized, cwd)) {
     return null;
   }
 
-  const firstComponent = getFirstPathComponent(normalized);
-
-  const universalSubdirs = getAllUniversalSubdirs(cwd);
-  if (!firstComponent || !universalSubdirs.has(firstComponent)) {
+  // Extract first path component
+  const parts = normalized.split('/');
+  const firstComponent = parts[0];
+  
+  // If first component contains a dot, it's a root-level file, not a subdir
+  if (!firstComponent || firstComponent.includes('.')) {
     return null;
   }
 
-  const relPath = getPathAfterFirstComponent(normalized) ?? '';
+  // First component is a directory
+  const relPath = parts.slice(1).join('/');
   return {
     universalSubdir: firstComponent,
     relPath

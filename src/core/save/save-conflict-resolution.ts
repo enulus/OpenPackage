@@ -59,7 +59,7 @@ export async function resolvePackageFilesWithConflicts(
     localRootCandidates,
     workspaceRootCandidates
   ] = await Promise.all([
-    loadLocalCandidates(packageRootDir),
+    loadLocalCandidates(packageRootDir, cwd),
     discoverWorkspaceCandidates(cwd, packageContext.config.name),
     loadLocalRootSaveCandidates(packageRootDir, packageContext.config.name),
     discoverWorkspaceRootSaveCandidates(cwd, packageContext.config.name)

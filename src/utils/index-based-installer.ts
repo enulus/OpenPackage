@@ -745,7 +745,7 @@ async function loadRegistryFileEntries(
       continue;
     }
 
-    if (!isAllowedRegistryPath(normalized)) {
+    if (!isAllowedRegistryPath(normalized, opts?.cwd)) {
       // Ignore any other top-level paths (e.g., README.md, some/...)
       continue;
     }
@@ -1281,7 +1281,7 @@ function mapRegistryPathToTargets(
             parsed.relPath,
             cwd
           );
-          const targetAbs = join(cwd, mapped.absFile);
+          const targetAbs = join(cwd, mapped.relFile);
           targets.push({
             absPath: targetAbs,
             relPath: normalizeRelativePath(cwd, targetAbs),
@@ -1299,7 +1299,7 @@ function mapRegistryPathToTargets(
     for (const platform of platforms) {
       try {
         const mapped = mapUniversalToPlatform(platform, universalInfo.universalSubdir, rel, cwd);
-        const targetAbs = join(cwd, mapped.absFile);
+        const targetAbs = join(cwd, mapped.relFile);
         targets.push({
           absPath: targetAbs,
           relPath: normalizeRelativePath(cwd, targetAbs),
@@ -1580,8 +1580,8 @@ async function augmentIndexMappingWithRootAndCopyToRoot(
   // flows where the source path itself is the only existing workspace location before apply/install.
   for (const file of packageFiles) {
     const normalized = normalizeRegistryPath(file.path);
-    if (!isAllowedRegistryPath(normalized)) continue;
-    if (isSkippableRegistryPath(normalized)) continue;
+    if (!isAllowedRegistryPath(normalized, cwd)) continue;
+    if (isSkippableRegistryPath(normalized, cwd)) continue;
     if (await exists(join(cwd, normalized))) {
       addMappingValue(augmented, normalized, normalized);
     }
@@ -1626,8 +1626,8 @@ export async function buildIndexMappingForPackageFiles(
       const normalized = normalizeRegistryPath(file.path);
       // Skip root files and skippable paths (same logic as loadRegistryFileEntries)
       if (isRootRegistryPath(normalized)) return false;
-      if (isSkippableRegistryPath(normalized)) return false;
-      return isAllowedRegistryPath(normalized);
+      if (isSkippableRegistryPath(normalized, cwd)) return false;
+      return isAllowedRegistryPath(normalized, cwd);
     })
     .map(file => ({
       registryPath: normalizeRegistryPath(file.path),
@@ -1652,13 +1652,13 @@ export async function buildIndexMappingForPackageFiles(
   return await augmentIndexMappingWithRootAndCopyToRoot(cwd, mapping, packageFiles, platforms);
 }
 
-function filterRegistryEntriesForPackageFiles(packageFiles: PackageFile[]): RegistryFileEntry[] {
+function filterRegistryEntriesForPackageFiles(packageFiles: PackageFile[], cwd?: string): RegistryFileEntry[] {
   return packageFiles
     .filter(file => {
       const normalized = normalizeRegistryPath(file.path);
       if (isRootRegistryPath(normalized)) return false;
-      if (isSkippableRegistryPath(normalized)) return false;
-      return isAllowedRegistryPath(normalized);
+      if (isSkippableRegistryPath(normalized, cwd)) return false;
+      return isAllowedRegistryPath(normalized, cwd);
     })
     .map(file => ({
       registryPath: normalizeRegistryPath(file.path),
@@ -1681,7 +1681,7 @@ export async function applyPlannedSyncForPackageFiles(
   options: InstallOptions,
   location: PackageIndexLocation = 'nested'
 ): Promise<PlannedSyncOutcome> {
-  const registryEntries = filterRegistryEntriesForPackageFiles(packageFiles);
+  const registryEntries = filterRegistryEntriesForPackageFiles(packageFiles, cwd);
 
   const plannedFiles = createPlannedFiles(registryEntries);
   attachTargetsToPlannedFiles(cwd, plannedFiles, platforms);

@@ -20,6 +20,10 @@ import { readJsoncFileSync, readJsoncOrJson } from "../utils/jsonc.js"
 import * as os from "os"
 import type { Flow } from "../types/flows.js"
 import type { PlatformFlowsConfig as PlatformFlowsConfigType, GlobalFlowsConfig } from "../types/platform-flows.js"
+import { 
+  matchesAnyPattern, 
+  extractSubdirectoriesFromPatterns 
+} from "./universal-patterns.js"
 
 export type Platform = string
 
@@ -56,7 +60,8 @@ export interface PlatformsState {
   defs: Record<Platform, PlatformDefinition>
   dirLookup: Record<string, Platform>
   aliasLookup: Record<string, Platform>
-  universalSubdirs: Set<string>
+  universalPatterns: Set<string>  // All 'from' patterns from flows (source of truth)
+  universalSubdirs: Set<string>  // Derived from patterns for backward compatibility
   rootFiles: string[]
   allPlatforms: Platform[]
   enabledPlatforms: Platform[]
@@ -383,41 +388,39 @@ function getPlatformsState(cwd?: string | null): PlatformsState {
 
   const dirLookup: Record<string, Platform> = {}
   const aliasLookup: Record<string, Platform> = {}
-  const universalSubdirs = new Set<string>()
+  const universalPatterns = new Set<string>()
   const rootFiles: string[] = []
   const allPlatforms: Platform[] = []
 
+  // Collect all universal patterns from platform flows
   for (const def of Object.values(defs)) {
     allPlatforms.push(def.id)
     dirLookup[def.rootDir] = def.id
     for (const alias of def.aliases ?? []) {
       aliasLookup[alias.toLowerCase()] = def.id
     }
-    // Add universal subdirs from flows config
+    
+    // Collect all 'from' patterns from flows
     if (def.flows && def.flows.length > 0) {
       for (const flow of def.flows) {
-        // Extract first path component from 'from' pattern
-        const firstComponent = flow.from.split('/')[0]
-        // Skip if it's a file pattern (contains extension) or root file
-        if (firstComponent && !firstComponent.includes('.')) {
-          universalSubdirs.add(firstComponent)
-        }
+        universalPatterns.add(flow.from)
       }
     }
+    
     if (def.rootFile) {
       rootFiles.push(def.rootFile)
     }
   }
 
-  // Add universal subdirs from global flows
+  // Add patterns from global flows
   if (globalFlows && globalFlows.length > 0) {
     for (const flow of globalFlows) {
-      const firstComponent = flow.from.split('/')[0]
-      if (firstComponent && !firstComponent.includes('.')) {
-        universalSubdirs.add(firstComponent)
-      }
+      universalPatterns.add(flow.from)
     }
   }
+
+  // Derive subdirectories from patterns (backward compatibility)
+  const universalSubdirs = extractSubdirectoriesFromPatterns(universalPatterns)
 
   const enabledPlatforms = allPlatforms.filter(p => defs[p].enabled)
 
@@ -427,6 +430,7 @@ function getPlatformsState(cwd?: string | null): PlatformsState {
     defs,
     dirLookup,
     aliasLookup,
+    universalPatterns,
     universalSubdirs,
     rootFiles,
     allPlatforms,
@@ -472,10 +476,46 @@ export function platformUsesSubdirs(platform: Platform, cwd?: string): boolean {
 }
 
 /**
+ * Get all universal path patterns from flow definitions.
+ * These patterns define which files are considered universal package content.
+ * This is the source of truth for determining what belongs in a package.
+ * 
+ * @param cwd - Optional cwd for local config overrides
+ * @returns Set of glob patterns from all platform flows
+ * 
+ * @example
+ * // Returns: Set(["rules/**\/*.md", "mcp.jsonc", "commands/*.md", ...])
+ * const patterns = getAllUniversalPatterns()
+ */
+export function getAllUniversalPatterns(cwd?: string): Set<string> {
+  return new Set(getPlatformsState(cwd).universalPatterns)
+}
+
+/**
+ * Check if a file path matches any universal pattern from flows.
+ * This is the primary method for determining if a file is universal content.
+ * 
+ * @param filePath - File path to check (normalized, no leading slash)
+ * @param cwd - Optional cwd for local config overrides
+ * @returns true if path matches any universal pattern
+ * 
+ * @example
+ * matchesUniversalPattern("mcp.jsonc") // true (if defined in flows)
+ * matchesUniversalPattern("rules/typescript.md") // true
+ * matchesUniversalPattern("random-file.txt") // false
+ */
+export function matchesUniversalPattern(filePath: string, cwd?: string): boolean {
+  const patterns = getAllUniversalPatterns(cwd)
+  return matchesAnyPattern(filePath, patterns)
+}
+
+/**
  * Get all unique universal subdirectory names defined across all platforms.
- * This dynamically discovers what subdirs exist based on the loaded platform configs.
+ * This is derived from universal patterns for backward compatibility.
+ * 
  * @param cwd - Optional cwd for local config overrides
  * @returns Set of all universal subdir names
+ * @deprecated Prefer using matchesUniversalPattern for file validation
  */
 export function getAllUniversalSubdirs(cwd?: string): Set<string> {
   return new Set(getPlatformsState(cwd).universalSubdirs)
@@ -483,9 +523,11 @@ export function getAllUniversalSubdirs(cwd?: string): Set<string> {
 
 /**
  * Check if a string is a recognized universal subdir.
+ * 
  * @param subdirName - Name to check
  * @param cwd - Optional cwd for local config overrides
  * @returns true if the subdir is defined in any platform
+ * @deprecated Prefer using matchesUniversalPattern for file validation
  */
 export function isKnownUniversalSubdir(subdirName: string, cwd?: string): boolean {
   return getPlatformsState(cwd).universalSubdirs.has(subdirName)

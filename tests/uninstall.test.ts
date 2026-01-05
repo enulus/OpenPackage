@@ -17,7 +17,7 @@ async function setupWorkspace(): Promise<{ cwd: string; home: string }> {
 
   await fs.writeFile(
     path.join(openpkgDir, 'openpackage.yml'),
-    ['name: workspace', 'packages:', '  - name: my-pkg', '    path: ./packages/my-pkg/', ''].join('\n'),
+    ['name: workspace', 'packages:', '  - name: my-pkg', '    path: ./.openpackage/packages/my-pkg/', ''].join('\n'),
     'utf8'
   );
 
@@ -40,7 +40,7 @@ async function setupWorkspace(): Promise<{ cwd: string; home: string }> {
       '',
       'packages:',
       '  my-pkg:',
-      '    path: ./packages/my-pkg/',
+      '    path: ./.openpackage/packages/my-pkg/',
       '    version: 1.0.0',
       '    files:',
       '      rules/:',

@@ -146,12 +146,12 @@ export async function getPlatformSpecificPath(
   const { mapUniversalToPlatform } = await import('./platform-mapper.js');
 
   // Get the mapping
-  const { absDir, absFile } = mapUniversalToPlatform(platform, universalSubdir, relPath, cwd);
+  const { relDir, relFile } = mapUniversalToPlatform(platform, universalSubdir, relPath, cwd);
 
   // Convert relative paths to absolute paths
   const { join } = await import('path');
   return {
-    absDir: join(cwd, absDir),
-    absFile: join(cwd, absFile)
+    absDir: join(cwd, relDir),
+    absFile: join(cwd, relFile)
   };
 }

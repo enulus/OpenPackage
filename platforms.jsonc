@@ -106,6 +106,9 @@
         "from": "mcp.jsonc",
         "to": ".cursor/mcp.json",
         "pipe": ["filter-comments"],
+        "map": {
+          "mcp.*": "mcpServers.*"
+        },
         "merge": "deep"
       }
     ]
