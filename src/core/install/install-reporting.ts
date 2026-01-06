@@ -1,5 +1,6 @@
 import type { PackageRemoteResolutionOutcome } from './types.js';
 import { extractRemoteErrorReason } from '../../utils/error-reasons.js';
+import { formatPathForDisplay } from '../../utils/formatters.js';
 
 export function formatSelectionSummary(
   source: 'local' | 'remote' | 'path',
@@ -85,7 +86,7 @@ export function displayInstallationResults(
     console.log(`✓ Added files: ${allAddedFiles.length}`);
     const sortedFiles = [...allAddedFiles].sort((a, b) => a.localeCompare(b));
     for (const file of sortedFiles) {
-      console.log(`   ├── ${file}`);
+      console.log(`   ├── ${formatPathForDisplay(file)}`);
     }
   }
 
@@ -93,7 +94,7 @@ export function displayInstallationResults(
     console.log(`✓ Updated files: ${allUpdatedFiles.length}`);
     const sortedFiles = [...allUpdatedFiles].sort((a, b) => a.localeCompare(b));
     for (const file of sortedFiles) {
-      console.log(`   ├── ${file}`);
+      console.log(`   ├── ${formatPathForDisplay(file)}`);
     }
   }
 
@@ -105,14 +106,14 @@ export function displayInstallationResults(
       if (rootFileResults.installed.length > 0) {
         const sortedInstalled = [...rootFileResults.installed].sort((a, b) => a.localeCompare(b));
         for (const file of sortedInstalled) {
-          console.log(`   ├── ${file} (created)`);
+          console.log(`   ├── ${formatPathForDisplay(file)} (created)`);
         }
       }
 
       if (rootFileResults.updated.length > 0) {
         const sortedUpdated = [...rootFileResults.updated].sort((a, b) => a.localeCompare(b));
         for (const file of sortedUpdated) {
-          console.log(`   ├── ${file} (updated)`);
+          console.log(`   ├── ${formatPathForDisplay(file)} (updated)`);
         }
       }
     }

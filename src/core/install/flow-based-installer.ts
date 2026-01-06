@@ -18,6 +18,7 @@ import { exists, ensureDir } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
 import { toTildePath } from '../../utils/path-resolution.js';
 import { minimatch } from 'minimatch';
+import { parseUniversalPath } from '../../utils/platform-file.js';
 
 // ============================================================================
 // Types and Interfaces
@@ -365,34 +366,85 @@ export async function installPackageWithFlows(
     // Discover source files for each flow
     const flowSources = await discoverFlowSources(flows, packageRoot, flowContext);
 
+    // Build a map of base paths to platforms that have override files
+    // This allows universal files to exclude platforms that have platform-specific overrides
+    const overridesByBasePath = new Map<string, Set<Platform>>();
+    for (const [flow, sources] of flowSources) {
+      for (const sourceRel of sources) {
+        const parsed = parseUniversalPath(sourceRel, { allowPlatformSuffix: true });
+        if (parsed?.platformSuffix) {
+          const baseKey = `${parsed.universalSubdir}/${parsed.relPath}`;
+          if (!overridesByBasePath.has(baseKey)) {
+            overridesByBasePath.set(baseKey, new Set());
+          }
+          overridesByBasePath.get(baseKey)!.add(parsed.platformSuffix as Platform);
+        }
+      }
+    }
+
     // Execute flows per *concrete source file* (avoid re-expanding globs inside executor)
     for (const [flow, sources] of flowSources) {
       for (const sourceRel of sources) {
         const sourceAbs = join(packageRoot, sourceRel);
+        
+        // Check for platform-specific file suffix (e.g., commands/foo.claude.md)
+        // Parse with allowPlatformSuffix to detect and strip platform suffix
+        const parsed = parseUniversalPath(sourceRel, { allowPlatformSuffix: true });
+        
+        // If file has platform suffix, only process for that specific platform
+        if (parsed?.platformSuffix) {
+          const filePlatform = parsed.platformSuffix as Platform;
+          if (filePlatform !== platform) {
+            // This file is for a different platform, skip it
+            logger.debug(`Skipping ${sourceRel} for platform ${platform} (file is for ${filePlatform})`);
+            continue;
+          }
+          // File is for current platform - use the suffix-stripped path for mapping
+          // parsed.relPath has the suffix removed (e.g., "foo.claude.md" -> "foo.md")
+        } else if (parsed) {
+          // Universal file: check if there's a platform-specific override for current platform
+          const baseKey = `${parsed.universalSubdir}/${parsed.relPath}`;
+          const overridePlatforms = overridesByBasePath.get(baseKey);
+          if (overridePlatforms && overridePlatforms.has(platform)) {
+            // This universal file is overridden by a platform-specific file for this platform
+            logger.debug(`Skipping universal file ${sourceRel} for platform ${platform} (overridden by platform-specific file)`);
+            continue;
+          }
+        }
+        
         try {
-          const capturedName = extractCapturedName(sourceRel, flow.from);
+          // Use suffix-stripped path if available, otherwise use original
+          // This is the path used for flow pattern matching and target path resolution
+          const sourceRelForMapping = parsed ? `${parsed.universalSubdir}/${parsed.relPath}` : sourceRel;
+          const sourceAbsForMapping = parsed ? join(packageRoot, sourceRelForMapping) : sourceAbs;
+          
+          const capturedName = extractCapturedName(sourceRelForMapping, flow.from);
 
           const sourceContext: FlowContext = {
             ...flowContext,
             variables: {
               ...flowContext.variables,
-              sourcePath: sourceRel,
-              sourceDir: dirname(sourceRel),
-              sourceFile: basename(sourceRel),
+              sourcePath: sourceRelForMapping,
+              sourceDir: dirname(sourceRelForMapping),
+              sourceFile: basename(sourceRelForMapping),
               ...(capturedName ? { capturedName } : {})
             }
           };
 
           // Resolve a concrete target path so flow-executor doesn't need glob expansion.
+          // Use the suffix-stripped source path for target resolution
           const rawToPattern = typeof flow.to === 'string' ? flow.to : Object.keys(flow.to)[0] ?? '';
           const resolvedToPattern = resolvePattern(rawToPattern, sourceContext, capturedName);
-          const targetAbs = resolveTargetFromGlob(sourceAbs, flow.from, resolvedToPattern, sourceContext);
+          const targetAbs = resolveTargetFromGlob(sourceAbsForMapping, flow.from, resolvedToPattern, sourceContext);
           const targetRel = relative(workspaceRoot, targetAbs);
 
+          // Create a concrete flow using the original source path for file reading
+          // but with target path computed from the suffix-stripped source
+          // The flow executor will resolve flow.from relative to packageRoot
           const concreteFlow: Flow = {
             ...flow,
-            from: sourceRel,
-            to: targetRel
+            from: sourceRel, // Original source path (may have platform suffix) for file reading
+            to: targetRel     // Target path computed from stripped source
           };
 
           const flowResult = await executor.executeFlow(concreteFlow, sourceContext);
