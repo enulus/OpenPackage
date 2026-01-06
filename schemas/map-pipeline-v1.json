@@ -1,0 +1,229 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://openpackage.ai/schemas/map-pipeline-v1.json",
+  "title": "Map Pipeline",
+  "description": "MongoDB-inspired transformation pipeline for document field operations",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "type": "object",
+    "oneOf": [
+      {
+        "title": "$set Operation",
+        "description": "Set field values with context variable resolution",
+        "required": ["$set"],
+        "properties": {
+          "$set": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "title": "$rename Operation",
+        "description": "Rename fields with wildcard support",
+        "required": ["$rename"],
+        "properties": {
+          "$rename": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": { "type": "string" }
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "title": "$unset Operation",
+        "description": "Remove fields from document",
+        "required": ["$unset"],
+        "properties": {
+          "$unset": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 1
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "title": "$switch Operation",
+        "description": "Pattern matching with value replacement",
+        "required": ["$switch"],
+        "properties": {
+          "$switch": {
+            "type": "object",
+            "required": ["field", "cases"],
+            "properties": {
+              "field": {
+                "type": "string",
+                "description": "Field path to check and replace"
+              },
+              "cases": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["pattern", "value"],
+                  "properties": {
+                    "pattern": {
+                      "description": "Pattern to match (string glob or object shape)"
+                    },
+                    "value": {
+                      "description": "Value to set if pattern matches"
+                    }
+                  }
+                }
+              },
+              "default": {
+                "description": "Default value if no pattern matches"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "title": "$transform Operation",
+        "description": "Pipeline transformation on a field",
+        "required": ["$transform"],
+        "properties": {
+          "$transform": {
+            "type": "object",
+            "required": ["field", "steps"],
+            "properties": {
+              "field": {
+                "type": "string",
+                "description": "Field path to transform"
+              },
+              "steps": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "oneOf": [
+                    {
+                      "title": "filter step",
+                      "properties": {
+                        "filter": {
+                          "type": "object",
+                          "properties": {
+                            "value": { "description": "Filter by value equality" },
+                            "key": { "description": "Filter by key equality" }
+                          }
+                        }
+                      },
+                      "required": ["filter"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "title": "keys step",
+                      "properties": { "keys": { "const": true } },
+                      "required": ["keys"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "title": "values step",
+                      "properties": { "values": { "const": true } },
+                      "required": ["values"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "title": "entries step",
+                      "properties": { "entries": { "const": true } },
+                      "required": ["entries"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "title": "map step",
+                      "properties": {
+                        "map": {
+                          "type": "string",
+                          "enum": ["capitalize", "uppercase", "lowercase"]
+                        }
+                      },
+                      "required": ["map"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "title": "join step",
+                      "properties": {
+                        "join": {
+                          "type": "string",
+                          "description": "Separator string for joining array elements"
+                        }
+                      },
+                      "required": ["join"],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "title": "$copy Operation",
+        "description": "Copy field with optional pattern-based transformation",
+        "required": ["$copy"],
+        "properties": {
+          "$copy": {
+            "type": "object",
+            "required": ["from", "to"],
+            "properties": {
+              "from": {
+                "type": "string",
+                "description": "Source field path"
+              },
+              "to": {
+                "type": "string",
+                "description": "Target field path"
+              },
+              "transform": {
+                "type": "object",
+                "required": ["cases"],
+                "properties": {
+                  "cases": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "required": ["pattern", "value"],
+                      "properties": {
+                        "pattern": { "description": "Pattern to match" },
+                        "value": { "description": "Value to set if pattern matches" }
+                      }
+                    }
+                  },
+                  "default": {
+                    "description": "Default value if no pattern matches"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    ]
+  },
+  "examples": [
+    [{ "$set": { "name": "$$filename" } }],
+    [{ "$rename": { "mcp": "mcpServers" } }],
+    [{ "$switch": { "field": "model", "cases": [{ "pattern": "anthropic/claude-sonnet-*", "value": "sonnet" }], "default": "inherit" } }],
+    [{ "$transform": { "field": "tools", "steps": [{ "filter": { "value": true } }, { "keys": true }, { "map": "capitalize" }, { "join": ", " }] } }],
+    [{ "$copy": { "from": "permission", "to": "permissionMode", "transform": { "cases": [{ "pattern": { "edit": "deny", "bash": "deny" }, "value": "plan" }], "default": "default" } } }]
+  ]
+}

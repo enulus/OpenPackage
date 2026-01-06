@@ -95,18 +95,12 @@
           }
         },
         "map": {
-          "type": "object",
-          "description": "Key mapping configuration - rename and transform keys",
-          "additionalProperties": {
-            "oneOf": [
-              {
-                "type": "string",
-                "description": "Simple key rename (target key path)"
-              },
-              {
-                "$ref": "#/definitions/keyMapConfig"
-              }
-            ]
+          "type": "array",
+          "description": "Map Pipeline - array of transformation operations",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "description": "A single map operation"
           }
         },
         "pick": {
@@ -177,17 +171,11 @@
           }
         },
         "map": {
-          "type": "object",
-          "description": "Key mapping overrides",
-          "additionalProperties": {
-            "oneOf": [
-              {
-                "type": "string"
-              },
-              {
-                "$ref": "#/definitions/keyMapConfig"
-              }
-            ]
+          "type": "array",
+          "description": "Map Pipeline overrides",
+          "minItems": 1,
+          "items": {
+            "type": "object"
           }
         },
         "pick": {
@@ -220,45 +208,7 @@
         }
       }
     },
-    "keyMapConfig": {
-      "type": "object",
-      "description": "Advanced key mapping with transformations and defaults",
-      "required": ["to"],
-      "properties": {
-        "to": {
-          "type": "string",
-          "description": "Target key path (supports dot notation)"
-        },
-        "transform": {
-          "oneOf": [
-            {
-              "type": "string",
-              "description": "Single transform name"
-            },
-            {
-              "type": "array",
-              "description": "Array of transform names to apply in order",
-              "items": {
-                "type": "string"
-              }
-            }
-          ]
-        },
-        "default": {
-          "description": "Default value if source key is missing"
-        },
-        "values": {
-          "type": "object",
-          "description": "Value lookup table - map source values to target values",
-          "additionalProperties": true
-        },
-        "required": {
-          "type": "boolean",
-          "description": "Whether to remove the key if value is undefined/null",
-          "default": false
-        }
-      }
-    },
+
     "condition": {
       "type": "object",
       "description": "Conditions for flow execution",
@@ -400,14 +350,9 @@
           {
             "from": "agents/{name}.md",
             "to": ".claude/agents/{name}.md",
-            "pipe": ["frontmatter"],
-            "map": {
-              "title": "name",
-              "tags": {
-                "to": "categories",
-                "transform": "array-unique"
-              }
-            }
+            "map": [
+              { "$set": { "name": "$$filename" } }
+            ]
           }
         ]
       }

@@ -375,19 +375,6 @@ When packages use platform flows with merge strategies (`deep` or `shallow`), th
 - ❌ `merge: 'composite'` - delimiter-based tracking used
 - ❌ Simple file copy - no merge involved
 
-**Example flow with key transformation:**
-
-```jsonc
-{
-  "from": "mcp.jsonc",
-  "to": ".opencode/opencode.json",
-  "map": {
-    "mcpServers.*": "mcp.*"  // Transform keys
-  },
-  "merge": "deep"
-}
-```
-
 **Package source:**
 ```json
 {

@@ -299,9 +299,9 @@ function validateFlows(flows: Flow[], context: string): string[] {
       }
     }
     
-    // Validate map
-    if (flow.map !== undefined && (typeof flow.map !== 'object' || Array.isArray(flow.map))) {
-      errors.push(`${context}, flows[${i}]: 'map' must be object or undefined`)
+    // Validate map pipeline (must be array)
+    if (flow.map !== undefined && !Array.isArray(flow.map)) {
+      errors.push(`${context}, flows[${i}]: 'map' must be array of operations`)
     }
     
     // Validate pick/omit

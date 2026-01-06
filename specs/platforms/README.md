@@ -12,6 +12,7 @@ The **Platform System** is OpenPackage's declarative transformation engine that 
 ### Core Concepts
 
 - **[Flows](./flows.md)** - Declarative transformation system: execution pipeline, format conversion, and merge strategies
+- **[Map Pipeline](./map-pipeline.md)** - MongoDB-inspired document transformations: 6 core operations, context variables, and pattern matching
 - **[Configuration](./configuration.md)** - Structure of `platforms.jsonc`, merge hierarchy, and validation rules
 - **[Flow Reference](./flow-reference.md)** - Complete technical reference for all flow fields, transforms, and options
 

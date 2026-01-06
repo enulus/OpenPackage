@@ -5,6 +5,8 @@
  * universal package format and platform-specific workspace files.
  */
 
+import type { MapPipeline } from '../core/flows/map-pipeline/types.js';
+
 // ============================================================================
 // Core Flow Types
 // ============================================================================
@@ -23,8 +25,8 @@ export interface Flow {
   /** Transform pipeline - array of transform names to apply in order */
   pipe?: string[];
 
-  /** Key mapping configuration - rename and transform keys */
-  map?: KeyMap;
+  /** Map pipeline - MongoDB-inspired document transformations */
+  map?: MapPipeline;
 
   /** Keys to include (whitelist) */
   pick?: string[];

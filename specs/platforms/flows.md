@@ -430,36 +430,58 @@ terminal:
 
 ### Stage 4: Map (optional)
 
-Transform keys and values:
+Transform document fields using a **MongoDB-inspired pipeline**:
 
 ```jsonc
 {
-  "map": {
-    "theme": "workbench.colorTheme",           // Simple rename
-    "fontSize": {
-      "to": "editor.fontSize",
-      "transform": "number",                    // Type conversion
-      "default": 14
-    },
-    "ai.*": "cursor.*"                          // Wildcard mapping
-  }
+  "map": [
+    { "$set": { "name": "$$filename" } },
+    { "$rename": { "mcp": "mcpServers" } },
+    { "$unset": "deprecated" }
+  ]
+}
+```
+
+**Map Pipeline** is an array of operations that execute sequentially on the document:
+
+**Six core operations:**
+1. **`$set`** - Set field values (supports context variables like `$$filename`)
+2. **`$rename`** - Rename fields (supports wildcards)
+3. **`$unset`** - Remove fields
+4. **`$switch`** - Pattern-based value replacement
+5. **`$transform`** - Multi-step field transformation (objects → strings)
+6. **`$copy`** - Copy field with optional transformation
+
+**Example transformation:**
+```jsonc
+{
+  "map": [
+    { "$set": { "name": "$$filename" } },
+    {
+      "$switch": {
+        "field": "model",
+        "cases": [
+          { "pattern": "anthropic/claude-sonnet-*", "value": "sonnet" }
+        ],
+        "default": "inherit"
+      }
+    }
+  ]
 }
 ```
 
 **Before:**
-```json
-{ "theme": "dark", "fontSize": "14" }
+```yaml
+model: anthropic/claude-sonnet-4-20250514
 ```
 
 **After:**
-```json
-{
-  "workbench": { "colorTheme": "dark" },
-  "editor": { "fontSize": 14 }
-}
+```yaml
+name: code-reviewer
+model: sonnet
 ```
 
-See [Flow Reference](./flow-reference.md#key-mapping) for complete mapping syntax.
+See [Map Pipeline](./map-pipeline.md) for complete operation reference and [Flow Reference](./flow-reference.md#map-pipeline) for usage in flows.
 
 ### Stage 5: Transform (optional)
 

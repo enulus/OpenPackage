@@ -67,7 +67,35 @@
       },
       {
         "from": "agents/**/*.md",
-        "to": ".claude/agents/**/*.md"
+        "to": ".claude/agents/**/*.md",
+        "map": [
+          // Set name from context
+          { "$set": { "name": "$$filename" } },
+          // Transform model
+          {
+            "$switch": {
+              "field": "model",
+              "cases": [
+                { "pattern": "anthropic/claude-sonnet-*", "value": "sonnet" },
+                { "pattern": "anthropic/claude-opus-*", "value": "opus" },
+                { "pattern": "anthropic/claude-haiku-*", "value": "haiku" }
+              ],
+              "default": "inherit"
+            }
+          },
+          // Transform tools
+          {
+            "$transform": {
+              "field": "tools",
+              "steps": [
+                { "filter": { "value": true } },
+                { "keys": true },
+                { "join": ", " }
+              ]
+            }
+          },
+          { "$unset": "permission" }
+        ]
       },
       {
         "from": "skills/**/*",
@@ -77,9 +105,9 @@
         "from": "mcp.jsonc",
         "to": ".mcp.json",
         "pipe": ["filter-comments"],
-        "map": {
-          "mcp.*": "mcpServers.*"
-        },
+        "map": [
+          { "$rename": { "mcp": "mcpServers" } }
+        ],
         "merge": "deep"
       }
     ]
@@ -99,9 +127,9 @@
         "from": "mcp.jsonc",
         "to": ".codex/mcp-servers.toml",
         "pipe": ["filter-comments", "json-to-toml"],
-        "map": {
-          "mcp.*": "mcp_servers.*"
-        },
+        "map": [
+          { "$rename": { "mcp": "mcp_servers" } }
+        ],
         "merge": "deep"
       }
     ]
@@ -124,9 +152,9 @@
         "from": "mcp.jsonc",
         "to": ".cursor/mcp.json",
         "pipe": ["filter-comments"],
-        "map": {
-          "mcp.*": "mcpServers.*"
-        },
+        "map": [
+          { "$rename": { "mcp": "mcpServers" } }
+        ],
         "merge": "deep"
       }
     ]
@@ -166,9 +194,9 @@
         "from": "mcp.jsonc",
         "to": ".kilocode/mcp.json",
         "pipe": ["filter-comments"],
-        "map": {
-          "mcp.*": "mcpServers.*"
-        },
+        "map": [
+          { "$rename": { "mcp": "mcpServers" } }
+        ],
         "merge": "deep"
       }
     ]
@@ -206,9 +234,9 @@
         "from": "mcp.jsonc",
         "to": ".opencode/opencode.json",
         "pipe": ["filter-comments"],
-        "map": {
-          "mcpServers.*": "mcp.*"
-        },
+        "map": [
+          { "$rename": { "mcpServers": "mcp" } }
+        ],
         "merge": "deep"
       }
     ]
@@ -245,9 +273,9 @@
         "from": "mcp.jsonc",
         "to": ".roo/mcp.json",
         "pipe": ["filter-comments"],
-        "map": {
-          "mcp.*": "mcpServers.*"
-        },
+        "map": [
+          { "$rename": { "mcp": "mcpServers" } }
+        ],
         "merge": "deep"
       }
     ]

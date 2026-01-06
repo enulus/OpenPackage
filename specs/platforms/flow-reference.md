@@ -157,110 +157,246 @@ Ordered list of transforms to apply to content.
 **Custom transforms:**
 Register via `handler` field for complex logic.
 
-### `map` (object)
+### `map` (array)
 
-Key and value transformations.
+MongoDB-inspired transformation pipeline for document field operations.
 
-**Simple rename:**
+**Pipeline structure:**
 ```jsonc
 {
-  "map": {
-    "oldKey": "newKey"
-  }
+  "map": [
+    { "$operation1": config },
+    { "$operation2": config },
+    ...
+  ]
 }
 ```
 
-**Dot notation (nested paths):**
+**Core concept:** Map is an **array of operations** that execute sequentially on the entire document. Each operation performs a specific transformation.
+
+#### Operation 1: `$set` - Set Field Values
+
+Set one or more field values with context variable support:
+
 ```jsonc
-{
-  "map": {
-    "theme": "workbench.colorTheme",
-    "fontSize": "editor.fontSize"
-  }
-}
+// Single field with context variable
+{ "$set": { "name": "$$filename" } }
+
+// Multiple fields
+{ "$set": { 
+  "name": "$$filename",
+  "version": "1.0.0"
+}}
+
+// Nested fields (dot notation)
+{ "$set": { "config.model": "sonnet" } }
+```
+
+**Context variables** (use `$$` prefix):
+- `$$filename` - Filename without extension
+- `$$dirname` - Parent directory name
+- `$$path` - Full relative path
+- `$$ext` - File extension (including dot)
+
+#### Operation 2: `$rename` - Rename Fields
+
+Rename fields with wildcard support:
+
+```jsonc
+// Simple rename
+{ "$rename": { "oldName": "newName" } }
+
+// Multiple renames
+{ "$rename": { 
+  "old1": "new1",
+  "old2": "new2"
+}}
+
+// Nested paths
+{ "$rename": { "config.ai.model": "settings.model" } }
 ```
 
 **Before:**
 ```json
-{ "theme": "dark", "fontSize": 14 }
+{ "mcp": { "server1": {}, "server2": {} } }
 ```
 
 **After:**
 ```json
-{
-  "workbench": { "colorTheme": "dark" },
-  "editor": { "fontSize": 14 }
-}
+{ "mcpServers": { "server1": {}, "server2": {} } }
 ```
 
-**Wildcard mapping:**
+#### Operation 3: `$unset` - Remove Fields
+
+Remove one or more fields:
+
+```jsonc
+// Single field
+{ "$unset": "permission" }
+
+// Multiple fields
+{ "$unset": ["permission", "legacy", "temp"] }
+
+// Nested field
+{ "$unset": "config.deprecated" }
+```
+
+#### Operation 4: `$switch` - Pattern Matching
+
+Conditional field replacement based on patterns. **First match wins.**
+
 ```jsonc
 {
-  "map": {
-    "ai.*": "cursor.*"
+  "$switch": {
+    "field": "model",
+    "cases": [
+      { "pattern": "anthropic/claude-sonnet-*", "value": "sonnet" },
+      { "pattern": "anthropic/claude-opus-*", "value": "opus" }
+    ],
+    "default": "inherit"
   }
 }
 ```
 
+**Pattern types:**
+- **String patterns**: Glob syntax (`*`, `?`)
+- **Object patterns**: Match object shape
+  - `{ "edit": "deny", "bash": "deny" }` - exact match
+  - `{ "*": "deny" }` - all values must be "deny"
+- **Wildcard**: `"*"` matches anything
+
 **Before:**
-```json
-{ "ai": { "model": "gpt-4", "temperature": 0.7 } }
+```yaml
+model: anthropic/claude-sonnet-4-20250514
 ```
 
 **After:**
-```json
-{ "cursor": { "model": "gpt-4", "temperature": 0.7 } }
+```yaml
+model: sonnet
 ```
 
-**Complex mapping with transforms:**
+#### Operation 5: `$transform` - Pipeline Transformation
+
+Transform a field through multiple steps:
+
 ```jsonc
 {
-  "map": {
-    "fontSize": {
-      "to": "editor.fontSize",
-      "transform": "number",
-      "default": 14
+  "$transform": {
+    "field": "tools",
+    "steps": [
+      { "filter": { "value": true } },
+      { "keys": true },
+      { "map": "capitalize" },
+      { "join": ", " }
+    ]
+  }
+}
+```
+
+**Transform steps:**
+
+| Step | Purpose | Example |
+|------|---------|---------|
+| `{ "filter": { "value": X } }` | Keep entries where value equals X | Filter true values |
+| `{ "filter": { "key": X } }` | Keep entries where key equals X | Filter by key name |
+| `{ "keys": true }` | Extract object keys to array | `{a:1, b:2}` → `["a","b"]` |
+| `{ "values": true }` | Extract values to array | `{a:1, b:2}` → `[1,2]` |
+| `{ "entries": true }` | Convert to entries | `{a:1}` → `[["a",1]]` |
+| `{ "map": "capitalize" }` | Transform each element | Capitalize strings |
+| `{ "map": "uppercase" }` | Transform each element | Uppercase strings |
+| `{ "map": "lowercase" }` | Transform each element | Lowercase strings |
+| `{ "join": "sep" }` | Join array to string | Join with separator |
+
+**Before:**
+```yaml
+tools:
+  write: false
+  bash: true
+  read: true
+```
+
+**After:**
+```yaml
+tools: Bash, Read
+```
+
+#### Operation 6: `$copy` - Copy with Transformation
+
+Copy a field with optional pattern-based transformation:
+
+```jsonc
+{
+  "$copy": {
+    "from": "permission",
+    "to": "permissionMode",
+    "transform": {
+      "cases": [
+        { "pattern": { "edit": "deny", "bash": "deny" }, "value": "plan" },
+        { "pattern": { "*": "deny" }, "value": "ignore" }
+      ],
+      "default": "default"
     }
   }
 }
 ```
 
-**Mapping object schema:**
-```typescript
-type KeyMap = {
-  [sourceKey: string]: string | {
-    to: string
-    transform?: string
-    default?: any
-    values?: { [sourceValue: string]: any }
-  }
-}
+**Combine with `$unset` to replace fields:**
+
+```jsonc
+[
+  { "$copy": { "from": "old", "to": "new" } },
+  { "$unset": "old" }
+]
 ```
 
-**Value lookup table:**
+#### Complete Pipeline Example
+
 ```jsonc
 {
-  "map": {
-    "model": {
-      "to": "aiModel",
-      "values": {
-        "anthropic/claude-sonnet-4.5": "claude-sonnet-4.5",
-        "openai/gpt-4": "gpt-4"
+  "from": "agents/**/*.md",
+  "to": ".claude/agents/**/*.md",
+  "map": [
+    { "$set": { "name": "$$filename" } },
+    {
+      "$switch": {
+        "field": "model",
+        "cases": [
+          { "pattern": "anthropic/claude-sonnet-*", "value": "sonnet" }
+        ],
+        "default": "inherit"
       }
-    }
-  }
+    },
+    {
+      "$transform": {
+        "field": "tools",
+        "steps": [
+          { "filter": { "value": true } },
+          { "keys": true },
+          { "map": "capitalize" },
+          { "join": ", " }
+        ]
+      }
+    },
+    {
+      "$copy": {
+        "from": "permission",
+        "to": "permissionMode",
+        "transform": {
+          "cases": [
+            { "pattern": { "edit": "deny", "bash": "deny" }, "value": "plan" }
+          ],
+          "default": "default"
+        }
+      }
+    },
+    { "$unset": "permission" }
+  ]
 }
 ```
 
-**Before:**
-```json
-{ "model": "anthropic/claude-sonnet-4.5" }
-```
+**Schema:** Map pipelines are validated against `schemas/map-pipeline-v1.json`.
 
-**After:**
-```json
-{ "aiModel": "claude-sonnet-4.5" }
-```
+**See also:** [Map Pipeline Guide](./map-pipeline.md) for comprehensive documentation and examples.
 
 ### `pick` (string[])
 
@@ -925,24 +1061,28 @@ rules/                        .cursor/rules/
 
 ```jsonc
 {
-  "from": "agents/*.md",
-  "to": ".claude/agents/*.md",
-  "map": {
-    "role": "type",
-    "model": {
-      "values": {
-        "anthropic/claude-sonnet-4.5": "claude-sonnet-4.5",
-        "openai/gpt-4": "gpt-4"
+  "from": "agents/**/*.md",
+  "to": ".claude/agents/**/*.md",
+  "map": [
+    { "$set": { "name": "$$filename" } },
+    {
+      "$switch": {
+        "field": "model",
+        "cases": [
+          { "pattern": "anthropic/claude-sonnet-*", "value": "sonnet" },
+          { "pattern": "anthropic/claude-opus-*", "value": "opus" }
+        ],
+        "default": "inherit"
       }
     }
-  }
+  ]
 }
 ```
 
 **Behavior:**
-- Transforms YAML frontmatter
-- Renames `role` → `type`
-- Maps model values
+- Transforms YAML frontmatter using map pipeline
+- Sets `name` from filename
+- Transforms model field using pattern matching
 - Preserves markdown body
 
 ### Example 7: Recursive Directory Copy with Mixed File Types
@@ -973,16 +1113,16 @@ skills/                            .claude/skills/
     └── test-gen.md         →          └── test-gen.md
 ```
 
-### Example 8: Complex Pipeline with Filtering
+### Example 8: Complex Map Pipeline
 
 ```jsonc
 {
   "from": "config.jsonc",
   "to": ".cursor/config.json",
   "pick": ["editor", "terminal"],
-  "map": {
-    "editor.theme": "workbench.colorTheme"
-  },
+  "map": [
+    { "$rename": { "editor.theme": "workbench.colorTheme" } }
+  ],
   "pipe": ["filter-empty", "filter-null"],
   "merge": "deep"
 }
@@ -990,7 +1130,7 @@ skills/                            .claude/skills/
 
 **Behavior:**
 - Extracts only `editor` and `terminal` keys
-- Remaps nested theme key
+- Renames nested theme key using map pipeline
 - Filters empty/null values
 - Deep merges result
 

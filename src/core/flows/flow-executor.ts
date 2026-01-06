@@ -41,13 +41,12 @@ import {
 } from './flow-transforms.js';
 import { mergeInlinePlatformOverride } from '../../utils/platform-yaml-merge.js';
 import { 
-  applyKeyMap,
   getNestedValue,
   setNestedValue,
-  deleteNestedValue,
-  validateKeyMap
+  deleteNestedValue
 } from './flow-key-mapper.js';
 import { extractAllKeys } from './flow-key-extractor.js';
+import { applyMapPipeline, createMapContext, validateMapPipeline } from './map-pipeline/index.js';
 
 /**
  * Default flow executor implementation
@@ -294,14 +293,14 @@ export class DefaultFlowExecutor implements FlowExecutor {
       }
     }
 
-    // Validate key map
+    // Validate map pipeline
     if (flow.map) {
-      const keyMapValidation = validateKeyMap(flow.map);
-      if (!keyMapValidation.valid) {
-        for (const error of keyMapValidation.errors) {
+      const mapPipelineValidation = validateMapPipeline(flow.map);
+      if (!mapPipelineValidation.valid) {
+        for (const error of mapPipelineValidation.errors) {
           errors.push({
             message: error,
-            code: 'INVALID_KEY_MAP',
+            code: 'INVALID_MAP_PIPELINE',
           });
         }
       }
@@ -360,9 +359,24 @@ export class DefaultFlowExecutor implements FlowExecutor {
         transformed = true;
       }
 
-      // Step 4: Map keys (with transforms)
+      // Step 4: Apply map pipeline
       if (flow.map) {
-        data = this.mapKeys(data, flow.map, context);
+        // Determine source path from flow.from and context
+        const sourcePath = path.join(context.packageRoot, flow.from);
+        const mapContext = createMapContext({
+          filename: path.basename(sourcePath, path.extname(sourcePath)),
+          dirname: path.basename(path.dirname(sourcePath)),
+          path: path.relative(context.packageRoot, sourcePath),
+          ext: path.extname(sourcePath),
+        });
+        
+        // For markdown files, apply to frontmatter
+        if (data && typeof data === 'object' && 'frontmatter' in data) {
+          data.frontmatter = applyMapPipeline(data.frontmatter, flow.map, mapContext);
+        } else {
+          // Apply to entire document
+          data = applyMapPipeline(data, flow.map, mapContext);
+        }
         transformed = true;
       }
 
@@ -639,14 +653,6 @@ export class DefaultFlowExecutor implements FlowExecutor {
     }
 
     return result;
-  }
-
-  /**
-   * Map keys according to configuration
-   * Delegates to the dedicated key mapper module
-   */
-  private mapKeys(data: any, keyMap: any, context: FlowContext): any {
-    return applyKeyMap(data, keyMap, context);
   }
 
   /**
