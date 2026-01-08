@@ -29,16 +29,16 @@
 
 # OpenPackage
 
-OpenPackage transforms your AI coding setups into one-click, reusable modules—shareable across projects and teams for consistent workflows. **No API keys required. No MCP setup.** 
+OpenPackage turns your AI coding setups into reusable modules, allowing instant installs to any platform for consistent workflows across projects and teams. **No API keys. No MCP.** 
 
 ## Why OpenPackage?
 
 Modern AI coding tools are powerful, but lack organization, reusability, and efficiency.
-- Rules, commands, and subagents scattered across multiple projects.
+- Rules, commands, subagents, and skills scattered across multiple projects.
 - Familiar workflows rebuilt for each project, incompatible between AI coding platforms.
 - Specs across individuals and codebases, diverging, unversioned, and incohesive.
 
-OpenPackage organizes your AI coding configs and specs into reusable packages that can be accessed by any project and any coding platform.
+OpenPackage manages the complexity of cross-platform conversions, composition, and portability of configs, so you can build faster.
 
 - Install & sync pre-built workflows to speed up coding. No more reinventing the wheel.
 - Reuse rules, slash commands, and skills across multiple codebases and platforms.
@@ -46,7 +46,7 @@ OpenPackage organizes your AI coding configs and specs into reusable packages th
 
 ## How it works
 
-At its core, OpenPackage is a lightweight CLI tool for creating versioned, AI coding platform agnostic packages, each contaning sets of specs and coding config files for simplified installs, uninstalls, and distribution.
+At its core, OpenPackage is a lightweight CLI tool for creating versioned, AI coding platform agnostic packages, each contaning sets of specs and coding config files for simplified installs, uninstalls, and distribution. It's basically Claude Code Plugins, but universal, more powerful, and open source.
 
 1. Declare a package
 2. Add rules, commands, subagents, skills, mcp configs, specs, docs etc.
