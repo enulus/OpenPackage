@@ -179,6 +179,15 @@
       {
         "from": "agents/**/*.md",
         "to": ".factory/droids/**/*.md"
+      },
+      {
+        "from": "mcp.jsonc",
+        "to": ".factory/settings/mcp.json",
+        "pipe": ["filter-comments"],
+        "map": [
+          { "$rename": { "mcp": "mcpServers" } }
+        ],
+        "merge": "deep"
       }
     ]
   },
@@ -216,6 +225,15 @@
       {
         "from": "rules/**/*.md",
         "to": ".kiro/steering/**/*.md"
+      },
+      {
+        "from": "mcp.jsonc",
+        "to": ".kiro/settings/mcp.json",
+        "pipe": ["filter-comments"],
+        "map": [
+          { "$rename": { "mcp": "mcpServers" } }
+        ],
+        "merge": "deep"
       }
     ]
   },
@@ -263,6 +281,15 @@
       {
         "from": "agents/**/*.md",
         "to": ".qwen/agents/**/*.md"
+      },
+      {
+        "from": "mcp.jsonc",
+        "to": ".qwen/settings.json",
+        "pipe": ["filter-comments"],
+        "map": [
+          { "$rename": { "mcp": "mcpServers" } }
+        ],
+        "merge": "deep"
       }
     ]
   },
