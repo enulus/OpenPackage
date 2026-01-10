@@ -29,7 +29,7 @@
 
 # OpenPackage
 
-OpenPackage turns your AI coding setups into reusable modules that anyone can instantly install to any platform, any codebase, ensuring consistent workflows across projects and teams. **No API keys. No MCP.** 
+OpenPackage turns your AI coding setups into reusable modules that anyone can instantly install to any platform, any codebase, ensuring consistent workflows across projects and teams.
 
 ## Why OpenPackage?
 
@@ -44,6 +44,13 @@ OpenPackage takes care of cross-platform conversions, config composition, and po
 - Reuse rules, slash commands, and skills across multiple codebases and platforms.
 - Share and compose packages together to create powerful workflows that continuously evolve.
 
+## Use cases
+
+- Install Claude Code Plugins to any coding platform
+- Sync specs, rules, commands, agents, skills, and MCPs across platforms
+- Reuse files and configs across multiple codebases
+- Modular management of configs and specs
+
 ## How it works
 
 At its core, OpenPackage is a lightweight CLI tool for creating versioned, AI coding platform agnostic packages, each contaning sets of coding config files and specs for simplified installs, uninstalls, and distribution. It's basically Claude Code Plugins, but universal, more powerful, and open source.
@@ -51,13 +58,6 @@ At its core, OpenPackage is a lightweight CLI tool for creating versioned, AI co
 1. Declare a package
 2. Add rules, commands, subagents, skills, mcp configs, specs, docs etc.
 3. Install and sync to multiple codebases
-
-## Use cases
-
-- Install Claude Code Plugins to any coding platform
-- Reuse files and configs across multiple codebases
-- Sync configs across multiple platforms
-- Modular management of specs, rules, commands, agents, skills, and MCPs
 
 ## Quick start
 
@@ -116,8 +116,9 @@ The install command supports various package sources:
 ```bash title="Terminal"
 opkg install essentials               # Local/remote registry
 opkg install ../packages/essentials/  # Local path
-opkg install github:https://github.com/enulus/awesome-openpackage.git   # GitHub package repo
-opkg install github:https://github.com/anthropics/claude-code.git       # GitHub Claude Code Plugins marketplace
+opkg install git:https://github.com/enulus/awesome-openpackage.git                # GitHub package repo
+opkg install github:anthropics/claude-code                                        # GitHub Claude Code Plugins marketplace
+opkg install github:anthropics/claude-code#subdirectory=plugins/commit-commands   # GitHub Claude Code Plugin
 ```  
 
 
@@ -139,7 +140,7 @@ OpenPackage performs installation and platform sync of files for supported AI co
 | Antigravity | .agent/ | | rules/ | workflows/ |  | | |
 | Augment Code | .augment/ | | rules/ | commands/ |  | | |
 | Claude Code | .claude/ | CLAUDE.md | rules/ | commands/ | agents/ | skills/ | .mcp.json (root) |
-| Codex | .codex/ | AGENTS.md | | prompts/ | | | mcp-servers.toml |
+| Codex | .codex/ | AGENTS.md | | prompts/ | | | config.toml |
 | Cursor | .cursor/ | AGENTS.md | rules/ | commands/ | agents/ | | mcp.json |
 | Factory | .factory/ | AGENTS.md | | commands/ | droids/ | | mcp.json |
 | Kilo Code | .kilocode/ | AGENTS.md | rules/ | workflows/ | |  | mcp.json |
