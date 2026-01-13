@@ -193,7 +193,7 @@
         "to": "skills/**/*"
       },
       {
-        "from": [".mcp.json", ".mcp.jsonc"],
+        "from": ".mcp.json",
         "to": "mcp.jsonc"
       }
     ]

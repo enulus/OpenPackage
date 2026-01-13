@@ -177,10 +177,33 @@ async function discoverFlowSources(
 ): Promise<Map<Flow, string[]>> {
   const flowSources = new Map<Flow, string[]>();
   for (const flow of flows) {
-    const firstPattern = getFirstFromPattern(flow.from);
-    const sourcePattern = resolvePattern(firstPattern, context);
-    const sourcePaths = await matchPattern(sourcePattern, packageRoot);
-    flowSources.set(flow, sourcePaths);
+    // Handle array patterns: check all patterns in the array, not just the first
+    const patterns = Array.isArray(flow.from) ? flow.from : [flow.from];
+    const allSourcePaths = new Set<string>();
+    
+    for (const pattern of patterns) {
+      const sourcePattern = resolvePattern(pattern, context);
+      const sourcePaths = await matchPattern(sourcePattern, packageRoot);
+      for (const path of sourcePaths) {
+        allSourcePaths.add(path);
+      }
+    }
+    
+    // Also check for dot-prefixed variants (e.g., .mcp.json when looking for mcp.json)
+    // This handles cases where plugins use dot-prefixed filenames
+    for (const pattern of patterns) {
+      const sourcePattern = resolvePattern(pattern, context);
+      // Only check for dot-prefixed variants for root-level files (no slashes)
+      if (!sourcePattern.includes('/') && !sourcePattern.startsWith('.')) {
+        const dotPrefixedPattern = `.${sourcePattern}`;
+        const dotPrefixedPaths = await matchPattern(dotPrefixedPattern, packageRoot);
+        for (const path of dotPrefixedPaths) {
+          allSourcePaths.add(path);
+        }
+      }
+    }
+    
+    flowSources.set(flow, Array.from(allSourcePaths));
   }
   return flowSources;
 }
