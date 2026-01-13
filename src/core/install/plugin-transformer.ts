@@ -6,6 +6,7 @@ import { isJunk } from 'junk';
 import type { Package, PackageFile, PackageYml } from '../../types/index.js';
 import { detectPackageFormat } from './format-detector.js';
 import { CLAUDE_PLUGIN_PATHS, DIR_PATTERNS } from '../../constants/index.js';
+import { generatePluginName } from '../../utils/plugin-naming.js';
 
 /**
  * In-memory cache for transformed plugin packages.
@@ -60,16 +61,29 @@ export interface ClaudePluginManifest {
 }
 
 /**
+ * Context for transforming a plugin with naming information.
+ */
+export interface PluginTransformContext {
+  gitUrl?: string;
+  subdirectory?: string;
+  repoPath?: string;
+}
+
+/**
  * Transform a Claude Code plugin to an OpenPackage Package.
  * 
  * Reads the plugin manifest (.claude-plugin/plugin.json), converts it to
  * OpenPackage format, and collects all plugin files.
  * 
  * @param pluginDir - Absolute path to plugin directory
+ * @param context - Optional context for scoped naming (GitHub URL, subdirectory)
  * @returns Package object ready for installation
  */
-export async function transformPluginToPackage(pluginDir: string): Promise<Package> {
-  logger.debug('Transforming Claude Code plugin to OpenPackage format', { pluginDir });
+export async function transformPluginToPackage(
+  pluginDir: string,
+  context?: PluginTransformContext
+): Promise<Package> {
+  logger.debug('Transforming Claude Code plugin to OpenPackage format', { pluginDir, context });
   
   // Read and parse plugin manifest
   const manifestPath = join(pluginDir, CLAUDE_PLUGIN_PATHS.PLUGIN_MANIFEST);
@@ -84,17 +98,26 @@ export async function transformPluginToPackage(pluginDir: string): Promise<Packa
     );
   }
   
-  // Validate required fields
-  if (!pluginManifest.name) {
-    throw new ValidationError(
-      `Plugin manifest at ${manifestPath} is missing required field: name`
-    );
-  }
+  // Generate scoped name if GitHub context is provided
+  const packageName = generatePluginName({
+    gitUrl: context?.gitUrl,
+    subdirectory: context?.subdirectory,
+    pluginManifestName: pluginManifest.name,
+    repoPath: context?.repoPath
+  });
+  
+  logger.debug('Generated plugin name', { 
+    original: pluginManifest.name, 
+    scoped: packageName 
+  });
   
   // Transform to OpenPackage metadata
   const metadata: PackageYml = {
-    name: pluginManifest.name,
-    version: pluginManifest.version?.trim(),
+    name: packageName,
+    // Claude Code plugins often omit version; normalize to a concrete value so:
+    // - logs/install output are consistent
+    // - transformed plugin cache keys remain stable
+    version: pluginManifest.version?.trim() || '0.0.0',
     description: pluginManifest.description,
     keywords: pluginManifest.keywords,
     license: pluginManifest.license,

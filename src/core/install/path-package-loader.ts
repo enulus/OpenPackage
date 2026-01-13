@@ -15,6 +15,15 @@ import * as yaml from 'js-yaml';
 export type PathSourceType = 'directory' | 'tarball';
 
 /**
+ * Context for loading packages with naming information.
+ */
+export interface PackageLoadContext {
+  gitUrl?: string;
+  subdirectory?: string;
+  repoPath?: string;
+}
+
+/**
  * Infer the source type from a path string.
  */
 export function inferSourceType(path: string): PathSourceType {
@@ -26,15 +35,21 @@ export function inferSourceType(path: string): PathSourceType {
  * Reads all files from the directory and loads openpackage.yml.
  * 
  * If the directory is a Claude Code plugin, transforms it to OpenPackage format.
+ * 
+ * @param dirPath - Path to directory
+ * @param context - Optional context for scoped naming (GitHub URL, subdirectory)
  */
-export async function loadPackageFromDirectory(dirPath: string): Promise<Package> {
-  logger.debug(`Loading package from directory: ${dirPath}`);
+export async function loadPackageFromDirectory(
+  dirPath: string,
+  context?: PackageLoadContext
+): Promise<Package> {
+  logger.debug(`Loading package from directory: ${dirPath}`, { context });
   
   // Check if this is a Claude Code plugin
   const pluginDetection = await detectPluginType(dirPath);
   if (pluginDetection.isPlugin && pluginDetection.type === 'individual') {
     logger.info('Detected Claude Code plugin, transforming to OpenPackage format', { dirPath });
-    return await transformPluginToPackage(dirPath);
+    return await transformPluginToPackage(dirPath, context);
   }
   
   // If it's a marketplace, we need to handle plugin selection (done upstream in install command)
@@ -136,14 +151,20 @@ export async function loadPackageFromTarball(tarballPath: string): Promise<Packa
 /**
  * Load a package from either a directory or tarball path.
  * Automatically detects the source type.
+ * 
+ * @param path - Path to package
+ * @param context - Optional context for scoped naming
  */
-export async function loadPackageFromPath(path: string): Promise<Package> {
+export async function loadPackageFromPath(
+  path: string,
+  context?: PackageLoadContext
+): Promise<Package> {
   const sourceType = inferSourceType(path);
   
   if (sourceType === 'tarball') {
     return await loadPackageFromTarball(path);
   } else {
-    return await loadPackageFromDirectory(path);
+    return await loadPackageFromDirectory(path, context);
   }
 }
 

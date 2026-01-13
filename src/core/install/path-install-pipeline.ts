@@ -26,6 +26,7 @@ import {
 import { determineResolutionMode } from './install-pipeline.js';
 import { detectPluginType } from './plugin-detector.js';
 import { resolveDependencies } from '../dependency-resolver.js';
+import { gatherGlobalVersionConstraints, gatherRootVersionConstraints } from '../openpackage.js';
 
 export interface PathInstallPipelineOptions extends InstallOptions {
   sourcePath: string;     // Absolute path to local package directory or tarball
@@ -79,7 +80,12 @@ export async function runPathInstallPipeline(
       console.log(`\n🔌 Detected Claude Code plugin`);
     }
     
-    sourcePackage = await loadPackageFromPath(options.sourcePath);
+    // Pass context for scoped naming
+    sourcePackage = await loadPackageFromPath(options.sourcePath, {
+      gitUrl: options.gitUrl,
+      subdirectory: options.gitSubdirectory,
+      repoPath: options.sourcePath
+    });
   } catch (error) {
     return {
       success: false,
@@ -136,8 +142,6 @@ export async function runPathInstallPipeline(
 
       // Resolve dependencies from the source package
       // We need to manually resolve dependencies since resolveDependenciesForInstall expects a registry package
-      const { gatherGlobalVersionConstraints, gatherRootVersionConstraints } = await import('../openpackage.js');
-      
       const globalConstraints = await gatherGlobalVersionConstraints(cwd);
       const rootConstraints = await gatherRootVersionConstraints(cwd);
       const rootOverrides = new Map(rootConstraints);
@@ -264,7 +268,6 @@ export async function runPathInstallPipeline(
   // TODO: Removed manual source copy to .openpackage/packages/ as redundant with index-based install
   // Source files handled via installPackageByIndex; index tracks mappings
   // If local cache needed for path sources, register to registry minimally instead
-  const { getLocalPackageDir } = await import('../../utils/paths.js'); // Keep import if needed elsewhere
   logger.debug('Skipped manual source package copy to local packages dir', { packageName, sourcePath: options.sourcePath });
 
 

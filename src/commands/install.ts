@@ -88,7 +88,7 @@ async function installCommand(
         
         return await runPathInstallPipeline({
           ...options,
-          sourcePath: result.sourcePath,
+          sourcePath: result.repoPath,
           sourceType: 'directory',
           targetDir,
           gitUrl: existingSource.url,
@@ -130,8 +130,11 @@ async function installCommand(
         throw new ValidationError('Marketplace manifest not found');
       }
       
-      // Parse marketplace and prompt for selection
-      const marketplace = await parseMarketplace(pluginDetection.manifestPath);
+      // Parse marketplace and prompt for selection (pass context for fallback naming)
+      const marketplace = await parseMarketplace(pluginDetection.manifestPath, {
+        gitUrl: classification.gitUrl,
+        repoPath: result.repoPath
+      });
       const selectedPlugins = await promptPluginSelection(marketplace);
       
       if (selectedPlugins.length === 0) {
@@ -141,7 +144,7 @@ async function installCommand(
       
       // Install selected plugins
       return await installMarketplacePlugins(
-        result.sourcePath,
+        result.repoPath,
         marketplace,
         selectedPlugins,
         classification.gitUrl!,
@@ -153,7 +156,7 @@ async function installCommand(
     // Not a marketplace, install as regular package/plugin
     return await runPathInstallPipeline({
       ...options,
-      sourcePath: result.sourcePath,
+      sourcePath: result.repoPath,
       sourceType: 'directory',
       targetDir,
       gitUrl: classification.gitUrl,
@@ -176,8 +179,10 @@ async function installCommand(
           path: classification.resolvedPath 
         });
         
-        // Parse marketplace and prompt for selection
-        const marketplace = await parseMarketplace(pluginDetection.manifestPath!);
+        // Parse marketplace and prompt for selection (pass context for fallback naming)
+        const marketplace = await parseMarketplace(pluginDetection.manifestPath!, {
+          repoPath: classification.resolvedPath
+        });
         const selectedPlugins = await promptPluginSelection(marketplace);
         
         if (selectedPlugins.length === 0) {

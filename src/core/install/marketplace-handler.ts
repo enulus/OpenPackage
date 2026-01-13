@@ -1,4 +1,4 @@
-import { join } from 'path';
+import { join, basename } from 'path';
 import { readTextFile, exists } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
 import { ValidationError, UserCancellationError } from '../../utils/errors.js';
@@ -6,7 +6,8 @@ import { runPathInstallPipeline, type PathInstallPipelineOptions } from './path-
 import { detectPluginType, validatePluginManifest } from './plugin-detector.js';
 import { safePrompts } from '../../utils/prompts.js';
 import type { CommandResult } from '../../types/index.js';
-import { CLAUDE_PLUGIN_PATHS, DIR_PATTERNS, FILE_PATTERNS } from '../../constants/index.js';
+import { CLAUDE_PLUGIN_PATHS } from '../../constants/index.js';
+import { generatePluginName } from '../../utils/plugin-naming.js';
 
 /**
  * Claude Code marketplace manifest schema.
@@ -36,14 +37,24 @@ export interface MarketplacePluginEntry {
  * Parse and validate a marketplace manifest.
  * 
  * @param manifestPath - Path to marketplace.json file
+ * @param context - Context for fallback naming
  * @returns Parsed marketplace manifest
  */
-export async function parseMarketplace(manifestPath: string): Promise<MarketplaceManifest> {
-  logger.debug('Parsing marketplace manifest', { manifestPath });
+export async function parseMarketplace(
+  manifestPath: string,
+  context?: { gitUrl?: string; repoPath?: string }
+): Promise<MarketplaceManifest> {
+  logger.debug('Parsing marketplace manifest', { manifestPath, context });
   
   try {
     const content = await readTextFile(manifestPath);
     const manifest = JSON.parse(content) as MarketplaceManifest;
+    
+    // If name is missing, use fallback from repo name
+    if (!manifest.name && context?.repoPath) {
+      manifest.name = basename(context.repoPath);
+      logger.debug('Marketplace name missing, using repo name as fallback', { name: manifest.name });
+    }
     
     // Validate required fields
     if (!manifest.name) {
@@ -159,14 +170,15 @@ export async function installMarketplacePlugins(
     plugins: selectedNames 
   });
   
-  const results: Array<{ name: string; success: boolean; error?: string }> = [];
+  const results: Array<{ name: string; scopedName: string; success: boolean; error?: string }> = [];
   
   for (const pluginName of selectedNames) {
     const pluginEntry = marketplace.plugins.find(p => p.name === pluginName);
     if (!pluginEntry) {
       logger.error(`Plugin '${pluginName}' not found in marketplace`, { marketplace: marketplace.name });
       results.push({ 
-        name: pluginName, 
+        name: pluginName,
+        scopedName: pluginName,
         success: false, 
         error: `Plugin not found in marketplace` 
       });
@@ -177,7 +189,8 @@ export async function installMarketplacePlugins(
     if (!pluginSubdir) {
       logger.error(`Plugin entry missing both subdirectory and source fields`, { plugin: pluginName });
       results.push({ 
-        name: pluginName, 
+        name: pluginName,
+        scopedName: pluginName,
         success: false, 
         error: `Plugin entry missing subdirectory/source field` 
       });
@@ -194,7 +207,8 @@ export async function installMarketplacePlugins(
         fullPath: pluginDir
       });
       results.push({ 
-        name: pluginName, 
+        name: pluginName,
+        scopedName: pluginName,
         success: false, 
         error: `Subdirectory '${pluginSubdir}' does not exist` 
       });
@@ -209,7 +223,8 @@ export async function installMarketplacePlugins(
         subdirectory: pluginSubdir 
       });
       results.push({ 
-        name: pluginName, 
+        name: pluginName,
+        scopedName: pluginName,
         success: false, 
         error: `Subdirectory does not contain a valid plugin (missing ${CLAUDE_PLUGIN_PATHS.PLUGIN_MANIFEST})`
       });
@@ -219,15 +234,25 @@ export async function installMarketplacePlugins(
     // Validate plugin manifest is parseable
     if (!(await validatePluginManifest(detection.manifestPath!))) {
       results.push({ 
-        name: pluginName, 
+        name: pluginName,
+        scopedName: pluginName,
         success: false, 
         error: `Invalid plugin manifest (cannot parse JSON)` 
       });
       continue;
     }
     
+    // Generate scoped name for this plugin
+    const scopedName = generatePluginName({
+      gitUrl,
+      subdirectory: pluginSubdir,
+      pluginManifestName: pluginName,
+      marketplaceName: marketplace.name,
+      repoPath: marketplaceDir
+    });
+    
     // Install the plugin
-    console.log(`\n📦 Installing plugin: ${pluginName}...`);
+    console.log(`\n📦 Installing plugin: ${scopedName}...`);
     
     try {
       const pipelineResult = await runPathInstallPipeline({
@@ -243,24 +268,26 @@ export async function installMarketplacePlugins(
       if (!pipelineResult.success) {
         results.push({
           name: pluginName,
+          scopedName,
           success: false,
           error: pipelineResult.error || 'Unknown installation error'
         });
-        console.error(`✗ Failed to install ${pluginName}: ${pipelineResult.error || 'Unknown installation error'}`);
+        console.error(`✗ Failed to install ${scopedName}: ${pipelineResult.error || 'Unknown installation error'}`);
         continue;
       }
 
-      results.push({ name: pluginName, success: true });
-      console.log(`✓ Successfully installed ${pluginName}`);
+      results.push({ name: pluginName, scopedName, success: true });
+      console.log(`✓ Successfully installed ${scopedName}`);
       
     } catch (error) {
       logger.error(`Failed to install plugin`, { plugin: pluginName, error });
       results.push({ 
-        name: pluginName, 
+        name: pluginName,
+        scopedName,
         success: false, 
         error: error instanceof Error ? error.message : String(error) 
       });
-      console.error(`✗ Failed to install ${pluginName}: ${error}`);
+      console.error(`✗ Failed to install ${scopedName}: ${error}`);
     }
   }
   
@@ -275,14 +302,14 @@ export async function installMarketplacePlugins(
   if (successful.length > 0) {
     console.log(`\n✓ Successfully installed (${successful.length}):`);
     for (const result of successful) {
-      console.log(`  • ${result.name}`);
+      console.log(`  • ${result.scopedName}`);
     }
   }
   
   if (failed.length > 0) {
     console.log(`\n✗ Failed to install (${failed.length}):`);
     for (const result of failed) {
-      console.log(`  • ${result.name}: ${result.error}`);
+      console.log(`  • ${result.scopedName}: ${result.error}`);
     }
   }
   

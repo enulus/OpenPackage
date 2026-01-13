@@ -20,7 +20,9 @@ Creates a new package with an `openpackage.yml` manifest in one of three predefi
 - `[package-name]` (optional for root scope, required for local/global)
   - Package name following OpenPackage naming conventions
   - Supports scoped packages (`@org/package-name`)
-  - Validated against naming rules (lowercase, alphanumeric, hyphens, slashes for scopes)
+  - Supports hierarchical packages (`@org/package-name/subpackage`)
+  - Validated against naming rules (lowercase, alphanumeric, dots, underscores, hyphens, slashes)
+  - No consecutive or trailing slashes allowed
 
 ### Options
 - `--scope <scope>` - Package scope: `root`, `local`, or `global` (prompts if not specified in interactive mode)

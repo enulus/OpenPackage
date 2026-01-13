@@ -126,16 +126,19 @@ opkg set --ver 0.1.0
 **Format:** Package name string
 
 **Validation:**
-- Must contain only: `a-z`, `0-9`, `.`, `_`, `-`
+- Must contain only: `a-z`, `0-9`, `.`, `_`, `-`, `/`
 - Automatically normalized to lowercase
 - No spaces allowed
 - Supports scoped names: `@scope/package-name`
+- Supports hierarchical names: `@scope/package-name/subpackage`
+- No consecutive or trailing slashes
 
 **Examples:**
 ```bash
 opkg set --name my-package
 opkg set --name @myorg/my-package
 opkg set --name package.name
+opkg set --name @anthropics/claude-code/commit-commands
 ```
 
 ### Description Field (`--description`)
@@ -305,7 +308,7 @@ Version must be valid semver (e.g., 1.0.0, 2.1.3-beta.1)
 **Error:** Name contains invalid characters
 
 ```
-Error: Package name 'invalid name' contains invalid characters (use only: a-z, 0-9, ., _, -)
+Error: Package name 'invalid name' segment 'invalid name' contains invalid characters (use only: a-z, 0-9, ., _, -)
 ```
 
 ### Invalid URL

@@ -180,7 +180,8 @@ export async function findPackageByName(packageName: string): Promise<string | n
 
 /**
  * List all package base names in the local registry, including scoped packages.
- * Returns names relative to the packages root, e.g. 'name' or '@scope/name'.
+ * Returns names relative to the packages root, e.g. 'name', '@scope/name', or '@scope/name/subname'.
+ * Supports arbitrary nesting for hierarchical package names.
  */
 export async function listAllPackages(): Promise<string[]> {
   const { packages } = getRegistryDirectories();
@@ -190,29 +191,29 @@ export async function listAllPackages(): Promise<string[]> {
   }
 
   const result: string[] = [];
-  const topLevelDirs = await listDirectories(packages);
 
-  for (const firstLevel of topLevelDirs) {
-    const firstLevelPath = path.join(packages, firstLevel);
-    const firstLevelChildren = await listDirectories(firstLevelPath);
+  /**
+   * Recursively scan for packages by checking for version directories
+   */
+  async function scanForPackages(currentPath: string, relativePath: string): Promise<void> {
+    const children = await listDirectories(currentPath);
 
-    // Unscoped packages: name/<version>
-  const hasValidChildren = firstLevelChildren.some(child => child === UNVERSIONED || semver.valid(child));
-    if (hasValidChildren) {
-      result.push(firstLevel);
-      continue;
+    // Check if this directory contains version directories (is a package)
+    const hasVersions = children.some(child => child === UNVERSIONED || semver.valid(child));
+    if (hasVersions) {
+      result.push(relativePath);
+      return; // Don't recurse into version directories
     }
 
-    // Scoped packages: @scope/name/<version>
-    for (const secondLevel of firstLevelChildren) {
-      const secondLevelPath = path.join(firstLevelPath, secondLevel);
-      const secondLevelChildren = await listDirectories(secondLevelPath);
-      const hasValidGrandchildren = secondLevelChildren.some(child => child === UNVERSIONED || semver.valid(child));
-      if (hasValidGrandchildren) {
-        result.push(`${firstLevel}/${secondLevel}`);
-      }
+    // Otherwise, recurse into subdirectories
+    for (const child of children) {
+      const childPath = path.join(currentPath, child);
+      const childRelativePath = relativePath ? `${relativePath}/${child}` : child;
+      await scanForPackages(childPath, childRelativePath);
     }
   }
+
+  await scanForPackages(packages, '');
 
   // Stable order
   result.sort((a, b) => a.localeCompare(b));

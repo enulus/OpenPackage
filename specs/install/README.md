@@ -14,7 +14,8 @@ The documents are intended to be implementation-guiding but not tied to specific
 ### Files
 
 - **`install-behavior.md`**: Top-level `opkg install` UX and scenarios (CLI shapes, fresh vs existing deps, dev vs prod). Includes Claude Code plugin support (§9) with Universal Converter integration.
-- **`git-sources.md`**: Installing packages from git repositories (`git:` and `github:` inputs), including subdirectory support for monorepos and Claude Code plugins.
+- **`git-sources.md`**: Installing packages from git repositories (`git:` and `github:` inputs), including subdirectory support for monorepos and Claude Code plugins. Covers scoped naming for GitHub plugins.
+- **`git-cache.md`**: Structured Git cache architecture at `~/.openpackage/cache/git/` with deterministic paths, automatic reuse, and metadata tracking.
 - **`version-resolution.md`**: Formal rules for "latest in range from local+remote", including pre-release vs stable semantics.
 - **`package-yml-canonical.md`**: Rules for treating `openpackage.yml` as the canonical declaration for install.
 

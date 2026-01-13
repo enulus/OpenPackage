@@ -70,9 +70,16 @@ Rules:
 
 ### 3.1 Basic git install
 
-- `install` clones the repository to a temporary directory using the system `git` executable.
+- `install` clones the repository to a **structured cache** at `~/.openpackage/cache/git/` using the system `git` executable.
+- **Cache structure**: `~/.openpackage/cache/git/<url-hash-12>/<commit-sha-7>/`
+  - `<url-hash-12>`: 12-character hash of normalized Git URL
+  - `<commit-sha-7>`: First 7 characters of resolved commit SHA
+- **Clone behavior**:
+  - Uses shallow clones (`--depth 1`) for space efficiency.
+  - Reuses existing cache if same commit is already cached.
+  - Writes metadata files (`.opkg-repo.json`, `.opkg-commit.json`) for tracking.
 - If `ref` is provided:
-  - For branch/tag: clone the specified ref.
+  - For branch/tag: clone the specified ref and resolve to commit SHA.
   - For commit SHA: clone and checkout that SHA (best-effort shallow fetch).
 - Without subdirectory: The cloned repository root MUST contain `openpackage.yml`.
 - The installed package version is read from the repo's `openpackage.yml`.
@@ -83,14 +90,35 @@ Rules:
 ### 3.2 Subdirectory installs
 
 When `subdirectory` is specified:
-- Repository is cloned to a temporary directory.
+- Repository is cloned to the structured cache (same as §3.1).
 - The specified subdirectory path is resolved relative to the repository root.
 - The subdirectory MUST contain either:
   - `openpackage.yml` (standard OpenPackage package), OR
   - `.claude-plugin/plugin.json` (Claude Code plugin), OR
   - `.claude-plugin/marketplace.json` (Claude Code plugin marketplace)
 - For OpenPackage packages: `openpackage.yml` is read from the subdirectory.
-- For Claude Code plugins: See §4 for special handling.
+- For Claude Code plugins: See §4 for special handling including scoped naming.
+
+### 3.3 Cache persistence and management
+
+The Git cache persists across sessions:
+- **Location**: `~/.openpackage/cache/git/`
+- **Benefits**: Faster reinstalls, survives reboots, debuggable with metadata
+- **Structure**:
+  ```
+  ~/.openpackage/cache/git/
+  ├── a1b2c3d4e5f6/              # URL hash
+  │   ├── .opkg-repo.json        # Repo metadata (URL, last fetched)
+  │   ├── abc1234/               # Commit SHA
+  │   │   ├── .git/              # Shallow clone
+  │   │   ├── .opkg-commit.json  # Commit metadata (ref, timestamp)
+  │   │   └── <repo contents>
+  │   └── def5678/               # Different commit
+  └── x9y8z7w6v5u4/              # Different repo
+  ```
+- **Metadata tracking**:
+  - `.opkg-repo.json`: Stores URL, normalized URL, last fetch timestamp
+  - `.opkg-commit.json`: Stores full commit SHA, ref name, clone/access timestamps
 
 ---
 
@@ -116,20 +144,29 @@ Detection happens automatically after cloning, before attempting to load as an O
 
 When an individual plugin is detected:
 1. Plugin manifest (`.claude-plugin/plugin.json`) is read and validated.
-2. Plugin metadata is transformed to OpenPackage format in-memory:
-   - `name` and `version` from `plugin.json` become package metadata
+2. **Plugin name is generated with scoping**:
+   - **GitHub plugins**: Use scoped format `@<username>/<plugin-name>`
+   - **GitHub plugins from subdirectory**: Use `@<username>/<repo>/<plugin-name>`
+   - **Non-GitHub sources**: Use original plugin name (no scoping)
+   - **Fallback behavior**: If `plugin.json` has no `name` field:
+     - Use subdirectory basename if installing from subdirectory
+     - Use repository name if installing full repo
+     - Use "unnamed-plugin" as last resort
+3. Plugin metadata is transformed to OpenPackage format in-memory:
+   - Scoped `name` becomes package metadata
+   - `version` from `plugin.json` becomes package version
    - `description`, `author`, `repository`, etc. are preserved
-3. All plugin files are collected (commands/, agents/, skills/, hooks/, .mcp.json, .lsp.json, etc.)
-4. **Package format is detected** and appropriate installation strategy selected:
+4. All plugin files are collected (commands/, agents/, skills/, hooks/, .mcp.json, .lsp.json, etc.)
+5. **Package format is detected** and appropriate installation strategy selected:
    - **Direct AS-IS**: Source platform = target platform (fastest)
    - **Cross-platform conversion**: Source ≠ target (via Universal Converter)
    - **Standard flows**: Universal format packages
-5. Files are installed to platform-specific directories:
+6. Files are installed to platform-specific directories:
    - `commands/` → `.claude/commands/`, `.cursor/commands/`, etc.
    - `agents/` → `.claude/agents/`, `.cursor/agents/`, etc.
    - Root files (`.mcp.json`, `.lsp.json`) → platform roots
-6. The dependency is tracked in `openpackage.yml` with its git source (not as a registry version).
-7. No registry copy is created (git repository remains source of truth).
+7. The dependency is tracked in `openpackage.yml` with its **scoped name** and git source (not as a registry version).
+8. No registry copy is created (git repository remains source of truth).
 
 **See:** [Universal Platform Converter](../platforms/universal-converter.md) for cross-platform conversion details.
 
@@ -141,22 +178,29 @@ opkg install github:anthropics/claude-code#subdirectory=plugins/commit-commands
 Result in `openpackage.yml`:
 ```yaml
 packages:
-  - name: commit-commands
+  - name: "@anthropics/claude-code/commit-commands"  # Scoped name
     git: https://github.com/anthropics/claude-code.git
     subdirectory: plugins/commit-commands
+```
+
+Installed to cache:
+```
+~/.openpackage/cache/git/a1b2c3d4e5f6/abc1234/plugins/commit-commands/
 ```
 
 ### 4.3 Marketplace install
 
 When a plugin marketplace is detected:
 1. Marketplace manifest (`.claude-plugin/marketplace.json`) is parsed.
+   - **Fallback behavior**: If `marketplace.json` has no `name` field, uses repository name
 2. An interactive multiselect prompt is displayed listing all available plugins.
 3. User selects which plugin(s) to install (space to select, enter to confirm).
 4. Each selected plugin is installed individually:
+   - **Scoped name is generated**: `@<username>/<marketplace-name>/<plugin-name>`
    - Plugin subdirectory is resolved within the cloned repository.
    - Plugin is validated (must have `.claude-plugin/plugin.json`).
    - Plugin is installed following the individual plugin flow (§4.2).
-5. Each plugin gets its own entry in `openpackage.yml` with its specific subdirectory.
+5. Each plugin gets its own entry in `openpackage.yml` with its **scoped name** and specific subdirectory.
 
 **Example:**
 ```bash
@@ -177,15 +221,48 @@ Select plugins to install (space to select, enter to confirm):
 Result in `openpackage.yml` (if user selected commit-commands and pr-review-toolkit):
 ```yaml
 packages:
-  - name: commit-commands
+  - name: "@anthropics/claude-code/commit-commands"  # Scoped name
     git: https://github.com/anthropics/claude-code.git
     subdirectory: plugins/commit-commands
-  - name: pr-review-toolkit
+  - name: "@anthropics/claude-code/pr-review-toolkit"  # Scoped name
     git: https://github.com/anthropics/claude-code.git
     subdirectory: plugins/pr-review-toolkit
 ```
 
-### 4.4 Plugin transformation details
+Installed to cache:
+```
+~/.openpackage/cache/git/a1b2c3d4e5f6/abc1234/plugins/commit-commands/
+~/.openpackage/cache/git/a1b2c3d4e5f6/abc1234/plugins/pr-review-toolkit/
+```
+
+### 4.4 Plugin naming convention
+
+**Scoped naming for GitHub plugins**: Plugins installed from GitHub repositories use scoped names to provide clear provenance and prevent naming conflicts.
+
+**Naming formats**:
+- **Marketplace plugin**: `@<username>/<marketplace-name>/<plugin-name>`
+- **Standalone plugin**: `@<username>/<plugin-name>`
+- **Non-GitHub source**: `<plugin-name>` (no scoping)
+
+**Examples**:
+| Source | Plugin Name | Scoped Name |
+|--------|-------------|-------------|
+| `github:anthropics/claude-code#subdirectory=plugins/commit-commands` | `commit-commands` | `@anthropics/claude-code/commit-commands` |
+| `github:anthropics/my-plugin` | `my-plugin` | `@anthropics/my-plugin` |
+| `git:https://gitlab.com/user/plugin.git` | `cool-plugin` | `cool-plugin` (no scoping) |
+| `./local-plugin/` | `local-plugin` | `local-plugin` (no scoping) |
+
+**Fallback behavior**:
+1. **Plugin name missing**: Uses subdirectory basename → repo name → "unnamed-plugin"
+2. **Marketplace name missing**: Uses repo name → "unnamed-marketplace"
+
+**Benefits**:
+- Clear GitHub provenance at a glance
+- No name conflicts between authors
+- Easy to identify plugin source
+- Consistent with npm/yarn scoping patterns
+
+### 4.5 Plugin transformation details
 
 **In-memory transformation** (no registry copy):
 - Plugin manifest fields map to OpenPackage metadata:
@@ -213,8 +290,8 @@ packages:
 
 ### 5.1 Current limitations
 
-- No lockfile or commit pinning is persisted (no `resolvedSha` field).
-- No clone caching (each install may re-clone).
+- **No lockfile pinning**: Commit SHAs are resolved but not persisted to `openpackage.yml` (no `resolvedSha` field).
+- **Branch tracking**: Installing from a branch will use the latest commit at install time, not track updates.
 - Authentication behavior is delegated to `git` (credentials configured in the user's environment).
 
 ### 5.2 Subdirectory support notes
@@ -223,8 +300,19 @@ packages:
 - Subdirectory must contain a valid package or plugin manifest.
 - For OpenPackage packages in subdirectories, their dependencies are resolved relative to the subdirectory location.
 
-### 5.3 Future considerations
+### 5.3 Cache features
 
-- Commit SHA resolution and pinning for reproducible installs.
-- Clone caching to speed up repeated installs.
-- Plugin registry support (converting plugins to first-class OpenPackage packages).
+**Implemented**:
+- ✅ Structured cache at `~/.openpackage/cache/git/`
+- ✅ Deterministic paths based on URL hash + commit SHA
+- ✅ Automatic cache reuse when same commit exists
+- ✅ Metadata tracking (`.opkg-repo.json`, `.opkg-commit.json`)
+- ✅ Shallow clones for space efficiency
+- ✅ Persistent across reboots
+
+**Future considerations**:
+- Cache management commands (`opkg cache list`, `opkg cache clean`)
+- Cache update detection (detect when branch has new commits)
+- Git worktrees for further space optimization
+- Automatic cache cleanup based on age/size
+- Commit SHA lockfile support for reproducible installs

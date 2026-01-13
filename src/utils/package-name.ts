@@ -2,7 +2,8 @@ import { ValidationError } from './errors.js';
 import { PackageDependency } from '../types/index.js';
 
 /**
- * Regex pattern for scoped package names (@scope/name)
+ * Regex pattern for scoped package names (@scope/name or @scope/name/subname/...)
+ * Supports multiple slashes for hierarchical names like @anthropics/claude-code/commit-commands
  */
 export const SCOPED_PACKAGE_REGEX = /^@([^\/]+)\/(.+)$/;
 
@@ -57,19 +58,31 @@ function validatePackageNamePart(part: string, fullName: string, partType: strin
     throw new ValidationError(`Package name '${fullName}' must be lowercase`);
   }
 
-  // Check first character
-  if (/^[0-9.\-]/.test(part)) {
-    throw new ValidationError(`Package ${partType} '${fullName}' cannot start with a number, dot, or hyphen`);
-  }
+  // Split by slashes to validate each segment individually
+  const segments = part.split('/');
+  
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+    
+    // Check for empty segments (e.g., double slashes)
+    if (!segment || segment.trim() === '') {
+      throw new ValidationError(`Package name '${fullName}' cannot have empty segments (consecutive or trailing slashes)`);
+    }
 
-  // Check for consecutive special characters
-  if (/(\.\.|__|--)/.test(part)) {
-    throw new ValidationError(`Package name '${fullName}' cannot have consecutive dots, underscores, or hyphens`);
-  }
+    // Check first character of each segment
+    if (/^[0-9.\-]/.test(segment)) {
+      throw new ValidationError(`Package ${partType} '${fullName}' segment '${segment}' cannot start with a number, dot, or hyphen`);
+    }
 
-  // Check allowed characters only
-  if (!/^[a-z0-9._-]+$/.test(part)) {
-    throw new ValidationError(`Package name '${fullName}' contains invalid characters (use only: a-z, 0-9, ., _, -)`);
+    // Check for consecutive special characters within a segment
+    if (/(\.\.|__|--)/.test(segment)) {
+      throw new ValidationError(`Package name '${fullName}' segment '${segment}' cannot have consecutive dots, underscores, or hyphens`);
+    }
+
+    // Check allowed characters only (a-z, 0-9, ., _, -, but no slashes within segment)
+    if (!/^[a-z0-9._-]+$/.test(segment)) {
+      throw new ValidationError(`Package name '${fullName}' segment '${segment}' contains invalid characters (use only: a-z, 0-9, ., _, -)`);
+    }
   }
 }
 
@@ -112,14 +125,49 @@ export function parsePackageInput(packageInput: string): { name: string; version
 export function parsePackageInstallSpec(
   raw: string
 ): { name: string; version?: string; registryPath?: string } {
-  const firstSlash = raw.indexOf('/', raw.startsWith('@') ? raw.indexOf('/', 1) + 1 : 0);
-  if (firstSlash === -1) {
+  // Explicit separator for unambiguous registry paths:
+  //   package@1.2.3::rules/foo.md
+  //   @scope/name/sub::commands/bar.md
+  const explicitSep = raw.indexOf('::');
+  if (explicitSep !== -1) {
+    const packagePortion = raw.slice(0, explicitSep);
+    const registryPath = raw.slice(explicitSep + 2);
+    if (!packagePortion || !registryPath) {
+      throw new ValidationError(
+        `Invalid install spec '${raw}'. Use 'package::path/to/file' or 'package@version::path/to/file'.`
+      );
+    }
+    const { name, version } = parsePackageInput(packagePortion);
+    return { name, version, registryPath };
+  }
+
+  // Backward-compatible "package/path" parsing, with special handling for scoped
+  // hierarchical names like @scope/marketplace/plugin (3+ segments).
+  const scopeFirstSlash = raw.startsWith('@') ? raw.indexOf('/', 1) : -1;
+  const scopedSecondSlash = scopeFirstSlash !== -1 ? raw.indexOf('/', scopeFirstSlash + 1) : -1;
+
+  const splitSlashIndex = raw.indexOf('/', raw.startsWith('@') ? scopeFirstSlash + 1 : 0);
+
+  // For scoped names, only treat the third segment as registryPath if it looks like a path
+  // (contains '/' or '.') to avoid breaking marketplace plugin names like:
+  //   @anthropics/claude-plugins-official/github
+  if (raw.startsWith('@') && scopedSecondSlash !== -1) {
+    const registryPathCandidate = raw.slice(scopedSecondSlash + 1);
+    const looksLikeRegistryPath =
+      registryPathCandidate.includes('/') || registryPathCandidate.includes('.');
+    if (!looksLikeRegistryPath) {
+      // Treat the whole string as the package name.
+      return parsePackageInput(raw);
+    }
+  }
+
+  if (splitSlashIndex === -1) {
     // No path portion; fall back to standard parsing
     return parsePackageInput(raw);
   }
 
-  const packagePortion = raw.slice(0, firstSlash);
-  const registryPath = raw.slice(firstSlash + 1);
+  const packagePortion = raw.slice(0, splitSlashIndex);
+  const registryPath = raw.slice(splitSlashIndex + 1);
   if (!registryPath) {
     throw new ValidationError(
       `Invalid install spec '${raw}'. Provide a registry path after the package name, e.g. package/path/to/file.md.`
