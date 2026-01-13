@@ -221,7 +221,7 @@ export async function installMarketplacePlugins(
     console.log(`\n📦 Installing plugin: ${pluginName}...`);
     
     try {
-      await runPathInstallPipeline({
+      const pipelineResult = await runPathInstallPipeline({
         ...options,
         sourcePath: pluginDir,
         sourceType: 'directory',
@@ -230,7 +230,17 @@ export async function installMarketplacePlugins(
         gitRef,
         gitSubdirectory: pluginSubdir
       });
-      
+
+      if (!pipelineResult.success) {
+        results.push({
+          name: pluginName,
+          success: false,
+          error: pipelineResult.error || 'Unknown installation error'
+        });
+        console.error(`✗ Failed to install ${pluginName}: ${pipelineResult.error || 'Unknown installation error'}`);
+        continue;
+      }
+
       results.push({ name: pluginName, success: true });
       console.log(`✓ Successfully installed ${pluginName}`);
       

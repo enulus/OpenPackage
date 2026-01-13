@@ -4,7 +4,6 @@ import { logger } from '../../utils/logger.js';
 import { ValidationError } from '../../utils/errors.js';
 import { isJunk } from 'junk';
 import type { Package, PackageFile, PackageYml } from '../../types/index.js';
-import type { PackageFormat } from './format-detector.js';
 import { detectPackageFormat } from './format-detector.js';
 
 /**
@@ -43,7 +42,7 @@ export function clearPluginCache(): void {
  */
 export interface ClaudePluginManifest {
   name: string;
-  version: string;
+  version?: string;
   description?: string;
   author?: {
     name?: string;
@@ -90,16 +89,11 @@ export async function transformPluginToPackage(pluginDir: string): Promise<Packa
       `Plugin manifest at ${manifestPath} is missing required field: name`
     );
   }
-  if (!pluginManifest.version) {
-    throw new ValidationError(
-      `Plugin manifest at ${manifestPath} is missing required field: version`
-    );
-  }
   
   // Transform to OpenPackage metadata
   const metadata: PackageYml = {
     name: pluginManifest.name,
-    version: pluginManifest.version,
+    version: pluginManifest.version?.trim(),
     description: pluginManifest.description,
     keywords: pluginManifest.keywords,
     license: pluginManifest.license,
