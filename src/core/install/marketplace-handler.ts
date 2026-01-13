@@ -1,11 +1,12 @@
 import { join } from 'path';
 import { readTextFile, exists } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
-import { ValidationError } from '../../utils/errors.js';
+import { ValidationError, UserCancellationError } from '../../utils/errors.js';
 import { runPathInstallPipeline, type PathInstallPipelineOptions } from './path-install-pipeline.js';
 import { detectPluginType, validatePluginManifest } from './plugin-detector.js';
-import prompts from 'prompts';
+import { safePrompts } from '../../utils/prompts.js';
 import type { CommandResult } from '../../types/index.js';
+import { CLAUDE_PLUGIN_PATHS, DIR_PATTERNS, FILE_PATTERNS } from '../../constants/index.js';
 
 /**
  * Claude Code marketplace manifest schema.
@@ -109,22 +110,30 @@ export async function promptPluginSelection(
     selected: false
   }));
   
-  const response = await prompts({
-    type: 'multiselect',
-    name: 'plugins',
-    message: 'Select plugins to install (space to select, enter to confirm):',
-    choices,
-    min: 1,
-    hint: '- Use arrow keys to navigate, space to select/deselect, enter to confirm'
-  });
-  
-  if (!response.plugins || response.plugins.length === 0) {
-    logger.info('User cancelled plugin selection');
-    return [];
+  try {
+    const response = await safePrompts({
+      type: 'multiselect',
+      name: 'plugins',
+      message: 'Select plugins to install (space to select, enter to confirm):',
+      choices,
+      min: 1,
+      hint: '- Use arrow keys to navigate, space to select/deselect, enter to confirm'
+    });
+    
+    if (!response.plugins || response.plugins.length === 0) {
+      logger.info('User cancelled plugin selection');
+      return [];
+    }
+    
+    logger.info('User selected plugins', { selected: response.plugins });
+    return response.plugins as string[];
+  } catch (error) {
+    if (error instanceof UserCancellationError) {
+      logger.info('User cancelled plugin selection');
+      return [];
+    }
+    throw error;
   }
-  
-  logger.info('User selected plugins', { selected: response.plugins });
-  return response.plugins as string[];
 }
 
 /**
@@ -202,7 +211,7 @@ export async function installMarketplacePlugins(
       results.push({ 
         name: pluginName, 
         success: false, 
-        error: `Subdirectory does not contain a valid plugin (missing .claude-plugin/plugin.json)` 
+        error: `Subdirectory does not contain a valid plugin (missing ${CLAUDE_PLUGIN_PATHS.PLUGIN_MANIFEST})`
       });
       continue;
     }

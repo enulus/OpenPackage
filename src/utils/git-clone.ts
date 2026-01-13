@@ -65,17 +65,17 @@ export async function cloneRepoToTempDir(options: GitCloneOptions): Promise<stri
   const hasManifest = await exists(manifestPath);
   
   // Check for plugin manifest as alternative
-  const pluginManifestPath = join(finalPath, DIR_PATTERNS.CLAUDE_PLUGIN, 'plugin.json');
+  const pluginManifestPath = join(finalPath, DIR_PATTERNS.CLAUDE_PLUGIN, FILE_PATTERNS.PLUGIN_JSON);
   const hasPluginManifest = await exists(pluginManifestPath);
   
   // Check for marketplace manifest as alternative
-  const marketplaceManifestPath = join(finalPath, DIR_PATTERNS.CLAUDE_PLUGIN, 'marketplace.json');
+  const marketplaceManifestPath = join(finalPath, DIR_PATTERNS.CLAUDE_PLUGIN, FILE_PATTERNS.MARKETPLACE_JSON);
   const hasMarketplaceManifest = await exists(marketplaceManifestPath);
   
   if (!hasManifest && !hasPluginManifest && !hasMarketplaceManifest) {
     throw new ValidationError(
       `Cloned repository is not an OpenPackage or Claude Code plugin ` +
-      `(missing ${FILE_PATTERNS.OPENPACKAGE_YML}, .claude-plugin/plugin.json, or .claude-plugin/marketplace.json ` +
+      `(missing ${FILE_PATTERNS.OPENPACKAGE_YML}, ${DIR_PATTERNS.CLAUDE_PLUGIN}/${FILE_PATTERNS.PLUGIN_JSON}, or ${DIR_PATTERNS.CLAUDE_PLUGIN}/${FILE_PATTERNS.MARKETPLACE_JSON} ` +
       `at ${subdirectory ? `subdirectory '${subdirectory}'` : 'repository root'})`
     );
   }

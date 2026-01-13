@@ -7,7 +7,7 @@ import { PackageFile, Package } from '../types/index.js';
 import { logger } from './logger.js';
 import { ValidationError } from './errors.js';
 import { writeTextFile, readTextFile, ensureDir, exists } from './fs.js';
-import { UNVERSIONED } from '../constants/index.js';
+import { UNVERSIONED, FILE_PATTERNS } from '../constants/index.js';
 
 /**
  * Tarball utilities for package packaging and extraction
@@ -212,7 +212,7 @@ export function createFormDataForUpload(
   
   // Add tarball file
   const blob = new Blob([tarballInfo.buffer], { type: 'application/gzip' });
-  const filename = version ? `${packageName}-${version}.tgz` : `${packageName}-${UNVERSIONED}.tgz`;
+  const filename = version ? `${packageName}-${version}${FILE_PATTERNS.TGZ_FILES}` : `${packageName}-${UNVERSIONED}${FILE_PATTERNS.TGZ_FILES}`;
   formData.append('file', blob, filename);
   
   return formData;

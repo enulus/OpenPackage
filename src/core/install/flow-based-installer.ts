@@ -8,25 +8,28 @@
 
 import { join, dirname, basename, relative, extname } from 'path';
 import { promises as fs } from 'fs';
+import { mkdtemp, rm } from 'fs/promises';
+import { tmpdir } from 'os';
 import type { Platform } from '../platforms.js';
 import type { Flow, FlowContext, FlowResult } from '../../types/flows.js';
 import type { WorkspaceIndexFileMapping } from '../../types/workspace-index.js';
 import type { InstallOptions, Package } from '../../types/index.js';
 import { getPlatformDefinition, getGlobalExportFlows, platformUsesFlows, getAllPlatforms, isPlatformId } from '../platforms.js';
 import { createFlowExecutor } from '../flows/flow-executor.js';
-import { exists, ensureDir } from '../../utils/fs.js';
+import { exists, ensureDir, readTextFile, writeTextFile, ensureDir as ensureDirUtil } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
 import { toTildePath } from '../../utils/path-resolution.js';
 import { minimatch } from 'minimatch';
 import { parseUniversalPath } from '../../utils/platform-file.js';
 import type { PackageFormat } from '../install/format-detector.js';
-import { 
-  detectPackageFormat, 
+import {
+  detectPackageFormat,
   shouldInstallDirectly,
   shouldUsePathMappingOnly,
-  needsConversion 
+  needsConversion
 } from '../install/format-detector.js';
 import { createPlatformConverter } from '../flows/platform-converter.js';
+import { isJunk } from 'junk';
 
 // ============================================================================
 // Helpers
@@ -862,7 +865,6 @@ async function detectPackageFormatFromDirectory(packageRoot: string): Promise<Pa
       }
       
       const pathParts = relativePath.split('/');
-      const isJunk = await import('junk').then(m => m.isJunk);
       if (pathParts.some(part => isJunk(part))) {
         continue;
       }
@@ -1326,7 +1328,6 @@ async function installWithConversion(
   
   try {
     // Step 1: Load package files
-    const { readTextFile } = await import('../../utils/fs.js');
     const packageFiles: Array<{ path: string; content: string }> = [];
     
     for await (const sourcePath of walkFiles(packageRoot)) {
@@ -1375,9 +1376,6 @@ async function installWithConversion(
     logger.info(`Conversion to universal format complete (${conversionResult.stages.length} stages), now applying ${platform} platform flows`);
     
     // Step 4: Write converted (universal format) files to temporary directory
-    const { mkdtemp, rm } = await import('fs/promises');
-    const { tmpdir } = await import('os');
-    const { writeTextFile, ensureDir: ensureDirUtil } = await import('../../utils/fs.js');
     
     let tempPackageRoot: string | null = null;
     

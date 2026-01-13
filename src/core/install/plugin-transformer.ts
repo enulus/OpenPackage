@@ -5,6 +5,7 @@ import { ValidationError } from '../../utils/errors.js';
 import { isJunk } from 'junk';
 import type { Package, PackageFile, PackageYml } from '../../types/index.js';
 import { detectPackageFormat } from './format-detector.js';
+import { CLAUDE_PLUGIN_PATHS, DIR_PATTERNS } from '../../constants/index.js';
 
 /**
  * In-memory cache for transformed plugin packages.
@@ -71,7 +72,7 @@ export async function transformPluginToPackage(pluginDir: string): Promise<Packa
   logger.debug('Transforming Claude Code plugin to OpenPackage format', { pluginDir });
   
   // Read and parse plugin manifest
-  const manifestPath = join(pluginDir, '.claude-plugin', 'plugin.json');
+  const manifestPath = join(pluginDir, CLAUDE_PLUGIN_PATHS.PLUGIN_MANIFEST);
   let pluginManifest: ClaudePluginManifest;
   
   try {
@@ -189,7 +190,7 @@ export async function extractPluginFiles(pluginDir: string): Promise<PackageFile
       }
       
       // Skip .claude-plugin directory (plugin metadata, not needed in workspace)
-      if (relativePath.startsWith('.claude-plugin/')) {
+      if (relativePath.startsWith(`${DIR_PATTERNS.CLAUDE_PLUGIN}/`)) {
         continue;
       }
       
@@ -224,9 +225,9 @@ export function validatePluginStructure(files: PackageFile[]): {
   const paths = files.map(f => f.path);
   
   // Check for .claude-plugin directory
-  const hasManifest = paths.some(p => p.startsWith('.claude-plugin/'));
+  const hasManifest = paths.some(p => p.startsWith(`${DIR_PATTERNS.CLAUDE_PLUGIN}/`));
   if (!hasManifest) {
-    warnings.push('Plugin is missing .claude-plugin/ directory');
+    warnings.push(`Plugin is missing ${DIR_PATTERNS.CLAUDE_PLUGIN}/ directory`);
   }
   
   // Warn if no commands, agents, or skills (but this is valid)

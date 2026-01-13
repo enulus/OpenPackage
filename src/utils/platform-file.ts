@@ -3,7 +3,7 @@
  * Shared utilities for handling platform-specific file paths and extensions
  */
 
-import { basename } from 'path';
+import { basename, join } from 'path';
 import {
   getPlatformDefinition,
   getAllPlatforms,
@@ -14,6 +14,7 @@ import {
 } from '../core/platforms.js';
 import { DIR_PATTERNS, FILE_PATTERNS, type UniversalSubdir } from '../constants/index.js';
 import { getFirstPathComponent, parsePathWithPrefix, normalizePathForProcessing } from './path-normalization.js';
+import { mapUniversalToPlatform } from './platform-mapper.js';
 
 /**
  * Parse a registry or universal path to extract subdir and relative path info
@@ -144,14 +145,10 @@ export async function getPlatformSpecificPath(
   relPath: string,
   platform: Platform
 ): Promise<{ absDir: string; absFile: string }> {
-  // Import here to avoid circular dependencies
-  const { mapUniversalToPlatform } = await import('./platform-mapper.js');
-
   // Get the mapping
   const { relDir, relFile } = mapUniversalToPlatform(platform, universalSubdir, relPath, cwd);
 
   // Convert relative paths to absolute paths
-  const { join } = await import('path');
   return {
     absDir: join(cwd, relDir),
     absFile: join(cwd, relFile)

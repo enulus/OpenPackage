@@ -19,6 +19,7 @@ import { planConflictsForPackage } from '../../utils/index-based-installer.js';
 import { safePrompts } from '../../utils/prompts.js';
 import { resolveVersionRange, isExactVersion } from '../../utils/version-ranges.js';
 import { inferSourceType } from './path-package-loader.js';
+import { loadPackageFromGit } from './git-package-loader.js';
 
 interface BulkPackageEntry {
   name: string;
@@ -116,7 +117,7 @@ export async function runBulkInstallPipeline(
       if (pkg.git) {
         console.log(`\n🔧 Installing ${pkg.isDev ? '[dev] ' : ''}${gitLabel}...`);
 
-        const { sourcePath } = await (await import('./git-package-loader.js')).loadPackageFromGit({
+        const { sourcePath } = await loadPackageFromGit({
           url: pkg.git,
           ref: pkg.ref
         });

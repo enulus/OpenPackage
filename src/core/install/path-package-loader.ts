@@ -7,9 +7,10 @@ import { walkFiles, readTextFile } from '../../utils/fs.js';
 import { isJunk } from 'junk';
 import { logger } from '../../utils/logger.js';
 import { ValidationError } from '../../utils/errors.js';
-import { FILE_PATTERNS, PACKAGE_PATHS } from '../../constants/index.js';
+import { FILE_PATTERNS, PACKAGE_PATHS, CLAUDE_PLUGIN_PATHS } from '../../constants/index.js';
 import { detectPluginType } from './plugin-detector.js';
 import { transformPluginToPackage } from './plugin-transformer.js';
+import * as yaml from 'js-yaml';
 
 export type PathSourceType = 'directory' | 'tarball';
 
@@ -17,7 +18,7 @@ export type PathSourceType = 'directory' | 'tarball';
  * Infer the source type from a path string.
  */
 export function inferSourceType(path: string): PathSourceType {
-  return path.endsWith('.tgz') || path.endsWith('.tar.gz') ? 'tarball' : 'directory';
+  return path.endsWith(FILE_PATTERNS.TGZ_FILES) || path.endsWith(FILE_PATTERNS.TAR_GZ_FILES) ? 'tarball' : 'directory';
 }
 
 /**
@@ -49,7 +50,7 @@ export async function loadPackageFromDirectory(dirPath: string): Promise<Package
   if (!config) {
     throw new ValidationError(
       `Directory '${dirPath}' is not a valid OpenPackage directory or Claude Code plugin. ` +
-      `Missing ${FILE_PATTERNS.OPENPACKAGE_YML} or .claude-plugin/plugin.json`
+      `Missing ${FILE_PATTERNS.OPENPACKAGE_YML} or ${CLAUDE_PLUGIN_PATHS.PLUGIN_MANIFEST}`
     );
   }
 
@@ -116,7 +117,6 @@ export async function loadPackageFromTarball(tarballPath: string): Promise<Packa
   }
   
   // Parse openpackage.yml content
-  const yaml = await import('js-yaml');
   const config = yaml.load(packageYmlFile.content) as PackageYml;
   
   if (!config.name) {

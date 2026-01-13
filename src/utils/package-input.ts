@@ -5,11 +5,13 @@ import { parsePackageInstallSpec } from './package-name.js';
 import { ValidationError } from './errors.js';
 import { parseGitSpec } from './git-spec.js';
 import { logger } from './logger.js';
-import { 
-  resolvePackageByName, 
-  type PackageSourceCandidate, 
-  type SourceResolutionInfo 
+import {
+  resolvePackageByName,
+  type PackageSourceCandidate,
+  type SourceResolutionInfo
 } from './package-name-resolution.js';
+import { detectPluginType } from '../core/install/plugin-detector.js';
+import { DIR_PATTERNS, FILE_PATTERNS, CLAUDE_PLUGIN_PATHS } from '../constants/index.js';
 
 export type PackageInputType = 'registry' | 'directory' | 'tarball' | 'git';
 
@@ -64,15 +66,15 @@ export async function classifyPackageInput(
   }
 
   // Check for tarball file extension
-  const isTarballPath = raw.endsWith('.tgz') || raw.endsWith('.tar.gz');
+  const isTarballPath = raw.endsWith(FILE_PATTERNS.TGZ_FILES) || raw.endsWith(FILE_PATTERNS.TAR_GZ_FILES);
   
   // Check if input looks like a path
-  const looksLikePath = raw.startsWith('/') || 
-                        raw.startsWith('./') || 
-                        raw.startsWith('../') || 
+  const looksLikePath = raw.startsWith('/') ||
+                        raw.startsWith('./') ||
+                        raw.startsWith('../') ||
                         raw === '.' ||
                         raw.startsWith('~/') ||
-                        raw.startsWith('.openpackage/') || // Include .openpackage paths
+                        raw.startsWith(DIR_PATTERNS.OPENPACKAGE + '/') || // Include .openpackage paths
                         (isAbsolute(raw) && !raw.includes('@'));
   
   if (isTarballPath || looksLikePath) {
@@ -88,7 +90,6 @@ export async function classifyPackageInput(
     
     // Check if it's a valid package directory OR a plugin
     const isValid = await isValidPackageDirectory(resolvedPath);
-    const { detectPluginType } = await import('../core/install/plugin-detector.js');
     const pluginDetection = await detectPluginType(resolvedPath);
     
     if (isValid || pluginDetection.isPlugin) {
@@ -99,7 +100,7 @@ export async function classifyPackageInput(
     if (await exists(resolvedPath)) {
       throw new ValidationError(
         `Path '${raw}' exists but is not a valid OpenPackage directory or Claude Code plugin. ` +
-        `Valid packages must contain openpackage.yml or .claude-plugin/plugin.json`
+        `Valid packages must contain ${FILE_PATTERNS.OPENPACKAGE_YML} or ${CLAUDE_PLUGIN_PATHS.PLUGIN_MANIFEST}`
       );
     }
   }

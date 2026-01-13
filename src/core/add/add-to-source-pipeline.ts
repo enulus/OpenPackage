@@ -14,6 +14,7 @@ import type { PackageContext } from '../package-context.js';
 import { parsePackageYml } from '../../utils/package-yml.js';
 import { exists } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
+import { runApplyPipeline } from '../apply/apply-pipeline.js';
 
 export interface AddToSourceOptions {
   apply?: boolean;
@@ -87,9 +88,8 @@ export async function runAddToSourcePipeline(
     try {
       // Check if package is installed in current workspace
       await resolvePackageSource(cwd, packageName);
-      
+
       // Apply changes to workspace
-      const { runApplyPipeline } = await import('../apply/apply-pipeline.js');
       const applyResult = await runApplyPipeline(source.packageName, {});
       
       if (!applyResult.success) {

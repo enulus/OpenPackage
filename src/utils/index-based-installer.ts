@@ -58,6 +58,8 @@ import { calculateFileHash } from './hash-utils.js';
 import { installPackageWithFlows, type FlowInstallResult } from '../core/install/flow-based-installer.js';
 import { getTargetPath } from './workspace-index-helpers.js';
 import type { WorkspaceIndexFileMapping } from '../types/workspace-index.js';
+import { loadPackageFromPath } from '../core/install/path-package-loader.js';
+import { installPackageByIndexWithFlows } from './flow-index-installer.js';
 
 // ============================================================================
 // Types and Interfaces
@@ -1119,7 +1121,6 @@ export async function installPackageByIndex(
     let packageFormat: any = undefined;
     if (contentRoot) {
       try {
-        const { loadPackageFromPath } = await import('../core/install/path-package-loader.js');
         const pkg = await loadPackageFromPath(contentRoot);
         
         // Extract format metadata if available (set by plugin transformer)
@@ -1136,9 +1137,8 @@ export async function installPackageByIndex(
         logger.debug(`Could not load package for format detection: ${(error as Error).message}`);
       }
     }
-    
+
     // Delegate to flow-based installer
-    const { installPackageByIndexWithFlows } = await import('./flow-index-installer.js');
     return await installPackageByIndexWithFlows(
       cwd,
       packageName,

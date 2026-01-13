@@ -21,9 +21,10 @@ import {
 import { getPlatformDefinition, getGlobalImportFlows } from '../platforms.js';
 import { createFlowExecutor } from './flow-executor.js';
 import { logger } from '../../utils/logger.js';
-import { ensureDir, writeTextFile } from '../../utils/fs.js';
+import { ensureDir, writeTextFile, readTextFile } from '../../utils/fs.js';
 import { tmpdir } from 'os';
 import { mkdtemp, rm } from 'fs/promises';
+import { minimatch } from 'minimatch';
 
 /**
  * Conversion pipeline stage
@@ -289,7 +290,6 @@ export class PlatformConverter {
   ): Promise<string[]> {
     const patterns = Array.isArray(pattern) ? pattern : [pattern];
     const matches: string[] = [];
-    const { minimatch } = await import('minimatch');
     
     // Walk all files in baseDir
     async function* walkFiles(dir: string): AsyncGenerator<string> {
@@ -416,7 +416,6 @@ export class PlatformConverter {
             
             // Read transformed file content
             try {
-              const { readTextFile } = await import('../../utils/fs.js');
               const content = await readTextFile(flowResult.target);
               
               convertedFiles.push({

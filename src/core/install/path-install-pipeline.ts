@@ -24,6 +24,8 @@ import {
   addPackageToYml,
 } from '../../utils/package-management.js';
 import { determineResolutionMode } from './install-pipeline.js';
+import { detectPluginType } from './plugin-detector.js';
+import { resolveDependencies } from '../dependency-resolver.js';
 
 export interface PathInstallPipelineOptions extends InstallOptions {
   sourcePath: string;     // Absolute path to local package directory or tarball
@@ -71,7 +73,6 @@ export async function runPathInstallPipeline(
   let isPlugin = false;
   try {
     // Check if this is a Claude Code plugin
-    const { detectPluginType } = await import('./plugin-detector.js');
     const pluginDetection = await detectPluginType(options.sourcePath);
     if (pluginDetection.isPlugin && pluginDetection.type === 'individual') {
       isPlugin = true;
@@ -135,7 +136,6 @@ export async function runPathInstallPipeline(
 
       // Resolve dependencies from the source package
       // We need to manually resolve dependencies since resolveDependenciesForInstall expects a registry package
-      const { resolveDependencies } = await import('../dependency-resolver.js');
       const { gatherGlobalVersionConstraints, gatherRootVersionConstraints } = await import('../openpackage.js');
       
       const globalConstraints = await gatherGlobalVersionConstraints(cwd);

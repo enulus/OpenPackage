@@ -27,6 +27,7 @@ import {
   isExactVersion
 } from '../utils/version-ranges.js';
 import { PACKAGE_PATHS, UNVERSIONED } from '../constants/index.js';
+import { getTransformedPlugin } from './install/plugin-transformer.js';
 
 /**
  * Package management operations
@@ -59,7 +60,6 @@ export class PackageManager {
     
     // Check if this is a cached transformed plugin
     if (version) {
-      const { getTransformedPlugin } = await import('./install/plugin-transformer.js');
       const cachedPlugin = getTransformedPlugin(packageName, version);
       if (cachedPlugin) {
         logger.debug(`Using cached transformed plugin: ${packageName}@${version}`);

@@ -5,6 +5,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { runCli } from '../../test-helpers.js';
 import { exists } from '../../../src/utils/fs.js';
+import { DIR_PATTERNS, FILE_PATTERNS, CLAUDE_PLUGIN_PATHS } from '../../../src/constants/index.js';
 
 describe('Claude Code Plugin Installation', () => {
   let testDir: string;
@@ -25,7 +26,7 @@ describe('Claude Code Plugin Installation', () => {
    * Helper to create a minimal Claude Code plugin structure
    */
   async function createTestPlugin(name: string, version: string) {
-    await mkdir(join(pluginDir, '.claude-plugin'), { recursive: true });
+    await mkdir(join(pluginDir, DIR_PATTERNS.CLAUDE_PLUGIN), { recursive: true });
     await mkdir(join(pluginDir, 'commands'), { recursive: true });
 
     // Create plugin manifest
@@ -38,7 +39,7 @@ describe('Claude Code Plugin Installation', () => {
       }
     };
     await writeFile(
-      join(pluginDir, '.claude-plugin', 'plugin.json'),
+      join(pluginDir, CLAUDE_PLUGIN_PATHS.PLUGIN_MANIFEST),
       JSON.stringify(pluginManifest, null, 2)
     );
 
@@ -120,8 +121,8 @@ This is a test command.
     // Verify files were extracted (with original paths, .claude-plugin excluded)
     assert.ok(pkg.files.length > 0, 'Should extract files');
     // Plugin manifest (.claude-plugin/plugin.json) should be excluded
-    const manifestFile = pkg.files.find(f => f.path.includes('.claude-plugin'));
-    assert.ok(!manifestFile, 'Should NOT include .claude-plugin directory');
+    const manifestFile = pkg.files.find(f => f.path.includes(DIR_PATTERNS.CLAUDE_PLUGIN));
+    assert.ok(!manifestFile, `Should NOT include ${DIR_PATTERNS.CLAUDE_PLUGIN} directory`);
     // Command files should be kept with original paths
     const commandFile = pkg.files.find(f => f.path === 'commands/test.md');
     assert.ok(commandFile, 'Should include command file');
@@ -129,7 +130,7 @@ This is a test command.
 
   it('should convert Claude-format frontmatter to OpenCode format', async () => {
     // Create a plugin with an agent that has Claude-format tools frontmatter
-    await mkdir(join(pluginDir, '.claude-plugin'), { recursive: true });
+    await mkdir(join(pluginDir, DIR_PATTERNS.CLAUDE_PLUGIN), { recursive: true });
     await mkdir(join(pluginDir, 'agents'), { recursive: true });
 
     // Create plugin manifest
@@ -138,7 +139,7 @@ This is a test command.
       version: '1.0.0'
     };
     await writeFile(
-      join(pluginDir, '.claude-plugin', 'plugin.json'),
+      join(pluginDir, CLAUDE_PLUGIN_PATHS.PLUGIN_MANIFEST),
       JSON.stringify(pluginManifest, null, 2)
     );
 

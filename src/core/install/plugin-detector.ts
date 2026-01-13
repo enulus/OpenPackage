@@ -1,6 +1,7 @@
 import { join } from 'path';
 import { exists, readTextFile } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
+import { DIR_PATTERNS, FILE_PATTERNS } from '../../constants/index.js';
 
 export type PluginType = 'individual' | 'marketplace';
 
@@ -9,10 +10,6 @@ export interface PluginDetectionResult {
   type?: PluginType;
   manifestPath?: string;
 }
-
-const PLUGIN_DIR = '.claude-plugin';
-const PLUGIN_MANIFEST = 'plugin.json';
-const MARKETPLACE_MANIFEST = 'marketplace.json';
 
 /**
  * Detect if a directory contains a Claude Code plugin.
@@ -27,10 +24,10 @@ const MARKETPLACE_MANIFEST = 'marketplace.json';
 export async function detectPluginType(dirPath: string): Promise<PluginDetectionResult> {
   logger.debug('Detecting plugin type', { dirPath });
   
-  const pluginDir = join(dirPath, PLUGIN_DIR);
+  const pluginDir = join(dirPath, DIR_PATTERNS.CLAUDE_PLUGIN);
   
   // Check for individual plugin
-  const pluginManifestPath = join(pluginDir, PLUGIN_MANIFEST);
+  const pluginManifestPath = join(pluginDir, FILE_PATTERNS.PLUGIN_JSON);
   if (await exists(pluginManifestPath)) {
     logger.info('Detected individual Claude Code plugin', { path: pluginManifestPath });
     return {
@@ -41,7 +38,7 @@ export async function detectPluginType(dirPath: string): Promise<PluginDetection
   }
   
   // Check for marketplace
-  const marketplaceManifestPath = join(pluginDir, MARKETPLACE_MANIFEST);
+  const marketplaceManifestPath = join(pluginDir, FILE_PATTERNS.MARKETPLACE_JSON);
   if (await exists(marketplaceManifestPath)) {
     logger.info('Detected Claude Code plugin marketplace', { path: marketplaceManifestPath });
     return {

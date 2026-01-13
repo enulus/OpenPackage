@@ -22,6 +22,12 @@ export const FILE_PATTERNS = {
   GEMINI_MD: 'GEMINI.md',
   QWEN_MD: 'QWEN.md',
   WARP_MD: 'WARP.md',
+  // Claude Code plugin manifest files
+  PLUGIN_JSON: 'plugin.json',
+  MARKETPLACE_JSON: 'marketplace.json',
+  // Archive file extensions
+  TGZ_FILES: '.tgz',
+  TAR_GZ_FILES: '.tar.gz',
   // File patterns arrays
   MARKDOWN_FILES: ['.md', '.mdc'],
   YML_FILE: '.yml',
@@ -62,6 +68,22 @@ export const PACKAGE_PATHS = {
    * <cached-package-root>/openpackage.index.yml
    */
   INDEX_RELATIVE: `${FILE_PATTERNS.OPENPACKAGE_INDEX_YML}`,
+} as const;
+
+/**
+ * Claude Code plugin-related paths.
+ */
+export const CLAUDE_PLUGIN_PATHS = {
+  /**
+   * The Claude plugin manifest file path (relative to plugin directory):
+   * <plugin-root>/.claude-plugin/plugin.json
+   */
+  PLUGIN_MANIFEST: `${DIR_PATTERNS.CLAUDE_PLUGIN}/${FILE_PATTERNS.PLUGIN_JSON}`,
+  /**
+   * The Claude plugin marketplace manifest file path (relative to marketplace directory):
+   * <marketplace-root>/.claude-plugin/marketplace.json
+   */
+  MARKETPLACE_MANIFEST: `${DIR_PATTERNS.CLAUDE_PLUGIN}/${FILE_PATTERNS.MARKETPLACE_JSON}`,
 } as const;
 
 export const DEPENDENCY_ARRAYS = {
