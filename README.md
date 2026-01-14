@@ -136,19 +136,19 @@ OpenPackage performs installation and platform sync of files for supported AI co
 
 | Platform | Directory | Root file | Rules | Commands | Agents | Skills | MCP |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Antigravity | .agent/ | | rules/ | workflows/ |  | | |
-| Augment Code | .augment/ | | rules/ | commands/ |  | | |
+| Antigravity | .agent/ | | rules/ | workflows/ | | skills/ | |
+| Augment Code | .augment/ | | rules/ | commands/ | | | |
 | Claude Code | .claude/ | CLAUDE.md | rules/ | commands/ | agents/ | skills/ | .mcp.json (root) |
-| Codex | .codex/ | AGENTS.md | | prompts/ | | | config.toml |
-| Cursor | .cursor/ | AGENTS.md | rules/ | commands/ | agents/ | | mcp.json |
-| Factory | .factory/ | AGENTS.md | | commands/ | droids/ | | mcp.json |
-| Kilo Code | .kilocode/ | AGENTS.md | rules/ | workflows/ | |  | mcp.json |
-| Kiro | .kiro/ | | steering/ |  | | | settings/mcp.json |
+| Codex | .codex/ | AGENTS.md | | prompts/ | | skills/ | config.toml |
+| Cursor | .cursor/ | AGENTS.md | rules/ | commands/ | agents/ | skills/ | mcp.json |
+| Factory | .factory/ | AGENTS.md | | commands/ | droids/ | skills/ | mcp.json |
+| Kilo Code | .kilocode/ | AGENTS.md | rules/ | workflows/ | | skills/ | mcp.json |
+| Kiro | .kiro/ | | steering/ | | | | settings/mcp.json |
 | OpenCode | .opencode/ | AGENTS.md | | command/ | agent/ | skills/ | opencode.json |
-| Qwen Code | .qwen/ | QWEN.md | | | agents/ | | settings.json |
-| Roo | .roo/ | AGENTS.md | | commands/ | | | mcp.json |
+| Qwen Code | .qwen/ | QWEN.md | | | agents/ | skills/ | settings.json |
+| Roo | .roo/ | AGENTS.md | | commands/ | | skills/ | mcp.json |
 | Warp | .warp/ | WARP.md | | | | |
-| Windsurf | .windsurf/ | | rules/ |  | | | |
+| Windsurf | .windsurf/ | | rules/ | | | skills/ | |
 
 The built-in `platforms.jsonc` defines supported platforms, but can be overridden by user configs:
 - Global: `~/.openpackage/platforms.jsonc` (`.json`)

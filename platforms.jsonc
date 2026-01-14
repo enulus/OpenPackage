@@ -34,6 +34,10 @@
       {
         "from": "commands/**/*.md",
         "to": ".agent/workflows/**/*.md"
+      },
+      {
+        "from": "skills/**/*",
+        "to": ".agent/skills/**/*"
       }
     ],
     "import": [
@@ -44,6 +48,10 @@
       {
         "from": ".agent/workflows/**/*.md",
         "to": "commands/**/*.md"
+      },
+      {
+        "from": ".agent/skills/**/*",
+        "to": "skills/**/*"
       }
     ]
   },
@@ -210,18 +218,22 @@
         "to": ".codex/prompts/**/*.md"
       },
       {
+        "from": "skills/**/*",
+        "to": ".codex/skills/**/*"
+      },
+      {
         "from": ["mcp.jsonc", "mcp.json"],
         "to": ".codex/config.toml",
         "map": [
           // 1. Rename root key
           { "$rename": { "mcpServers": "mcp_servers" } },
-          
+
           // 2. Extract bearer token from Authorization header
           {
             "$pipeline": {
               "field": "mcp_servers.*.headers.Authorization",
               "operations": [
-                { "$extract": { 
+                { "$extract": {
                     "pattern": "^Bearer \\$\\{env:([A-Z_][A-Z0-9_]*)\\}$",
                     "group": 1,
                     "default": "$SELF"
@@ -230,7 +242,7 @@
             }
           },
           { "$rename": { "mcp_servers.*.headers.Authorization": "mcp_servers.*.bearer_token_env_var" } },
-          
+
           // 3. Partition headers into env and static
           {
             "$pipeline": {
@@ -246,7 +258,7 @@
               ]
             }
           },
-          
+
           // 4. Extract env var names from env_http_headers
           {
             "$pipeline": {
@@ -254,24 +266,24 @@
               "operations": [
                 { "$mapValues": {
                     "operations": [
-                      { "$extract": { 
+                      { "$extract": {
                           "pattern": "^\\$\\{env:([A-Z_][A-Z0-9_]*)\\}$",
-                          "group": 1 
+                          "group": 1
                       }}
                     ]
                 }}
               ]
             }
           },
-          
+
           // 5. Flatten to server level
           { "$rename": { "mcp_servers.*.headers.http_headers": "mcp_servers.*.http_headers" } },
           { "$rename": { "mcp_servers.*.headers.env_http_headers": "mcp_servers.*.env_http_headers" } },
           { "$unset": "mcp_servers.*.headers" },
-          
+
           // 6. Rename timeout
           { "$rename": { "mcp_servers.*.timeout": "mcp_servers.*.startup_timeout_sec" } },
-          
+
           // Post-process: Convert to TOML
           { "$pipe": ["json-to-toml"] }
         ],
@@ -284,12 +296,16 @@
         "to": "commands/**/*.md"
       },
       {
+        "from": ".codex/skills/**/*",
+        "to": "skills/**/*"
+      },
+      {
         "from": ".codex/config.toml",
         "to": "mcp.jsonc",
         "map": [
           // Pre-process: Parse TOML
           { "$pipe": ["toml-to-json"] },
-          
+
           // 1. Wrap env vars
           {
             "$pipeline": {
@@ -303,7 +319,7 @@
               ]
             }
           },
-          
+
           // 2. Merge headers
           {
             "$pipeline": {
@@ -316,7 +332,7 @@
               ]
             }
           },
-          
+
           // 3. Reconstruct Authorization header
           {
             "$pipeline": {
@@ -327,10 +343,10 @@
             }
           },
           { "$rename": { "mcp_servers.*.bearer_token_env_var": "mcp_servers.*.headers.Authorization" } },
-          
+
           // 4. Rename timeout
           { "$rename": { "mcp_servers.*.startup_timeout_sec": "mcp_servers.*.timeout" } },
-          
+
           // 5. Rename top-level key
           { "$rename": { "mcp_servers": "mcpServers" } }
         ]
@@ -356,6 +372,10 @@
         "to": ".cursor/agents/**/*.md"
       },
       {
+        "from": "skills/**/*",
+        "to": ".cursor/skills/**/*"
+      },
+      {
         "from": ["mcp.jsonc", "mcp.json"],
         "to": ".cursor/mcp.json",
         "merge": "deep"
@@ -373,6 +393,10 @@
       {
         "from": ".cursor/agents/**/*.md",
         "to": "agents/**/*.md"
+      },
+      {
+        "from": ".cursor/skills/**/*",
+        "to": "skills/**/*"
       },
       {
         "from": [".cursor/mcp.json", ".cursor/mcp.jsonc"],
@@ -395,6 +419,10 @@
         "to": ".factory/droids/**/*.md"
       },
       {
+        "from": "skills/**/*",
+        "to": ".factory/skills/**/*"
+      },
+      {
         "from": ["mcp.jsonc", "mcp.json"],
         "to": ".factory/settings/mcp.json",
         "merge": "deep"
@@ -408,6 +436,10 @@
       {
         "from": ".factory/droids/**/*.md",
         "to": "agents/**/*.md"
+      },
+      {
+        "from": ".factory/skills/**/*",
+        "to": "skills/**/*"
       },
       {
         "from": [".factory/settings/mcp.json", ".factory/settings/mcp.jsonc"],
@@ -431,6 +463,10 @@
         "to": ".kilocode/workflows/**/*.md"
       },
       {
+        "from": "skills/**/*",
+        "to": ".kilocode/skills/**/*"
+      },
+      {
         "from": ["mcp.jsonc", "mcp.json"],
         "to": ".kilocode/mcp.json",
         "merge": "deep"
@@ -444,6 +480,10 @@
       {
         "from": ".kilocode/workflows/**/*.md",
         "to": "commands/**/*.md"
+      },
+      {
+        "from": ".kilocode/skills/**/*",
+        "to": "skills/**/*"
       },
       {
         "from": [".kilocode/mcp.json", ".kilocode/mcp.jsonc"],
@@ -537,6 +577,10 @@
         "to": ".qwen/agents/**/*.md"
       },
       {
+        "from": "skills/**/*",
+        "to": ".qwen/skills/**/*"
+      },
+      {
         "from": ["mcp.jsonc", "mcp.json"],
         "to": ".qwen/settings.json",
         "merge": "deep"
@@ -551,6 +595,10 @@
       {
         "from": ".qwen/agents/**/*.md",
         "to": "agents/**/*.md"
+      },
+      {
+        "from": ".qwen/skills/**/*",
+        "to": "skills/**/*"
       },
       {
         "from": [".qwen/settings.json", ".qwen/settings.jsonc"],
@@ -569,6 +617,10 @@
         "to": ".roo/commands/**/*.md"
       },
       {
+        "from": "skills/**/*",
+        "to": ".roo/skills/**/*"
+      },
+      {
         "from": ["mcp.jsonc", "mcp.json"],
         "to": ".roo/mcp.json",
         "merge": "deep"
@@ -578,6 +630,10 @@
       {
         "from": ".roo/commands/**/*.md",
         "to": "commands/**/*.md"
+      },
+      {
+        "from": ".roo/skills/**/*",
+        "to": "skills/**/*"
       },
       {
         "from": [".roo/mcp.json", ".roo/mcp.jsonc"],
@@ -613,12 +669,20 @@
       {
         "from": "rules/**/*.md",
         "to": ".windsurf/rules/**/*.md"
+      },
+      {
+        "from": "skills/**/*",
+        "to": ".windsurf/skills/**/*"
       }
     ],
     "import": [
       {
         "from": ".windsurf/rules/**/*.md",
         "to": "rules/**/*.md"
+      },
+      {
+        "from": ".windsurf/skills/**/*",
+        "to": "skills/**/*"
       }
     ]
   }
