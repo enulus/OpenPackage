@@ -371,7 +371,8 @@ async function findMatchingFiles(
       if (entry.isDirectory()) {
         await findMatchingFiles(fullPath, pattern, baseDir, matches);
       } else if (entry.isFile()) {
-        if (minimatch(rel, pattern, { dot: false })) {
+        const matched = minimatch(rel, pattern, { dot: false });
+        if (matched) {
           matches.push(rel);
         }
       }
@@ -392,36 +393,70 @@ function resolveTargetFromGlob(
   // If 'to' pattern has glob, map the structure
   if (toPattern.includes('*')) {
     // Handle ** recursive patterns
-    if (fromPattern.includes('**') && toPattern.includes('**')) {
-      const fromParts = fromPattern.split('**');
+    if (toPattern.includes('**')) {
       const toParts = toPattern.split('**');
-      const fromBase = fromParts[0].replace(/\/$/, '');
       const toBase = toParts[0].replace(/\/$/, '');
-
-      const fromSuffix = fromParts[1] || '';
       const toSuffix = toParts[1] || '';
 
-      let relativeSubpath = sourceRelFromPackage;
-      if (fromBase) {
-        relativeSubpath = sourceRelFromPackage.startsWith(fromBase + '/')
-          ? sourceRelFromPackage.slice(fromBase.length + 1)
-          : sourceRelFromPackage;
-      }
+      let relativeSubpath: string;
 
-      // Handle extension mapping if suffixes specify extensions: /**/*.md -> /**/*.mdc
-      if (fromSuffix && toSuffix) {
-        const fromExt = fromSuffix.replace(/^\/?\*+/, '');
-        const toExt = toSuffix.replace(/^\/?\*+/, '');
-        if (fromExt && toExt && fromExt !== toExt) {
-          relativeSubpath = relativeSubpath.replace(
-            new RegExp(fromExt.replace('.', '\\.') + '$'),
-            toExt
-          );
+      if (fromPattern.includes('**')) {
+        // Both patterns have ** - use original logic
+        const fromParts = fromPattern.split('**');
+        const fromBase = fromParts[0].replace(/\/$/, '');
+        const fromSuffix = fromParts[1] || '';
+
+        relativeSubpath = sourceRelFromPackage;
+        if (fromBase) {
+          relativeSubpath = sourceRelFromPackage.startsWith(fromBase + '/')
+            ? sourceRelFromPackage.slice(fromBase.length + 1)
+            : sourceRelFromPackage;
+        }
+
+        // Handle extension mapping if suffixes specify extensions: /**/*.md -> /**/*.mdc
+        if (fromSuffix && toSuffix) {
+          const fromExt = fromSuffix.replace(/^\/?\*+/, '');
+          const toExt = toSuffix.replace(/^\/?\*+/, '');
+          if (fromExt && toExt && fromExt !== toExt) {
+            relativeSubpath = relativeSubpath.replace(
+              new RegExp(fromExt.replace('.', '\\.') + '$'),
+              toExt
+            );
+          }
+        }
+      } else {
+        // fromPattern is a concrete path (no **), but toPattern has **
+        // Extract the relative subpath by matching the base directory from toPattern
+        if (toBase) {
+          // Extract everything after the base directory
+          // e.g., if toBase is "skills" and sourceRelFromPackage is "skills/frontend-design/SKILL.md",
+          // extract "frontend-design/SKILL.md"
+          if (sourceRelFromPackage.startsWith(toBase + '/')) {
+            relativeSubpath = sourceRelFromPackage.slice(toBase.length + 1);
+          } else {
+            // Fallback: use full relative path if it doesn't start with toBase
+            relativeSubpath = sourceRelFromPackage;
+          }
+        } else {
+          // No base in toPattern, use full relative path
+          relativeSubpath = sourceRelFromPackage;
+        }
+
+        // Handle extension mapping if toSuffix specifies an extension
+        if (toSuffix) {
+          const toExt = toSuffix.replace(/^\/?\*+/, '');
+          if (toExt && toExt.startsWith('.')) {
+            const currentExt = extname(relativeSubpath);
+            if (currentExt && currentExt !== toExt) {
+              relativeSubpath = relativeSubpath.slice(0, -currentExt.length) + toExt;
+            }
+          }
         }
       }
 
       const targetPath = toBase ? join(toBase, relativeSubpath) : relativeSubpath;
-      return join(context.workspaceRoot, targetPath);
+      const finalTarget = join(context.workspaceRoot, targetPath);
+      return finalTarget;
     }
 
     // Single-level * patterns
