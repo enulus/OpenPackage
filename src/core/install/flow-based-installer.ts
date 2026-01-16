@@ -14,7 +14,7 @@ import type { Platform } from '../platforms.js';
 import type { Flow, FlowContext, FlowResult } from '../../types/flows.js';
 import type { WorkspaceIndexFileMapping } from '../../types/workspace-index.js';
 import type { InstallOptions, Package } from '../../types/index.js';
-import { getPlatformDefinition, getGlobalExportFlows, platformUsesFlows, getAllPlatforms, isPlatformId } from '../platforms.js';
+import { getPlatformDefinition, getGlobalExportFlows, platformUsesFlows, getAllPlatforms, isPlatformId, deriveRootDirFromFlows } from '../platforms.js';
 import { createFlowExecutor } from '../flows/flow-executor.js';
 import { exists, ensureDir, readTextFile, writeTextFile, ensureDir as ensureDirUtil } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
@@ -528,7 +528,9 @@ export async function installPackageWithFlows(
         version: packageVersion,
         priority,
         rootFile: platformDef.rootFile,
-        rootDir: platformDef.rootDir
+        rootDir: deriveRootDirFromFlows(platformDef),
+        source: packageFormat.sourcePlatform,
+        platform: platform
       },
       dryRun
     };
@@ -1116,7 +1118,7 @@ async function installWithPathMappingOnly(
         version: packageVersion,
         priority,
         rootFile: platformDef.rootFile,
-        rootDir: platformDef.rootDir
+        rootDir: deriveRootDirFromFlows(platformDef)
       },
       dryRun
     };

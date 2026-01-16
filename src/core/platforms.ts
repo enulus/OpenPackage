@@ -31,8 +31,9 @@ export type Platform = string
 export interface PlatformDefinition {
   id: Platform
   name: string
-  rootDir: string
-  rootFile?: string
+  rootDir?: string  // Optional now, use detection instead
+  rootFile?: string  // Optional now, use detection instead
+  detection?: string[]  // Array of glob patterns for detection
   export: Flow[]  // Export flows: Package → Workspace (install, apply)
   import: Flow[]  // Import flows: Workspace → Package (save)
   aliases?: string[]
@@ -44,8 +45,9 @@ export interface PlatformDefinition {
 // Types for JSONC config structure (array format)
 interface PlatformConfig {
   name: string
-  rootDir: string
-  rootFile?: string
+  rootDir?: string  // Optional now, use detection instead
+  rootFile?: string  // Optional now, use detection instead
+  detection?: string[]  // Array of glob patterns for detection
   export?: Flow[]  // Export flows: Package → Workspace (install, apply)
   import?: Flow[]  // Import flows: Workspace → Package (save)
   aliases?: string[]
@@ -107,6 +109,7 @@ function createPlatformDefinitions(
       name: platformConfig.name,
       rootDir: platformConfig.rootDir,
       rootFile: platformConfig.rootFile,
+      detection: platformConfig.detection,
       export: platformConfig.export || [],
       import: platformConfig.import || [],
       aliases: platformConfig.aliases,
@@ -169,6 +172,7 @@ export function mergePlatformsConfig(base: PlatformsConfig, override: PlatformsC
       name: overrideCfg.name ?? baseCfg.name,
       rootDir: overrideCfg.rootDir ?? baseCfg.rootDir,
       rootFile: overrideCfg.rootFile ?? baseCfg.rootFile,
+      detection: overrideCfg.detection ?? baseCfg.detection, // replace array
       aliases: overrideCfg.aliases ?? baseCfg.aliases, // replace array
       enabled: overrideCfg.enabled ?? baseCfg.enabled,
       description: overrideCfg.description ?? baseCfg.description,
@@ -213,8 +217,9 @@ export function validatePlatformsConfig(config: PlatformsConfig): string[] {
     // Now we know platConfig is PlatformConfig
     const cfg = platConfig as PlatformConfig
 
-    if (!cfg.rootDir || cfg.rootDir.trim() === '') {
-      errors.push(`Platform '${platformId}': Missing or empty rootDir`)
+    // rootDir is now optional if detection is provided
+    if (!cfg.detection && (!cfg.rootDir || cfg.rootDir.trim() === '')) {
+      errors.push(`Platform '${platformId}': Must define either 'detection' array or 'rootDir'`)
     }
     if (!cfg.name || cfg.name.trim() === '') {
       errors.push(`Platform '${platformId}': Missing or empty name`)
@@ -238,11 +243,12 @@ export function validatePlatformsConfig(config: PlatformsConfig): string[] {
       }
     }
 
-    // Validate that export or import or rootFile is present
+    // Validate that export or import or rootFile or detection is present
     const hasExport = cfg.export && cfg.export.length > 0;
     const hasImport = cfg.import && cfg.import.length > 0;
-    if (!hasExport && !hasImport && !cfg.rootFile) {
-      errors.push(`Platform '${platformId}': Must define at least one of 'export', 'import', or 'rootFile'`)
+    const hasDetection = cfg.detection && cfg.detection.length > 0;
+    if (!hasExport && !hasImport && !cfg.rootFile && !hasDetection) {
+      errors.push(`Platform '${platformId}': Must define at least one of 'export', 'import', 'detection', or 'rootFile'`)
     }
 
     if (cfg.aliases !== undefined && (!Array.isArray(cfg.aliases) || cfg.aliases.some((a: any) => typeof a !== 'string'))) {
@@ -431,7 +437,9 @@ function getPlatformsState(cwd?: string | null): PlatformsState {
   // Collect all universal patterns from platform export flows
   for (const def of Object.values(defs)) {
     allPlatforms.push(def.id)
-    dirLookup[def.rootDir] = def.id
+    if (def.rootDir) {
+      dirLookup[def.rootDir] = def.id
+    }
     for (const alias of def.aliases ?? []) {
       aliasLookup[alias.toLowerCase()] = def.id
     }
@@ -652,6 +660,52 @@ export function getPlatformDefinition(
 }
 
 /**
+ * Derive the root directory from platform flows.
+ * Extracts the common root directory from export flow 'to' patterns.
+ * Falls back to platform ID if no flows defined.
+ * 
+ * @param definition - Platform definition
+ * @returns Root directory path (e.g., '.claude', '.cursor')
+ */
+export function deriveRootDirFromFlows(definition: PlatformDefinition): string {
+  // If rootDir is explicitly defined, use it
+  if (definition.rootDir) {
+    return definition.rootDir;
+  }
+  
+  // Try to extract from export flows
+  if (definition.export && definition.export.length > 0) {
+    for (const flow of definition.export) {
+      const toPattern = typeof flow.to === 'string' ? flow.to : Object.keys(flow.to)[0];
+      if (toPattern) {
+        // Extract root directory from pattern (e.g., ".claude/rules/**/*.md" -> ".claude")
+        const match = toPattern.match(/^(\.[^/]+)/);
+        if (match) {
+          return match[1];
+        }
+      }
+    }
+  }
+  
+  // Try to extract from import flows
+  if (definition.import && definition.import.length > 0) {
+    for (const flow of definition.import) {
+      const fromPattern = Array.isArray(flow.from) ? flow.from[0] : flow.from;
+      if (fromPattern) {
+        // Extract root directory from pattern
+        const match = fromPattern.match(/^(\.[^/]+)/);
+        if (match) {
+          return match[1];
+        }
+      }
+    }
+  }
+  
+  // Fallback to platform ID prefixed with dot
+  return `.${definition.id}`;
+}
+
+/**
  * Get all platforms
  */
 export function getAllPlatforms(
@@ -736,8 +790,10 @@ function buildDirectoryPaths(
     }
   }
 
+  const rootDir = deriveRootDirFromFlows(definition);
+  
   return {
-    rootDir: join(cwd, definition.rootDir),
+    rootDir: join(cwd, rootDir),
     rootFile: definition.rootFile ? join(cwd, definition.rootFile) : undefined,
     subdirs: subdirsPaths
   }
@@ -785,19 +841,38 @@ export async function detectAllPlatforms(
   const detectionPromises = state.enabledPlatforms.map(
     async (platform) => {
       const definition = state.defs[platform]
-      const rootDirPath = join(cwd, definition.rootDir)
-
-      // Detected if root dir exists OR unique root file exists (skip AGENTS.md)
-      const dirExists = await exists(rootDirPath)
-      let fileExists = false
-      if (
-        definition.rootFile &&
-        definition.rootFile !== FILE_PATTERNS.AGENTS_MD
-      ) {
-        const rootFilePath = join(cwd, definition.rootFile)
-        fileExists = await exists(rootFilePath)
+      
+      // Use new detection array if available
+      if (definition.detection && definition.detection.length > 0) {
+        // Check if any detection pattern matches
+        for (const pattern of definition.detection) {
+          const testPath = join(cwd, pattern)
+          if (await exists(testPath)) {
+            return {
+              name: platform,
+              detected: true,
+            }
+          }
+        }
+        
+        return {
+          name: platform,
+          detected: false,
+        }
       }
-      const detected = dirExists || fileExists
+      
+      // Legacy detection using rootDir/rootFile
+      let detected = false
+      
+      if (definition.rootDir) {
+        const rootDirPath = join(cwd, definition.rootDir)
+        detected = await exists(rootDirPath)
+      }
+      
+      if (!detected && definition.rootFile && definition.rootFile !== FILE_PATTERNS.AGENTS_MD) {
+        const rootFilePath = join(cwd, definition.rootFile)
+        detected = await exists(rootFilePath)
+      }
 
       return {
         name: platform,
@@ -840,19 +915,21 @@ export async function createPlatformDirectories(
       throw new Error(`Unknown platform: ${platform}`)
     }
     
-    // Only create root directory
-    const rootPath = join(cwd, definition.rootDir)
-    try {
-      const dirExists = await exists(rootPath)
-      if (!dirExists) {
-        await ensureDir(rootPath)
-        created.push(relative(cwd, rootPath))
-        logger.debug(`Created platform root directory: ${rootPath}`)
+    // Only create root directory if rootDir is defined
+    if (definition.rootDir) {
+      const rootPath = join(cwd, definition.rootDir)
+      try {
+        const dirExists = await exists(rootPath)
+        if (!dirExists) {
+          await ensureDir(rootPath)
+          created.push(relative(cwd, rootPath))
+          logger.debug(`Created platform root directory: ${rootPath}`)
+        }
+      } catch (error) {
+        logger.error(
+          `Failed to create platform root directory (${rootPath}): ${error}`
+        )
       }
-    } catch (error) {
-      logger.error(
-        `Failed to create platform root directory (${rootPath}): ${error}`
-      )
     }
     
     // Flow-based installations will create subdirectories as needed
@@ -876,8 +953,12 @@ export async function validatePlatformStructure(
 
   const issues: string[] = []
 
-  // Check root file
-  if (definition.rootFile) {
+  // Check detection patterns if available
+  if (definition.detection && definition.detection.length > 0) {
+    // Detection patterns are used for source detection, not validation
+    // Skip validation for now
+  } else if (definition.rootFile) {
+    // Legacy rootFile validation
     const rootFilePath = join(cwd, definition.rootFile)
     if (!(await exists(rootFilePath))) {
       issues.push(`Root file does not exist: ${rootFilePath}`)

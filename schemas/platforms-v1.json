@@ -11,20 +11,18 @@
     "platformConfig": {
       "type": "object",
       "description": "Configuration for a single platform",
-      "required": ["name", "rootDir"],
+      "required": ["name"],
       "properties": {
         "name": {
           "type": "string",
           "description": "Display name of the platform"
         },
-        "rootDir": {
-          "type": "string",
-          "description": "Platform root directory (e.g., '.cursor', '.claude')",
-          "pattern": "^\\."
-        },
-        "rootFile": {
-          "type": "string",
-          "description": "Optional root file for platform detection (e.g., 'AGENTS.md')"
+        "detection": {
+          "type": "array",
+          "description": "Array of glob patterns for platform detection (e.g., ['.claude', 'CLAUDE.md'])",
+          "items": {
+            "type": "string"
+          }
         },
         "aliases": {
           "type": "array",
@@ -232,6 +230,24 @@
         },
         "equals": {
           "description": "Key must equal specific value"
+        },
+        "$eq": {
+          "type": "array",
+          "description": "Equality check: [left, right] where left and right can be $$variables or literal values",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "string"
+          }
+        },
+        "$ne": {
+          "type": "array",
+          "description": "Not equal check: [left, right] where left and right can be $$variables or literal values",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "string"
+          }
         },
         "and": {
           "type": "array",

@@ -154,8 +154,8 @@ console.log('platform-flows-config tests starting')
   const errors = validatePlatformsConfig(config)
   assert.ok(errors.length > 0, 'should have validation errors')
   assert.ok(
-    errors.some(e => e.includes("Must define at least one of 'export', 'import', or 'rootFile'")),
-    'should reject platform without export/import/rootFile'
+    errors.some(e => e.includes("Must define at least one of 'export', 'import', 'detection', or 'rootFile'")),
+    'should reject platform without export/import/detection/rootFile'
   )
 }
 

@@ -26,6 +26,12 @@ export interface PackageFormat {
   platform?: Platform;
   
   /**
+   * Detected source platform ID (for $$source variable in flow conditions)
+   * Defaults to 'openpackage' if universal format
+   */
+  sourcePlatform: string;
+  
+  /**
    * Confidence score (0-1) based on file analysis
    */
   confidence: number;
@@ -75,6 +81,7 @@ const UNIVERSAL_SUBDIRS = [
  */
 const PLATFORM_ROOT_DIRS: Record<string, Platform> = {
   '.claude': 'claude',
+  '.claude-plugin': 'claude-plugin',
   '.cursor': 'cursor',
   '.opencode': 'opencode',
   '.codex': 'codex',
@@ -94,6 +101,33 @@ const PLATFORM_ROOT_DIRS: Record<string, Platform> = {
  */
 export function detectPackageFormat(files: PackageFile[]): PackageFormat {
   logger.debug('Detecting package format', { fileCount: files.length });
+  
+  // Check for claude-plugin first (highest priority)
+  const hasClaudePluginManifest = files.some(f => 
+    f.path === '.claude-plugin/plugin.json'
+  );
+  
+  if (hasClaudePluginManifest) {
+    logger.debug('Detected Claude Code plugin format');
+    return {
+      type: 'platform-specific',
+      platform: 'claude-plugin',
+      sourcePlatform: 'claude-plugin',
+      confidence: 1.0,
+      analysis: {
+        universalFiles: 0,
+        platformSpecificFiles: files.length,
+        detectedPlatforms: new Map([['claude-plugin', files.length]]),
+        totalFiles: files.length,
+        samplePaths: {
+          universal: [],
+          platformSpecific: ['.claude-plugin/plugin.json']
+        }
+      },
+      isNativeFormat: true,
+      nativePlatform: 'claude'
+    };
+  }
   
   const analysis: FormatAnalysis = {
     universalFiles: 0,
@@ -195,6 +229,7 @@ function determineFormat(analysis: FormatAnalysis): PackageFormat {
   if (totalFiles === 0) {
     return {
       type: 'universal',
+      sourcePlatform: 'openpackage',
       confidence: 0,
       analysis
     };
@@ -214,6 +249,7 @@ function determineFormat(analysis: FormatAnalysis): PackageFormat {
     
     return {
       type: 'universal',
+      sourcePlatform: 'openpackage',
       confidence: universalRatio,
       analysis
     };
@@ -243,6 +279,7 @@ function determineFormat(analysis: FormatAnalysis): PackageFormat {
       return {
         type: 'platform-specific',
         platform: dominantPlatform,
+        sourcePlatform: dominantPlatform,
         confidence: platformRatio,
         analysis
       };
@@ -258,6 +295,7 @@ function determineFormat(analysis: FormatAnalysis): PackageFormat {
   
   return {
     type: 'universal',
+    sourcePlatform: 'openpackage',
     confidence: Math.max(universalRatio, 0.3),
     analysis
   };

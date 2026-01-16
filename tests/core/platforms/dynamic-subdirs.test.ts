@@ -91,10 +91,10 @@ describe('Dynamic Subdirectories Feature', () => {
     const errors1 = validatePlatformsConfig(invalid1);
     assert.ok(errors1.some(e => e.includes('rootDir')), 'Detects empty rootDir');
 
-    // Invalid: missing export/import and rootFile
+    // Invalid: missing export/import and rootFile and detection
     const invalid2 = { test: { name: 'Test', rootDir: '.test' } } as any;
     const errors2 = validatePlatformsConfig(invalid2);
-    assert.ok(errors2.some(e => e.includes("Must define at least one of 'export', 'import', or 'rootFile'")), 'Detects missing export/import/rootFile');
+    assert.ok(errors2.some(e => e.includes("Must define at least one of 'export', 'import', 'detection', or 'rootFile'")), 'Detects missing export/import/detection/rootFile');
     
     // Invalid: flow missing required fields
     const invalid3 = { test: { rootDir: '.test', export: [{from: 'test.md'}] } } as any; // missing 'to'

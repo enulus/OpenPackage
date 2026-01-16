@@ -896,10 +896,6 @@ export class DefaultFlowExecutor implements FlowExecutor {
   /**
    * Evaluate condition
    */
-  /**
-   * Composite merge using comment delimiters to preserve multiple package contributions
-   * Each package's content is wrapped in HTML comment markers with package name
-   */
   private evaluateCondition(condition: any, context: FlowContext): boolean {
     if (condition.and) {
       return condition.and.every((c: any) => this.evaluateCondition(c, context));
@@ -913,6 +909,16 @@ export class DefaultFlowExecutor implements FlowExecutor {
       return !this.evaluateCondition(condition.not, context);
     }
 
+    if (condition.$eq) {
+      const [left, right] = condition.$eq;
+      return this.resolveValue(left, context) === this.resolveValue(right, context);
+    }
+
+    if (condition.$ne) {
+      const [left, right] = condition.$ne;
+      return this.resolveValue(left, context) !== this.resolveValue(right, context);
+    }
+
     if (condition.exists) {
       const testPath = path.join(context.workspaceRoot, condition.exists);
       // Use existsSync for synchronous condition evaluation
@@ -924,6 +930,17 @@ export class DefaultFlowExecutor implements FlowExecutor {
     }
 
     return true;
+  }
+
+  /**
+   * Resolve a value, handling $$variable references
+   */
+  private resolveValue(value: string, context: FlowContext): any {
+    if (value.startsWith('$$')) {
+      const varName = value.slice(2);
+      return context.variables[varName];
+    }
+    return value;
   }
 
 

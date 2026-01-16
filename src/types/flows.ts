@@ -128,6 +128,12 @@ export interface Condition {
   /** Key equals specific value */
   equals?: any;
 
+  /** Equality check: [left, right] - supports $$variables */
+  $eq?: [string, string];
+
+  /** Not equal check: [left, right] - supports $$variables */
+  $ne?: [string, string];
+
   /** All conditions must be true */
   and?: Condition[];
 
@@ -231,7 +237,7 @@ export interface FlowContext {
   /** Package name */
   packageName: string;
 
-  /** Custom variables for template substitution */
+  /** Custom variables for template substitution (includes 'source' and 'platform') */
   variables: Record<string, any>;
 
   /** Direction: install (package→workspace) or save (workspace→package) */

@@ -1,6 +1,6 @@
 import { join } from 'path';
 import type { Platform } from '../platforms.js';
-import { getPlatformDefinition } from '../platforms.js';
+import { getPlatformDefinition, deriveRootDirFromFlows } from '../platforms.js';
 import { mapPlatformFileToUniversal } from '../../utils/platform-mapper.js';
 import { exists, isDirectory, readTextFile } from '../../utils/fs.js';
 import { DiscoveredFile } from '../../types';
@@ -36,7 +36,8 @@ export async function obtainSourceDirAndRegistryPath(
     const registryPath = mapping
       ? join(mapping.subdir, mapping.relPath)
       : fallbackPath;
-    const sourceDir = context.sourceDirLabel ?? getPlatformDefinition(context.platform).rootDir;
+    const platformDef = getPlatformDefinition(context.platform);
+    const sourceDir = context.sourceDirLabel ?? deriveRootDirFromFlows(platformDef);
     return { sourceDir, registryPath };
   }
 

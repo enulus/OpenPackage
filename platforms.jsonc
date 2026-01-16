@@ -25,7 +25,7 @@
 
   "antigravity": {
     "name": "Google Antigravity",
-    "rootDir": ".agent",
+    "detection": [".agent"],
     "export": [
       {
         "from": "rules/**/*.md",
@@ -58,7 +58,7 @@
 
   "augment": {
     "name": "Augment Code",
-    "rootDir": ".augment",
+    "detection": [".augment"],
     "export": [
       {
         "from": "rules/**/*.md",
@@ -81,10 +81,34 @@
     ]
   },
 
+  "claude-plugin": {
+    "name": "Claude Code Plugin",
+    "detection": [".claude-plugin/plugin.json"],
+    "export": [
+      {
+        "from": "openpackage.yml",
+        "to": ".claude-plugin/plugin.json"
+      },
+      {
+        "from": "mcp.jsonc",
+        "to": ".mcp.json"
+      }
+    ],
+    "import": [
+      {
+        "from": ".claude-plugin/plugin.json",
+        "to": "openpackage.yml"
+      },
+      {
+        "from": ".mcp.json",
+        "to": "mcp.jsonc"
+      }
+    ]
+  },
+
   "claude": {
     "name": "Claude Code",
-    "rootDir": ".claude",
-    "rootFile": "CLAUDE.md",
+    "detection": [".claude", "CLAUDE.md"],
     "aliases": ["claudecode"],
     "export": [
       {
@@ -209,8 +233,7 @@
 
   "codex": {
     "name": "Codex CLI",
-    "rootDir": ".codex",
-    "rootFile": "AGENTS.md",
+    "detection": [".codex", "AGENTS.md"],
     "aliases": ["codexcli"],
     "export": [
       {
@@ -356,8 +379,7 @@
 
   "cursor": {
     "name": "Cursor",
-    "rootDir": ".cursor",
-    "rootFile": "AGENTS.md",
+    "detection": [".cursor", "AGENTS.md"],
     "export": [
       {
         "from": "rules/**/*.md",
@@ -407,8 +429,7 @@
 
   "factory": {
     "name": "Factory AI",
-    "rootDir": ".factory",
-    "rootFile": "AGENTS.md",
+    "detection": [".factory", "AGENTS.md"],
     "export": [
       {
         "from": "commands/**/*.md",
@@ -450,8 +471,7 @@
 
   "kilo": {
     "name": "Kilo Code",
-    "rootDir": ".kilocode",
-    "rootFile": "AGENTS.md",
+    "detection": [".kilocode", "AGENTS.md"],
     "aliases": ["kilocode"],
     "export": [
       {
@@ -494,7 +514,7 @@
 
   "kiro": {
     "name": "Kiro",
-    "rootDir": ".kiro",
+    "detection": [".kiro"],
     "export": [
       {
         "from": "rules/**/*.md",
@@ -520,8 +540,7 @@
 
   "opencode": {
     "name": "OpenCode",
-    "rootDir": ".opencode",
-    "rootFile": "AGENTS.md",
+    "detection": [".opencode", "AGENTS.md"],
     "export": [
       {
         "from": "commands/**/*.md",
@@ -563,8 +582,7 @@
 
   "qwen": {
     "name": "Qwen Code",
-    "rootDir": ".qwen",
-    "rootFile": "QWEN.md",
+    "detection": [".qwen", "QWEN.md"],
     "aliases": ["qwencode"],
     "export": [
       {
@@ -609,8 +627,7 @@
 
   "roo": {
     "name": "Roo Code",
-    "rootDir": ".roo",
-    "rootFile": "AGENTS.md",
+    "detection": [".roo", "AGENTS.md"],
     "export": [
       {
         "from": "commands/**/*.md",
@@ -644,8 +661,7 @@
 
   "warp": {
     "name": "Warp",
-    "rootDir": ".warp",
-    "rootFile": "WARP.md",
+    "detection": [".warp", "WARP.md"],
     "export": [
       {
         "from": "AGENTS.md",
@@ -664,7 +680,7 @@
 
   "windsurf": {
     "name": "Windsurf",
-    "rootDir": ".windsurf",
+    "detection": [".windsurf"],
     "export": [
       {
         "from": "rules/**/*.md",

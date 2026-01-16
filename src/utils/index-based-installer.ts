@@ -36,7 +36,7 @@ import type { InstallOptions } from '../types/index.js';
 import type { PackageFile } from '../types/index.js';
 import { mergeInlinePlatformOverride } from './platform-yaml-merge.js';
 import { parseUniversalPath } from './platform-file.js';
-import { getPlatformDefinition } from '../core/platforms.js';
+import { getPlatformDefinition, deriveRootDirFromFlows } from '../core/platforms.js';
 import {
   sortMapping,
   ensureTrailingSlash,
@@ -1310,7 +1310,8 @@ function hadPreviousDirForPlatform(
     return false;
   }
 
-  const rootDir = normalizePathForProcessing(getPlatformDefinition(platform).rootDir);
+  const platformDef = getPlatformDefinition(platform);
+  const rootDir = normalizePathForProcessing(deriveRootDirFromFlows(platformDef));
 
   for (const mapping of prevValues) {
     const value = getTargetPath(mapping);

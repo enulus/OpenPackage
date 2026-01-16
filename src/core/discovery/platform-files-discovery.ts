@@ -4,6 +4,7 @@ import {
   getPlatformDefinition,
   getDetectedPlatforms,
   isUniversalSubdirPath,
+  deriveRootDirFromFlows,
   type Platform
 } from '../../core/platforms.js';
 import type { DiscoveredFile } from '../../types/index.js';
@@ -50,7 +51,8 @@ async function discoverPlatformFiles(
 
     // Discover files in each platform directory
     for (const subdir of platformDirs) {
-      const subdirPath = join(cwd, definition.rootDir, subdir);
+      const rootDir = deriveRootDirFromFlows(definition);
+      const subdirPath = join(cwd, rootDir, subdir);
       
       if (await exists(subdirPath) && await isDirectory(subdirPath)) {
         const files = await discoverFiles(subdirPath, packageName, {

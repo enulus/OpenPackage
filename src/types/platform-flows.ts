@@ -44,10 +44,13 @@ export interface PlatformFlowsConfig {
   /** Display name */
   name: string;
 
-  /** Platform root directory (e.g., ".cursor", ".claude") */
-  rootDir: string;
+  /** Array of glob patterns for platform detection (e.g., ['.claude', 'CLAUDE.md']) */
+  detection?: string[];
 
-  /** Optional root file for detection (e.g., "AGENTS.md") */
+  /** Platform root directory (e.g., ".cursor", ".claude") - DEPRECATED: use detection instead */
+  rootDir?: string;
+
+  /** Optional root file for detection (e.g., "AGENTS.md") - DEPRECATED: use detection instead */
   rootFile?: string;
 
   /** Platform aliases for flexible naming */

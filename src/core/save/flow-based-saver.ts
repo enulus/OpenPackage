@@ -10,7 +10,8 @@ import type { Platform } from '../platforms.js';
 import { 
   getPlatformDefinition, 
   getGlobalImportFlows,
-  platformUsesFlows 
+  platformUsesFlows,
+  deriveRootDirFromFlows
 } from '../platforms.js';
 import type { Flow, FlowContext, FlowResult } from '../../types/flows.js';
 import { createFlowExecutor } from '../flows/flow-executor.js';
@@ -92,7 +93,8 @@ function findReverseFlow(
 
     for (const fromPattern of fromPatterns) {
       // Match the workspace file against the 'from' pattern
-      const match = matchWorkspacePathToPattern(normalizedWorkspacePath, fromPattern, definition.rootDir);
+      const rootDir = deriveRootDirFromFlows(definition);
+      const match = matchWorkspacePathToPattern(normalizedWorkspacePath, fromPattern, rootDir);
       
       if (match) {
         // Extract variables from the match (e.g., {name})

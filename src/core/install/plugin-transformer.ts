@@ -147,13 +147,15 @@ export async function transformPluginToPackage(
   // Mark as native Claude format: needs path mapping but no content transformation
   // - isNativeFormat: true = content is already in target format (skip map/pipe transforms)
   // - nativePlatform: 'claude' = this content is designed for Claude platform
-  // - platform: 'claude' = source format is Claude-specific
+  // - platform: 'claude-plugin' = source format is Claude plugin
+  // - sourcePlatform: 'claude-plugin' = for $$source variable in flow conditions
   // 
   // Installation behavior:
   // - Installing to claude: Use path mappings only (commands/ → .claude/commands/)
   // - Installing to other platforms: Full conversion (claude → universal → target)
   format.type = 'platform-specific';
-  format.platform = 'claude';
+  format.platform = 'claude-plugin';
+  format.sourcePlatform = 'claude-plugin';
   format.isNativeFormat = true;
   format.nativePlatform = 'claude';
   

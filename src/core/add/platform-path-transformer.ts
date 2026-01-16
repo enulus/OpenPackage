@@ -1,6 +1,6 @@
 import { join, resolve } from 'path';
 
-import { getPlatformDefinition } from '../platforms.js';
+import { getPlatformDefinition, deriveRootDirFromFlows } from '../platforms.js';
 import { mapPlatformFileToUniversal } from '../../utils/platform-mapper.js';
 import { suffixFileBasename, suffixFirstContentDir } from '../../utils/platform-specific-paths.js';
 import { isWithinDirectory } from '../../utils/path-normalization.js';
@@ -42,7 +42,8 @@ export function applyPlatformSpecificPaths(
       continue;
     }
 
-    const subdirAbs = resolve(join(cwd, definition.rootDir, subdirPath));
+    const rootDir = deriveRootDirFromFlows(definition);
+    const subdirAbs = resolve(join(cwd, rootDir, subdirPath));
     const sourceAbs = resolve(sourcePath);
     const withinSubdir = sourceAbs === subdirAbs || isWithinDirectory(subdirAbs, sourceAbs);
     if (!withinSubdir) {

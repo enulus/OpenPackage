@@ -1,6 +1,6 @@
 import { join, dirname } from 'path';
 import { FILE_PATTERNS } from '../../constants/index.js';
-import { getDetectedPlatforms, getPlatformDefinition, getAllPlatforms } from '../platforms.js';
+import { getDetectedPlatforms, getPlatformDefinition, getAllPlatforms, deriveRootDirFromFlows } from '../platforms.js';
 import { exists, walkFiles, readTextFile } from '../../utils/fs.js';
 import { extractPackageContentFromRootFile } from '../../utils/root-file-extractor.js';
 
@@ -77,7 +77,7 @@ async function discoverPlatformForPackages(
   packageNames: string[]
 ): Promise<void> {
   const def = getPlatformDefinition(platform as any);
-  const platformRoot = join(cwd, def.rootDir);
+  const platformRoot = join(cwd, deriveRootDirFromFlows(def));
 
   // TODO: Implement flow-based discovery
   // For now, discover files from export flows 'to' patterns (package → workspace)
