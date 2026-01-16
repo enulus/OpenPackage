@@ -561,6 +561,34 @@
     ]
   },
 
+  "pimono": {
+    "name": "Pi-Mono",
+    "rootDir": ".pi",
+    "rootFile": "AGENTS.md",
+    "aliases": ["pi-mono", "pi"],
+    "description": "Pi-Mono AI coding assistant framework",
+    "export": [
+      {
+        "from": "commands/**/*.md",
+        "to": ".pi/agent/prompts/**/*.md"
+      },
+      {
+        "from": "skills/**/*",
+        "to": ".pi/agent/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".pi/agent/prompts/**/*.md",
+        "to": "commands/**/*.md"
+      },
+      {
+        "from": ".pi/agent/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
   "qwen": {
     "name": "Qwen Code",
     "rootDir": ".qwen",
