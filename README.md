@@ -145,6 +145,7 @@ OpenPackage performs installation and platform sync of files for supported AI co
 | Kilo Code | .kilocode/ | AGENTS.md | rules/ | workflows/ | | skills/ | mcp.json |
 | Kiro | .kiro/ | | steering/ | | | | settings/mcp.json |
 | OpenCode | .opencode/ | AGENTS.md | | command/ | agent/ | skills/ | opencode.json |
+| Pi-Mono | .pi/ | AGENTS.md | | agent/prompts/ | | agent/skills/ | |
 | Qwen Code | .qwen/ | QWEN.md | | | agents/ | skills/ | settings.json |
 | Roo | .roo/ | AGENTS.md | | commands/ | | skills/ | mcp.json |
 | Warp | .warp/ | WARP.md | | | | |

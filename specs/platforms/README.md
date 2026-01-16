@@ -1,6 +1,6 @@
 # Platform System Documentation
 
-The **Platform System** is OpenPackage's declarative transformation engine that maps universal package content to platform-specific formats across 13+ AI coding platforms.
+The **Platform System** is OpenPackage's declarative transformation engine that maps universal package content to platform-specific formats across 14+ AI coding platforms.
 
 ## 📚 Documentation Overview
 
@@ -47,6 +47,6 @@ The **Platform System** is OpenPackage's declarative transformation engine that 
 
 ## Supported Platforms
 
-Built-in support for 13 platforms: Cursor, Claude, Windsurf, Gemini, Kilo, Cline, Roo-Code, Void, Aide, Zed, Codex, OpenCode, Factory.
+Built-in support for 14 platforms: Cursor, Claude, Windsurf, Gemini, Kilo, Cline, Roo-Code, Void, Aide, Zed, Codex, OpenCode, Pi-Mono, Factory.
 
 Custom platforms can be added via configuration overrides.
