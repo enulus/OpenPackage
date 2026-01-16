@@ -23,29 +23,6 @@ export interface DiscoveryPathContext {
   fileExtensions?: string[];
 }
 
-export async function obtainSourceDirAndRegistryPath(
-  file: { fullPath: string; relativePath: string },
-  context: DiscoveryPathContext = {}
-): Promise<{ sourceDir: string; registryPath: string }> {
-  const fallbackPath = context.registryPathPrefix
-    ? join(context.registryPathPrefix, file.relativePath)
-    : file.relativePath;
-
-  if (context.platform) {
-    const mapping = mapPlatformFileToUniversal(file.fullPath);
-    const registryPath = mapping
-      ? join(mapping.subdir, mapping.relPath)
-      : fallbackPath;
-    const platformDef = getPlatformDefinition(context.platform);
-    const sourceDir = context.sourceDirLabel ?? deriveRootDirFromFlows(platformDef);
-    return { sourceDir, registryPath };
-  }
-
-  return {
-    sourceDir: context.sourceDirLabel ?? (context.registryPathPrefix || 'workspace'),
-    registryPath: fallbackPath
-  };
-}
 
 export async function discoverFiles(
   rootDir: string,
@@ -80,7 +57,25 @@ async function processFileForDiscovery(
     try {
       const mtime = await getFileMtime(file.fullPath);
       const contentHash = await calculateFileHash(content);
-      const { sourceDir, registryPath } = await obtainSourceDirAndRegistryPath(file, context);
+
+      const fallbackPath = context.registryPathPrefix
+        ? join(context.registryPathPrefix, file.relativePath)
+        : file.relativePath;
+
+      let sourceDir: string;
+      let registryPath: string;
+
+      if (context.platform) {
+        const mapping = mapPlatformFileToUniversal(file.fullPath);
+        registryPath = mapping
+          ? join(mapping.subdir, mapping.relPath)
+          : fallbackPath;
+        const platformDef = getPlatformDefinition(context.platform);
+        sourceDir = context.sourceDirLabel ?? deriveRootDirFromFlows(platformDef);
+      } else {
+        sourceDir = context.sourceDirLabel ?? (context.registryPathPrefix || 'workspace');
+        registryPath = fallbackPath;
+      }
 
       return {
         fullPath: file.fullPath,

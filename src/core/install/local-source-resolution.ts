@@ -2,7 +2,7 @@ import os from 'os';
 import path from 'path';
 
 import { DIR_PATTERNS, OPENPACKAGE_DIRS, UNVERSIONED } from '../../constants/index.js';
-import { listPackageVersions, getPackageVersionPath, getRegistryDirectories } from '../directory.js';
+import { listPackageVersions, getPackageVersionPath } from '../directory.js';
 import { exists } from '../../utils/fs.js';
 import { parsePackageYml } from '../../utils/package-yml.js';
 import { getLocalPackageDir } from '../../utils/paths.js';
