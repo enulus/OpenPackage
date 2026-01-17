@@ -2,13 +2,20 @@ import { join, basename } from 'path';
 import { readTextFile, exists } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
 import { ValidationError, UserCancellationError } from '../../utils/errors.js';
-import { buildGitInstallContext, buildPathInstallContext } from './unified/context-builders.js';
+import { buildGitInstallContext } from './unified/context-builders.js';
 import { runUnifiedInstallPipeline } from './unified/pipeline.js';
 import { detectPluginType, validatePluginManifest } from './plugin-detector.js';
 import { safePrompts } from '../../utils/prompts.js';
 import type { CommandResult, InstallOptions } from '../../types/index.js';
 import { CLAUDE_PLUGIN_PATHS } from '../../constants/index.js';
 import { generatePluginName } from '../../utils/plugin-naming.js';
+import {
+  normalizePluginSource,
+  isRelativePathSource,
+  isGitSource,
+  type PluginSourceSpec,
+  type NormalizedPluginSource
+} from './plugin-sources.js';
 
 /**
  * Claude Code marketplace manifest schema.
@@ -21,17 +28,23 @@ export interface MarketplaceManifest {
   plugins: MarketplacePluginEntry[];
 }
 
+/**
+ * Marketplace plugin entry.
+ * Each entry defines a plugin and where to find it.
+ */
 export interface MarketplacePluginEntry {
   name: string;
-  subdirectory?: string; // opkg format
-  source?: string; // Claude Code format (relative path)
+  source: PluginSourceSpec;
   description?: string;
   version?: string;
   author?: {
     name?: string;
+    email?: string;
   };
   keywords?: string[];
   category?: string;
+  strict?: boolean;
+  // Additional plugin manifest fields can be included here
 }
 
 /**
@@ -75,13 +88,17 @@ export async function parseMarketplace(
       if (!plugin.name) {
         throw new ValidationError('Marketplace plugin entry missing required field: name');
       }
-      // Accept either subdirectory (opkg) or source (Claude Code) field
-      if (!plugin.subdirectory && !plugin.source) {
-        throw new ValidationError(`Plugin '${plugin.name}' missing required field: subdirectory or source`);
+      if (!plugin.source) {
+        throw new ValidationError(`Plugin '${plugin.name}' missing required field: source`);
       }
-      // Normalize: if source is provided but not subdirectory, use source as subdirectory
-      if (!plugin.subdirectory && plugin.source) {
-        plugin.subdirectory = plugin.source;
+      
+      // Validate source can be normalized (will throw if invalid)
+      try {
+        normalizePluginSource(plugin.source, plugin.name);
+      } catch (error) {
+        throw new ValidationError(
+          `Plugin '${plugin.name}' has invalid source: ${error instanceof Error ? error.message : String(error)}`
+        );
       }
     }
     
@@ -154,16 +171,16 @@ export async function promptPluginSelection(
  * @param marketplaceDir - Absolute path to cloned marketplace repository root
  * @param marketplace - Parsed marketplace manifest
  * @param selectedNames - Names of plugins to install
- * @param gitUrl - Git URL of the marketplace repository
- * @param gitRef - Git ref (branch/tag/sha) if specified
+ * @param marketplaceGitUrl - Git URL of the marketplace repository
+ * @param marketplaceGitRef - Git ref (branch/tag/sha) if specified
  * @param options - Install options
  */
 export async function installMarketplacePlugins(
   marketplaceDir: string,
   marketplace: MarketplaceManifest,
   selectedNames: string[],
-  gitUrl: string,
-  gitRef: string | undefined,
+  marketplaceGitUrl: string,
+  marketplaceGitRef: string | undefined,
   options: InstallOptions
 ): Promise<CommandResult> {
   logger.info('Installing marketplace plugins', { 
@@ -171,12 +188,19 @@ export async function installMarketplacePlugins(
     plugins: selectedNames 
   });
   
-  const results: Array<{ name: string; scopedName: string; success: boolean; error?: string }> = [];
+  const results: Array<{ 
+    name: string; 
+    scopedName: string; 
+    success: boolean; 
+    error?: string;
+  }> = [];
   
   for (const pluginName of selectedNames) {
     const pluginEntry = marketplace.plugins.find(p => p.name === pluginName);
     if (!pluginEntry) {
-      logger.error(`Plugin '${pluginName}' not found in marketplace`, { marketplace: marketplace.name });
+      logger.error(`Plugin '${pluginName}' not found in marketplace`, { 
+        marketplace: marketplace.name 
+      });
       results.push({ 
         name: pluginName,
         scopedName: pluginName,
@@ -186,116 +210,235 @@ export async function installMarketplacePlugins(
       continue;
     }
     
-    const pluginSubdir = pluginEntry.subdirectory || pluginEntry.source;
-    if (!pluginSubdir) {
-      logger.error(`Plugin entry missing both subdirectory and source fields`, { plugin: pluginName });
-      results.push({ 
-        name: pluginName,
-        scopedName: pluginName,
-        success: false, 
-        error: `Plugin entry missing subdirectory/source field` 
-      });
-      continue;
-    }
-    
-    const pluginDir = join(marketplaceDir, pluginSubdir);
-    
-    // Validate plugin subdirectory exists
-    if (!(await exists(pluginDir))) {
-      logger.error(`Plugin subdirectory does not exist`, { 
-        plugin: pluginName, 
-        subdirectory: pluginSubdir,
-        fullPath: pluginDir
-      });
-      results.push({ 
-        name: pluginName,
-        scopedName: pluginName,
-        success: false, 
-        error: `Subdirectory '${pluginSubdir}' does not exist` 
-      });
-      continue;
-    }
-    
-    // Validate plugin structure
-    const detection = await detectPluginType(pluginDir);
-    if (!detection.isPlugin || detection.type !== 'individual') {
-      logger.error(`Subdirectory is not a valid plugin`, { 
-        plugin: pluginName, 
-        subdirectory: pluginSubdir 
-      });
-      results.push({ 
-        name: pluginName,
-        scopedName: pluginName,
-        success: false, 
-        error: `Subdirectory does not contain a valid plugin (missing ${CLAUDE_PLUGIN_PATHS.PLUGIN_MANIFEST})`
-      });
-      continue;
-    }
-    
-    // Validate plugin manifest is parseable
-    if (!(await validatePluginManifest(detection.manifestPath!))) {
-      results.push({ 
-        name: pluginName,
-        scopedName: pluginName,
-        success: false, 
-        error: `Invalid plugin manifest (cannot parse JSON)` 
-      });
-      continue;
-    }
-    
-    // Generate scoped name for this plugin
-    const scopedName = generatePluginName({
-      gitUrl,
-      subdirectory: pluginSubdir,
-      pluginManifestName: pluginName,
-      marketplaceName: marketplace.name,
-      repoPath: marketplaceDir
-    });
-    
-    // Install the plugin
-    console.log(`\n📦 Installing plugin: ${scopedName}...`);
-    
+    // Normalize the plugin source
+    let normalizedSource: NormalizedPluginSource;
     try {
-      // Build git context with subdirectory to properly track git source
-      const ctx = await buildGitInstallContext(
-        process.cwd(),
-        gitUrl,
-        {
-          ...options,
-          gitRef,
-          gitSubdirectory: pluginSubdir
-        }
-      );
-
-      const pipelineResult = await runUnifiedInstallPipeline(ctx);
-
-      if (!pipelineResult.success) {
+      normalizedSource = normalizePluginSource(pluginEntry.source, pluginName);
+    } catch (error) {
+      logger.error('Failed to normalize plugin source', { plugin: pluginName, error });
+      results.push({ 
+        name: pluginName,
+        scopedName: pluginName,
+        success: false, 
+        error: error instanceof Error ? error.message : 'Invalid source configuration'
+      });
+      continue;
+    }
+    
+    // Install based on source type
+    try {
+      let installResult: CommandResult;
+      
+      if (isRelativePathSource(normalizedSource)) {
+        installResult = await installRelativePathPlugin(
+          marketplaceDir,
+          marketplace,
+          pluginEntry,
+          normalizedSource,
+          marketplaceGitUrl,
+          marketplaceGitRef,
+          options
+        );
+      } else if (isGitSource(normalizedSource)) {
+        installResult = await installGitPlugin(
+          marketplace,
+          pluginEntry,
+          normalizedSource,
+          options
+        );
+      } else {
+        throw new Error(`Unsupported source type: ${normalizedSource.type}`);
+      }
+      
+      if (!installResult.success) {
         results.push({
           name: pluginName,
-          scopedName,
+          scopedName: pluginEntry.name,
           success: false,
-          error: pipelineResult.error || 'Unknown installation error'
+          error: installResult.error || 'Unknown installation error'
         });
-        console.error(`✗ Failed to install ${scopedName}: ${pipelineResult.error || 'Unknown installation error'}`);
         continue;
       }
-
-      results.push({ name: pluginName, scopedName, success: true });
-      console.log(`✓ Successfully installed ${scopedName}`);
+      
+      results.push({ 
+        name: pluginName, 
+        scopedName: pluginEntry.name, 
+        success: true 
+      });
       
     } catch (error) {
-      logger.error(`Failed to install plugin`, { plugin: pluginName, error });
+      logger.error('Failed to install plugin', { plugin: pluginName, error });
       results.push({ 
         name: pluginName,
-        scopedName,
+        scopedName: pluginEntry.name,
         success: false, 
         error: error instanceof Error ? error.message : String(error) 
       });
-      console.error(`✗ Failed to install ${scopedName}: ${error}`);
     }
   }
   
   // Display summary
+  displayInstallationSummary(results);
+  
+  // Return success if at least one plugin was installed
+  return {
+    success: results.some(r => r.success),
+    error: results.every(r => !r.success) 
+      ? 'Failed to install any plugins from marketplace'
+      : undefined
+  };
+}
+
+/**
+ * Install a plugin from a relative path within the marketplace repository.
+ */
+async function installRelativePathPlugin(
+  marketplaceDir: string,
+  marketplace: MarketplaceManifest,
+  pluginEntry: MarketplacePluginEntry,
+  normalizedSource: NormalizedPluginSource,
+  marketplaceGitUrl: string,
+  marketplaceGitRef: string | undefined,
+  options: InstallOptions
+): Promise<CommandResult> {
+  const pluginSubdir = normalizedSource.relativePath!;
+  const pluginDir = join(marketplaceDir, pluginSubdir);
+  
+  // Validate plugin subdirectory exists
+  if (!(await exists(pluginDir))) {
+    const error = `Subdirectory '${pluginSubdir}' does not exist in marketplace repository`;
+    logger.error('Plugin subdirectory not found', { 
+      plugin: pluginEntry.name, 
+      subdirectory: pluginSubdir,
+      fullPath: pluginDir
+    });
+    console.error(`✗ ${error}`);
+    return { success: false, error };
+  }
+  
+  // Validate plugin structure
+  const detection = await detectPluginType(pluginDir);
+  if (!detection.isPlugin || detection.type !== 'individual') {
+    const error = `Subdirectory '${pluginSubdir}' does not contain a valid plugin ` +
+      `(missing ${CLAUDE_PLUGIN_PATHS.PLUGIN_MANIFEST})`;
+    logger.error('Invalid plugin structure', { 
+      plugin: pluginEntry.name, 
+      subdirectory: pluginSubdir 
+    });
+    console.error(`✗ ${error}`);
+    return { success: false, error };
+  }
+  
+  // Validate plugin manifest is parseable
+  if (!(await validatePluginManifest(detection.manifestPath!))) {
+    const error = `Invalid plugin manifest in '${pluginSubdir}' (cannot parse JSON)`;
+    logger.error('Invalid plugin manifest', { plugin: pluginEntry.name });
+    console.error(`✗ ${error}`);
+    return { success: false, error };
+  }
+  
+  // Generate scoped name
+  const scopedName = generatePluginName({
+    gitUrl: marketplaceGitUrl,
+    subdirectory: pluginSubdir,
+    pluginManifestName: pluginEntry.name,
+    marketplaceName: marketplace.name,
+    repoPath: marketplaceDir
+  });
+  
+  console.log(`\n📦 Installing plugin: ${scopedName}...`);
+  logger.info('Installing relative path plugin', {
+    plugin: pluginEntry.name,
+    scopedName,
+    subdirectory: pluginSubdir
+  });
+  
+  // Build git context with subdirectory to properly track git source
+  const ctx = await buildGitInstallContext(
+    process.cwd(),
+    marketplaceGitUrl,
+    {
+      ...options,
+      gitRef: marketplaceGitRef,
+      gitSubdirectory: pluginSubdir
+    }
+  );
+  
+  const pipelineResult = await runUnifiedInstallPipeline(ctx);
+  
+  if (pipelineResult.success) {
+    console.log(`✓ Successfully installed ${scopedName}`);
+  } else {
+    console.error(`✗ Failed to install ${scopedName}: ${pipelineResult.error || 'Unknown error'}`);
+  }
+  
+  return {
+    success: pipelineResult.success,
+    error: pipelineResult.error
+  };
+}
+
+/**
+ * Install a plugin from an external git repository.
+ */
+async function installGitPlugin(
+  marketplace: MarketplaceManifest,
+  pluginEntry: MarketplacePluginEntry,
+  normalizedSource: NormalizedPluginSource,
+  options: InstallOptions
+): Promise<CommandResult> {
+  const gitUrl = normalizedSource.gitUrl!;
+  const gitRef = normalizedSource.gitRef;
+  const gitSubdirectory = normalizedSource.gitSubdirectory;
+  
+  // Generate scoped name
+  const scopedName = generatePluginName({
+    gitUrl,
+    subdirectory: gitSubdirectory,
+    pluginManifestName: pluginEntry.name,
+    marketplaceName: marketplace.name
+  });
+  
+  console.log(`\n📦 Installing plugin: ${scopedName}...`);
+  logger.info('Installing git plugin', {
+    plugin: pluginEntry.name,
+    scopedName,
+    gitUrl,
+    gitRef,
+    gitSubdirectory
+  });
+  
+  // Build git context
+  const ctx = await buildGitInstallContext(
+    process.cwd(),
+    gitUrl,
+    {
+      ...options,
+      gitRef,
+      gitSubdirectory
+    }
+  );
+  
+  const pipelineResult = await runUnifiedInstallPipeline(ctx);
+  
+  if (pipelineResult.success) {
+    console.log(`✓ Successfully installed ${scopedName}`);
+  } else {
+    console.error(`✗ Failed to install ${scopedName}: ${pipelineResult.error || 'Unknown error'}`);
+  }
+  
+  return {
+    success: pipelineResult.success,
+    error: pipelineResult.error
+  };
+}
+
+/**
+ * Display installation summary.
+ */
+function displayInstallationSummary(
+  results: Array<{ name: string; scopedName: string; success: boolean; error?: string }>
+): void {
   console.log('\n' + '='.repeat(60));
   console.log('Installation Summary:');
   console.log('='.repeat(60));
@@ -318,16 +461,4 @@ export async function installMarketplacePlugins(
   }
   
   console.log('');
-  
-  // Return success if at least one plugin was installed
-  if (successful.length > 0) {
-    return {
-      success: true
-    };
-  } else {
-    return {
-      success: false,
-      error: 'Failed to install any plugins from marketplace'
-    };
-  }
 }

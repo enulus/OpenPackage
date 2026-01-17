@@ -12,6 +12,8 @@ const testFiles: string[] = [
   'tests/core/save/package-index-root-save.test.ts',
   
   // Core - Install
+  'tests/core/install/plugin-sources.test.ts',
+  'tests/core/install/marketplace-parsing.test.ts',
   'tests/core/install/cli-modes.test.ts',
   'tests/core/install/install-selection.test.ts',
   
