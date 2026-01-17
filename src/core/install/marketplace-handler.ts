@@ -6,6 +6,7 @@ import { buildGitInstallContext } from './unified/context-builders.js';
 import { runUnifiedInstallPipeline } from './unified/pipeline.js';
 import { detectPluginType, validatePluginManifest } from './plugin-detector.js';
 import { safePrompts } from '../../utils/prompts.js';
+import { Spinner } from '../../utils/spinner.js';
 import type { CommandResult, InstallOptions } from '../../types/index.js';
 import { CLAUDE_PLUGIN_PATHS } from '../../constants/index.js';
 import { generatePluginName } from '../../utils/plugin-naming.js';
@@ -126,9 +127,9 @@ export async function parseMarketplace(
 export async function promptPluginSelection(
   marketplace: MarketplaceManifest
 ): Promise<string[]> {
-  console.log(`\n📦 Marketplace: ${marketplace.name}`);
+  console.log(`\n✓ Marketplace: ${marketplace.name}`);
   if (marketplace.description) {
-    console.log(`   ${marketplace.description}`);
+    console.log(`  ${marketplace.description}`);
   }
   console.log(`\n${marketplace.plugins.length} plugin${marketplace.plugins.length === 1 ? '' : 's'} available:\n`);
   
@@ -189,6 +190,8 @@ export async function installMarketplacePlugins(
     marketplace: marketplace.name,
     plugins: selectedNames 
   });
+  
+  console.log(`\nInstalling ${selectedNames.length} plugin${selectedNames.length === 1 ? '' : 's'}...\n`);
   
   const results: Array<{ 
     name: string; 
@@ -309,6 +312,9 @@ async function installRelativePathPlugin(
   const pluginSubdir = normalizedSource.relativePath!;
   const pluginDir = join(marketplaceDir, pluginSubdir);
   
+  const spinner = new Spinner(`Validating ${pluginEntry.name}`);
+  spinner.start();
+  
   // Validate plugin subdirectory exists
   if (!(await exists(pluginDir))) {
     const error = `Subdirectory '${pluginSubdir}' does not exist in marketplace repository`;
@@ -317,7 +323,8 @@ async function installRelativePathPlugin(
       subdirectory: pluginSubdir,
       fullPath: pluginDir
     });
-    console.error(`✗ ${error}`);
+    spinner.stop();
+    console.error(`❌ ${pluginEntry.name}: ${error}`);
     return { success: false, error };
   }
   
@@ -330,7 +337,8 @@ async function installRelativePathPlugin(
       plugin: pluginEntry.name, 
       subdirectory: pluginSubdir 
     });
-    console.error(`✗ ${error}`);
+    spinner.stop();
+    console.error(`❌ ${pluginEntry.name}: ${error}`);
     return { success: false, error };
   }
   
@@ -338,7 +346,8 @@ async function installRelativePathPlugin(
   if (!(await validatePluginManifest(detection.manifestPath!))) {
     const error = `Invalid plugin manifest in '${pluginSubdir}' (cannot parse JSON)`;
     logger.error('Invalid plugin manifest', { plugin: pluginEntry.name });
-    console.error(`✗ ${error}`);
+    spinner.stop();
+    console.error(`❌ ${pluginEntry.name}: ${error}`);
     return { success: false, error };
   }
   
@@ -351,7 +360,7 @@ async function installRelativePathPlugin(
     repoPath: marketplaceDir
   });
   
-  console.log(`\n📦 Installing plugin: ${scopedName}...`);
+  spinner.update(`✓ Installing ${scopedName}`);
   logger.info('Installing relative path plugin', {
     plugin: pluginEntry.name,
     scopedName,
@@ -369,12 +378,15 @@ async function installRelativePathPlugin(
     }
   );
   
+  // Stop spinner before pipeline (which has its own output)
+  spinner.stop();
+  
   const pipelineResult = await runUnifiedInstallPipeline(ctx);
   
   if (pipelineResult.success) {
-    console.log(`✓ Successfully installed ${scopedName}`);
+    console.log(`✓ ${scopedName}`);
   } else {
-    console.error(`✗ Failed to install ${scopedName}: ${pipelineResult.error || 'Unknown error'}`);
+    console.error(`❌ ${scopedName}: ${pipelineResult.error || 'Unknown error'}`);
   }
   
   return {
@@ -405,7 +417,9 @@ async function installGitPlugin(
     marketplaceName: marketplace.name
   });
   
-  console.log(`\n📦 Installing plugin: ${scopedName}...`);
+  const spinner = new Spinner(`Installing ${scopedName}`);
+  spinner.start();
+  
   logger.info('Installing git plugin', {
     plugin: pluginEntry.name,
     scopedName,
@@ -425,12 +439,15 @@ async function installGitPlugin(
     }
   );
   
+  // Stop spinner before pipeline (which has its own output)
+  spinner.stop();
+  
   const pipelineResult = await runUnifiedInstallPipeline(ctx);
   
   if (pipelineResult.success) {
-    console.log(`✓ Successfully installed ${scopedName}`);
+    console.log(`✓ ${scopedName}`);
   } else {
-    console.error(`✗ Failed to install ${scopedName}: ${pipelineResult.error || 'Unknown error'}`);
+    console.error(`❌ ${scopedName}: ${pipelineResult.error || 'Unknown error'}`);
   }
   
   return {
@@ -445,26 +462,21 @@ async function installGitPlugin(
 function displayInstallationSummary(
   results: Array<{ name: string; scopedName: string; success: boolean; error?: string }>
 ): void {
-  console.log('\n' + '='.repeat(60));
-  console.log('Installation Summary:');
-  console.log('='.repeat(60));
-  
   const successful = results.filter(r => r.success);
   const failed = results.filter(r => !r.success);
   
+  console.log(`\n${'─'.repeat(60)}`);
+  
   if (successful.length > 0) {
-    console.log(`\n✓ Successfully installed (${successful.length}):`);
-    for (const result of successful) {
-      console.log(`  • ${result.scopedName}`);
-    }
+    console.log(`✓ Successfully installed: ${successful.length} plugin${successful.length === 1 ? '' : 's'}`);
   }
   
   if (failed.length > 0) {
-    console.log(`\n✗ Failed to install (${failed.length}):`);
+    console.log(`❌ Failed: ${failed.length} plugin${failed.length === 1 ? '' : 's'}`);
     for (const result of failed) {
-      console.log(`  • ${result.scopedName}: ${result.error}`);
+      console.log(`  ${result.scopedName}: ${result.error}`);
     }
   }
   
-  console.log('');
+  console.log(`${'─'.repeat(60)}\n`);
 }

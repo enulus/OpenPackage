@@ -37,10 +37,6 @@ export class PathSourceLoader implements PackageSourceLoader {
       const packageName = sourcePackage.metadata.name;
       const version = sourcePackage.metadata.version || '0.0.0';
       
-      if (pluginDetection.isPlugin) {
-        console.log(`📦 Loading plugin: ${packageName}@${version}`);
-      }
-      
       // Note: Plugin transformation is handled by the main flow, not here
       return {
         metadata: sourcePackage.metadata,

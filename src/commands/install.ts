@@ -113,20 +113,22 @@ async function handleMarketplaceInstallation(
     promptPluginSelection,
     installMarketplacePlugins
   } = await import('../core/install/marketplace-handler.js');
-  const { getLoaderForSource } = await import('../core/install/sources/loader-factory.js');
+  const { Spinner } = await import('../utils/spinner.js');
   
-  // Load the marketplace package
-  const loader = getLoaderForSource(context.source);
-  const loaded: LoadedPackage = await loader.load(context.source, options, cwd);
-  
-  if (!loaded.pluginMetadata?.manifestPath) {
+  // Load the marketplace package (already loaded, use context data)
+  if (!context.source.pluginMetadata?.manifestPath) {
     throw new Error('Marketplace manifest not found');
   }
   
+  const spinner = new Spinner('Loading marketplace');
+  spinner.start();
+  
   // Parse marketplace manifest
-  const marketplace = await parseMarketplace(loaded.pluginMetadata.manifestPath, {
-    repoPath: loaded.contentRoot
+  const marketplace = await parseMarketplace(context.source.pluginMetadata.manifestPath, {
+    repoPath: context.source.contentRoot
   });
+  
+  spinner.stop();
   
   // Prompt user to select plugins
   const selectedPlugins = await promptPluginSelection(marketplace);
@@ -143,7 +145,7 @@ async function handleMarketplaceInstallation(
   }
   
   return await installMarketplacePlugins(
-    loaded.contentRoot,
+    context.source.contentRoot!,
     marketplace,
     selectedPlugins,
     context.source.gitUrl,
@@ -158,15 +160,15 @@ async function handleMarketplaceInstallation(
  */
 async function runBulkInstall(contexts: InstallationContext[]): Promise<CommandResult> {
   if (contexts.length === 0) {
-    console.log('⚠️ No packages found in openpackage.yml');
-    console.log('\nTips:');
-    console.log('• Add packages to the "packages" array in openpackage.yml');
-    console.log('• Add development packages to the "dev-packages" array');
-    console.log('• Use "opkg install <package-name>" to install a specific package');
+    console.log('⚠️  No packages found in openpackage.yml');
+    console.log('\n💡 Tips:');
+    console.log('  • Add packages to the "packages" array in openpackage.yml');
+    console.log('  • Add development packages to the "dev-packages" array');
+    console.log('  • Use "opkg install <package-name>" to install a specific package');
     return { success: true, data: { installed: 0, skipped: 0 } };
   }
   
-  console.log(`✓ Installing ${contexts.length} packages from openpackage.yml\n`);
+  console.log(`\n✓ Installing ${contexts.length} package${contexts.length === 1 ? '' : 's'} from openpackage.yml\n`);
   
   let totalInstalled = 0;
   let totalSkipped = 0;
@@ -179,21 +181,21 @@ async function runBulkInstall(contexts: InstallationContext[]): Promise<CommandR
       if (result.success) {
         totalInstalled++;
         results.push({ name: ctx.source.packageName, success: true });
-        console.log(`✓ Successfully installed ${ctx.source.packageName}`);
+        console.log(`✓ ${ctx.source.packageName}`);
       } else {
         totalSkipped++;
         results.push({ name: ctx.source.packageName, success: false, error: result.error });
-        console.log(`❌ Failed to install ${ctx.source.packageName}: ${result.error}`);
+        console.log(`❌ ${ctx.source.packageName}: ${result.error}`);
       }
     } catch (error) {
       totalSkipped++;
       results.push({ name: ctx.source.packageName, success: false, error: String(error) });
-      console.log(`❌ Failed to install ${ctx.source.packageName}: ${error}`);
+      console.log(`❌ ${ctx.source.packageName}: ${error}`);
     }
   }
   
   // Display summary
-  console.log(`\n✓ Installation complete: ${totalInstalled} installed, ${totalSkipped} failed`);
+  console.log(`\n✓ Installation complete: ${totalInstalled} installed${totalSkipped > 0 ? `, ${totalSkipped} failed` : ''}`);
   
   const allSuccessful = totalSkipped === 0;
   return {

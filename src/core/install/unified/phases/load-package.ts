@@ -7,6 +7,7 @@ import type { InstallationContext } from '../context.js';
 import { getLoaderForSource } from '../../sources/loader-factory.js';
 import { addError, getSourceDisplayName } from '../context-helpers.js';
 import { logger } from '../../../../utils/logger.js';
+import { Spinner } from '../../../../utils/spinner.js';
 
 /**
  * Load package from source
@@ -14,16 +15,21 @@ import { logger } from '../../../../utils/logger.js';
 export async function loadPackagePhase(ctx: InstallationContext): Promise<void> {
   logger.debug(`Loading package from ${ctx.source.type} source`);
   
+  const spinner = new Spinner('Loading package from source');
+  
   try {
     // Get appropriate loader
     const loader = getLoaderForSource(ctx.source);
     
-    // Display loading message
+    // Display loading message with spinner
     const displayName = getSourceDisplayName(ctx);
-    console.log(`\n📦 Loading ${displayName}...`);
+    spinner.update(`Loading ${displayName}`);
+    spinner.start();
     
     // Load package
     const loaded = await loader.load(ctx.source, ctx.options, ctx.cwd);
+    
+    spinner.stop();
     
     // Update context
     ctx.source.packageName = loaded.packageName;
@@ -61,6 +67,7 @@ export async function loadPackagePhase(ctx: InstallationContext): Promise<void> 
     logger.info(`Loaded ${loaded.packageName}@${loaded.version} from ${loaded.source}`);
     
   } catch (error) {
+    spinner.stop();
     const errorMsg = `Failed to load package: ${error}`;
     addError(ctx, errorMsg);
     throw new Error(errorMsg);
