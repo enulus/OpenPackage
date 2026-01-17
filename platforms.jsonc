@@ -107,7 +107,16 @@
       },
       {
         "from": "mcp.jsonc",
-        "to": ".mcp.json"
+        "to": ".mcp.json",
+        "map": [
+          // Claude plugin `.mcp.json` expects a bare server map:
+          //   { "linear": { ... } }
+          // Universal format is:
+          //   { "mcpServers": { "linear": { ... } } }
+          // Only transform keys under `mcpServers` (no-op if missing).
+          { "$rename": { "mcpServers.*": "*" } },
+          { "$unset": "mcpServers" }
+        ]
       }
     ],
     "import": [
@@ -178,7 +187,14 @@
       },
       {
         "from": ".mcp.json",
-        "to": "mcp.jsonc"
+        "to": "mcp.jsonc",
+        "map": [
+          // Claude plugin `.mcp.json` may be a bare server map:
+          //   { "linear": { ... } }
+          // Convert to universal format:
+          //   { "mcpServers": { "linear": { ... } } }
+          { "$rename": { "*": "mcpServers.*" } }
+        ]
       }
     ]
   },
