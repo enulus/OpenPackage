@@ -9,8 +9,16 @@ import { exists } from '../../utils/fs.js';
 import type { WorkspaceIndexPackage } from '../../types/workspace-index.js';
 import { logger } from '../../utils/logger.js';
 import { getTargetPath } from '../../utils/workspace-index-helpers.js';
+import { parsePackageYml } from '../../utils/package-yml.js';
+import { arePackageNamesEquivalent } from '../../utils/package-name.js';
 
 export type PackageSyncState = 'synced' | 'partial' | 'missing';
+
+export interface StatusFileMapping {
+  source: string;
+  target: string;
+  exists: boolean;
+}
 
 export interface StatusPackageReport {
   name: string;
@@ -19,6 +27,7 @@ export interface StatusPackageReport {
   state: PackageSyncState;
   totalFiles: number;
   existingFiles: number;
+  fileList?: StatusFileMapping[];
 }
 
 export interface StatusPipelineResult {
@@ -32,7 +41,8 @@ export interface StatusPipelineResult {
 async function checkPackageStatus(
   cwd: string,
   pkgName: string,
-  entry: WorkspaceIndexPackage
+  entry: WorkspaceIndexPackage,
+  includeFileList: boolean = false
 ): Promise<StatusPackageReport> {
   const resolved = resolveDeclaredPath(entry.path, cwd);
   const sourceRoot = resolved.absolute;
@@ -47,17 +57,19 @@ async function checkPackageStatus(
       path: entry.path,
       state: 'missing',
       totalFiles: 0,
-      existingFiles: 0
+      existingFiles: 0,
+      fileList: includeFileList ? [] : undefined
     };
   }
 
   // Check workspace file existence
   let totalFiles = 0;
   let existingFiles = 0;
+  const fileList: StatusFileMapping[] = [];
   
   const filesMapping = entry.files || {};
 
-  for (const [_sourceKey, targets] of Object.entries(filesMapping)) {
+  for (const [sourceKey, targets] of Object.entries(filesMapping)) {
     if (!Array.isArray(targets) || targets.length === 0) continue;
 
     for (const mapping of targets) {
@@ -65,8 +77,17 @@ async function checkPackageStatus(
       const absPath = path.join(cwd, targetPath);
       totalFiles++;
       
-      if (await exists(absPath)) {
+      const fileExists = await exists(absPath);
+      if (fileExists) {
         existingFiles++;
+      }
+      
+      if (includeFileList) {
+        fileList.push({
+          source: sourceKey,
+          target: targetPath,
+          exists: fileExists
+        });
       }
     }
   }
@@ -80,11 +101,12 @@ async function checkPackageStatus(
     path: entry.path,
     state,
     totalFiles,
-    existingFiles
+    existingFiles,
+    fileList: includeFileList ? fileList : undefined
   };
 }
 
-export async function runStatusPipeline(): Promise<CommandResult<StatusPipelineResult>> {
+export async function runStatusPipeline(packageName?: string): Promise<CommandResult<StatusPipelineResult>> {
   const cwd = process.cwd();
   const openpkgDir = getLocalOpenPackageDir(cwd);
   const manifestPath = getLocalPackageYmlPath(cwd);
@@ -99,20 +121,63 @@ export async function runStatusPipeline(): Promise<CommandResult<StatusPipelineR
   const packages = index.packages || {};
   const reports: StatusPackageReport[] = [];
 
-  for (const [pkgName, pkgEntry] of Object.entries(packages)) {
+  // Get workspace package name to filter it out
+  let workspacePackageName: string | undefined;
+  try {
+    const config = await parsePackageYml(manifestPath);
+    workspacePackageName = config.name;
+  } catch (error) {
+    logger.warn(`Failed to read workspace manifest: ${error}`);
+  }
+
+  // If specific package requested, only check that one with file list
+  if (packageName) {
+    const pkgEntry = packages[packageName];
+    if (!pkgEntry) {
+      return {
+        success: true,
+        data: { packages: [] }
+      };
+    }
+
     try {
-      const report = await checkPackageStatus(cwd, pkgName, pkgEntry);
+      const report = await checkPackageStatus(cwd, packageName, pkgEntry, true);
       reports.push(report);
     } catch (error) {
-      logger.warn(`Failed to compute status for ${pkgName}: ${error}`);
+      logger.warn(`Failed to compute status for ${packageName}: ${error}`);
       reports.push({
-        name: pkgName,
+        name: packageName,
         version: pkgEntry?.version,
         path: pkgEntry?.path ?? '',
         state: 'missing',
         totalFiles: 0,
-        existingFiles: 0
+        existingFiles: 0,
+        fileList: []
       });
+    }
+  } else {
+    // Otherwise check all packages without file list
+    for (const [pkgName, pkgEntry] of Object.entries(packages)) {
+      // Skip the workspace package itself
+      if (workspacePackageName && arePackageNamesEquivalent(pkgName, workspacePackageName)) {
+        logger.debug(`Skipping workspace package '${pkgName}' in status list`);
+        continue;
+      }
+
+      try {
+        const report = await checkPackageStatus(cwd, pkgName, pkgEntry, false);
+        reports.push(report);
+      } catch (error) {
+        logger.warn(`Failed to compute status for ${pkgName}: ${error}`);
+        reports.push({
+          name: pkgName,
+          version: pkgEntry?.version,
+          path: pkgEntry?.path ?? '',
+          state: 'missing',
+          totalFiles: 0,
+          existingFiles: 0
+        });
+      }
     }
   }
 
