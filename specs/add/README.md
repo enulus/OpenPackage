@@ -22,16 +22,23 @@
 
 2. **Collect files** from input path(s).
 
-3. **Map & copy**:
-   - Platform subdirs (e.g., `.cursor/rules/`) → universal (`rules/`).
-   - Platform root files (e.g., `CLAUDE.md`) → package root.
-   - Other paths → package `root/<relpath>` (prefix for install stripping).
+3. **Map files using IMPORT flows** (workspace → package):
+   - Uses **import flows** from `platforms.jsonc` to map workspace files to universal package structure.
+   - Platform-specific files (e.g., `.cursor/commands/*.md`) → universal subdirs (`commands/*.md`).
+   - Handles glob patterns (`**/*.md`), extension transformations (`.mdc` → `.md`), nested directories.
+   - Platform root files (e.g., `AGENTS.md`, `CLAUDE.md`) → package root.
+   - Non-platform files → `root/<relpath>` (stored under package root).
+   - See [Flow-Based Mapping](#flow-based-mapping) for details.
 
-4. **Index updates**:
+4. **Copy with conflict resolution**:
+   - Copy files to package source with prompts for conflicts.
+   - Preserves directory structure and content.
+
+5. **Index updates**:
    - `add` does **not** update `openpackage.index.yml`.
    - Index updates happen via `install` or `apply`.
 
-5. **Optional --apply**:
+6. **Optional --apply**:
    - Triggers `apply` pipeline immediately after add.
    - Requires package to be installed in current workspace.
    - Updates workspace index via `apply`.
@@ -73,18 +80,111 @@ opkg install my-pkg
 opkg apply my-pkg
 ```
 
+## Flow-Based Mapping
+
+The `add` command uses **IMPORT flows** from `platforms.jsonc` to correctly map workspace files to their universal package structure. This is the reverse of install/apply, which use **EXPORT flows**.
+
+### Flow Directions
+- **EXPORT flows**: Package → Workspace (used by `install`, `apply`)
+- **IMPORT flows**: Workspace → Package (used by `add`, `save`)
+
+### Mapping Process
+
+1. **Detect platform**: Check if file path matches platform directory patterns (e.g., `.cursor/`, `.claude/`).
+
+2. **Match import flow**: Find matching `import` flow from platform definition:
+   ```jsonc
+   {
+     "cursor": {
+       "import": [
+         {
+           "from": ".cursor/commands/**/*.md",
+           "to": "commands/**/*.md"
+         },
+         {
+           "from": ".cursor/rules/**/*.mdc",
+           "to": "rules/**/*.md"  // Extension transformation
+         }
+       ]
+     }
+   }
+   ```
+
+3. **Apply pattern mapping**:
+   - Glob patterns (`**`, `*`) preserve directory structure
+   - Extension transformations are applied (`.mdc` → `.md`)
+   - Nested paths are preserved (`utils/helper.md` → `commands/utils/helper.md`)
+
+4. **Fallback behavior**:
+   - Platform root files (AGENTS.md, CLAUDE.md, etc.) → package root
+   - Unmatched files → `root/<relpath>` for non-platform content
+
+### Examples
+
+#### Cursor Commands
+```bash
+opkg add .cursor/commands/deploy.md
+# Maps via: .cursor/commands/**/*.md → commands/**/*.md
+# Result: .openpackage/commands/deploy.md ✓
+```
+
+#### Cursor Rules with Extension Transformation
+```bash
+opkg add .cursor/rules/typescript.mdc
+# Maps via: .cursor/rules/**/*.mdc → rules/**/*.md
+# Result: .openpackage/rules/typescript.md ✓
+# (Extension changed from .mdc to .md)
+```
+
+#### Nested Directory Preservation
+```bash
+opkg add .cursor/commands/utils/helper.md
+# Maps via: .cursor/commands/**/*.md → commands/**/*.md
+# Result: .openpackage/commands/utils/helper.md ✓
+```
+
+#### Platform Root Files
+```bash
+opkg add AGENTS.md
+# Platform root file detection
+# Result: .openpackage/AGENTS.md ✓
+```
+
+#### Non-Platform Files
+```bash
+opkg add config.json
+# No platform pattern match
+# Result: .openpackage/root/config.json ✓
+```
+
+### Technical Details
+
+**Symlink Resolution**: Paths are resolved using `realpathSync()` to handle platform symlinks (e.g., macOS `/var` → `/private/var`).
+
+**Pattern Matching**: Uses regex conversion of glob patterns for efficient matching:
+- `**` → matches zero or more directory segments
+- `*` → matches single filename segment
+- Patterns are anchored to workspace root
+
+**Implementation**:
+- Mapping function: `mapWorkspaceFileToUniversal()` in `src/utils/platform-mapper.ts`
+- Entry derivation: `deriveSourceEntry()` in `src/core/add/source-collector.ts`
+- Test coverage: `tests/core/add/add-flow-based-mapping.test.ts`
+
 ## Behavior Changes (v2)
 
 ### Previous behavior (v1)
 - Required package to be installed in current workspace (checked workspace index).
 - Automatically updated `openpackage.index.yml` after copying files.
 - Tightly coupled to workspace state.
+- Used hardcoded subdirectory mappings (legacy behavior).
 
 ### Current behavior (v2)
 - Works with any mutable package (workspace or global).
 - Does **not** update workspace index (separation of concerns).
 - Users explicitly control workspace sync via `install` + `apply` or `--apply` flag.
 - Clearer mental model: `add` = modify source, `apply`/`install` = sync to workspace.
+- **Uses flow-based mapping** from `platforms.jsonc` for accurate file placement.
 
 ## Errors
 

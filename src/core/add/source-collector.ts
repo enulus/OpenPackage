@@ -1,9 +1,10 @@
-import { relative } from 'path';
+import { relative, basename } from 'path';
+import { realpathSync } from 'fs';
 
 import { DIR_PATTERNS } from '../../constants/index.js';
 import { isDirectory, isFile, walkFiles } from '../../utils/fs.js';
 import { normalizePathForProcessing } from '../../utils/path-normalization.js';
-import { mapPlatformFileToUniversal } from '../../utils/platform-mapper.js';
+import { mapWorkspaceFileToUniversal } from '../../utils/platform-mapper.js';
 import { isPlatformRootFile } from '../../utils/platform-utils.js';
 
 export interface SourceEntry {
@@ -11,6 +12,10 @@ export interface SourceEntry {
   registryPath: string;
 }
 
+/**
+ * Collect source entries from a workspace path for adding to a package source.
+ * Uses IMPORT flows (workspace → package direction) to map files correctly.
+ */
 export async function collectSourceEntries(resolvedPath: string, cwd: string): Promise<SourceEntry[]> {
   const entries: SourceEntry[] = [];
 
@@ -37,35 +42,49 @@ export async function collectSourceEntries(resolvedPath: string, cwd: string): P
   throw new Error(`Unsupported path type: ${resolvedPath}`);
 }
 
+/**
+ * Derive a source entry from an absolute file path.
+ * Uses IMPORT flows to map workspace files to their universal package paths.
+ * 
+ * Flow-based mapping:
+ * 1. Try to match against platform IMPORT flows (workspace → package)
+ * 2. Check if it's a platform root file (AGENTS.md, CLAUDE.md, etc.)
+ * 3. Otherwise, treat as root-level content (stored at package root)
+ */
 function deriveSourceEntry(absFilePath: string, cwd: string): SourceEntry | null {
-  const relativePath = relative(cwd, absFilePath);
+  // Resolve symlinks to ensure consistent path comparison
+  const realFilePath = realpathSync(absFilePath);
+  const realCwd = realpathSync(cwd);
+  const relativePath = relative(realCwd, realFilePath);
   const normalizedRelPath = normalizePathForProcessing(relativePath);
 
-  // Check if this is a platform-specific file (e.g., .cursor/commands/test.md)
-  const mapping = mapPlatformFileToUniversal(absFilePath, cwd);
+  // 1. Try to map using platform IMPORT flows (workspace → package direction)
+  const mapping = mapWorkspaceFileToUniversal(absFilePath, cwd);
   if (mapping) {
-    // Universal content: prefix with .openpackage/
+    // Successfully mapped via import flow
+    // Construct registry path: subdir/relPath (e.g., "commands/test.md")
+    const registryPath = [mapping.subdir, mapping.relPath].filter(Boolean).join('/');
     return {
       sourcePath: absFilePath,
-      registryPath: [mapping.subdir, mapping.relPath].filter(Boolean).join('/')
+      registryPath
     };
   }
 
-  // Check if this is a platform root file (e.g., AGENTS.md, CLAUDE.md)
-  const fileName = normalizedRelPath.split('/').pop();
+  // 2. Check if this is a platform root file (e.g., AGENTS.md, CLAUDE.md)
+  const fileName = basename(normalizedRelPath);
   if (fileName && isPlatformRootFile(fileName) && !normalizedRelPath.includes('/')) {
-    // Root files: no prefix, stored at package root
+    // Root files: stored at package root with no prefix
     return {
       sourcePath: absFilePath,
       registryPath: fileName
     };
   }
 
-  // All other files: root-level content, no .openpackage/ prefix
-  // Stored at package root, outside .openpackage/
+  // 3. All other files: treat as root-level content
+  // These are non-platform-specific files stored at package root under root/
   return {
     sourcePath: absFilePath,
-    registryPath: normalizedRelPath
+    registryPath: `root/${normalizedRelPath}`
   };
 }
 

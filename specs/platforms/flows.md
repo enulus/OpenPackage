@@ -42,7 +42,7 @@ interface ExportFlow {
 
 Transform workspace files back into package files (Workspace → Package).
 
-**Used by:** `opkg save`
+**Used by:** `opkg save`, `opkg add`
 
 **Schema:**
 ```typescript
@@ -64,7 +64,33 @@ interface ImportFlow {
 }
 ```
 
-**Key difference:** Import flows only process files tracked in the workspace index (files previously exported).
+**Key differences by command:**
+- **`save`**: Only processes files tracked in workspace index (files previously exported)
+- **`add`**: Processes any workspace file matching the pattern, regardless of index state
+
+**Example:**
+```jsonc
+{
+  "cursor": {
+    "import": [
+      {
+        "from": ".cursor/commands/**/*.md",
+        "to": "commands/**/*.md"
+      },
+      {
+        "from": ".cursor/rules/**/*.mdc",
+        "to": "rules/**/*.md"
+      }
+    ]
+  }
+}
+```
+
+When you run `opkg add .cursor/commands/deploy.md`, it:
+1. Matches the file against `.cursor/commands/**/*.md` pattern
+2. Extracts the relative path within the pattern (`deploy.md`)
+3. Maps to package path `commands/deploy.md`
+4. Copies to `.openpackage/commands/deploy.md`
 
 ### Required Fields
 

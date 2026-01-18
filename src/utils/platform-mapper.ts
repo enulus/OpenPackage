@@ -1,4 +1,5 @@
-import { join, basename, dirname, extname } from 'path';
+import { join, basename, dirname, extname, relative, resolve } from 'path';
+import { realpathSync } from 'fs';
 import {
   getPlatformDefinition,
   getDetectedPlatforms,
@@ -75,6 +76,9 @@ export function mapUniversalToPlatform(
 
 /**
  * Map a platform-specific file path back to universal subdir and relative path
+ * Uses EXPORT flows (package → workspace direction)
+ * This is used during install/apply operations.
+ * 
  * Supports local platform configs via cwd.
  */
 export function mapPlatformFileToUniversal(
@@ -83,13 +87,10 @@ export function mapPlatformFileToUniversal(
 ): { platform: Platform; subdir: string; relPath: string } | null {
   const normalizedPath = normalizePathForProcessing(absPath);
 
-
-  // Check each platform using flows
+  // Check each platform using export flows (package → workspace)
   for (const platform of getAllPlatforms({ includeDisabled: true }, cwd)) {
     const definition = getPlatformDefinition(platform, cwd);
 
-    // TODO: Implement full flow-based reverse mapping
-    // For now, extract subdirs from export flows and do basic mapping (package → workspace)
     if (definition.export && definition.export.length > 0) {
       for (const flow of definition.export) {
         const toPattern = typeof flow.to === 'string' ? flow.to : Object.keys(flow.to)[0];
@@ -143,6 +144,166 @@ export function mapPlatformFileToUniversal(
   }
 
   return null;
+}
+
+/**
+ * Map a workspace file path to universal package path using IMPORT flows
+ * Uses IMPORT flows (workspace → package direction)
+ * This is used during add/save operations.
+ * 
+ * @param workspaceFilePath - Absolute or workspace-relative path to a workspace file
+ * @param cwd - Workspace root directory
+ * @returns Mapping result with platform, universal subdir, and relative path, or null if no match
+ */
+export function mapWorkspaceFileToUniversal(
+  workspaceFilePath: string,
+  cwd = process.cwd()
+): { platform: Platform; subdir: string; relPath: string } | null {
+  // Resolve symlinks to get real paths for consistent comparison
+  const absolutePath = realpathSync(workspaceFilePath);
+  const absoluteCwd = realpathSync(cwd);
+  
+  // Convert to workspace-relative path for matching against flow patterns
+  const relativePath = relative(absoluteCwd, absolutePath).replace(/\\/g, '/');
+
+  // Check each platform using import flows (workspace → package)
+  for (const platform of getAllPlatforms({ includeDisabled: true }, cwd)) {
+    const definition = getPlatformDefinition(platform, cwd);
+
+    if (definition.import && definition.import.length > 0) {
+      for (const flow of definition.import) {
+        const fromPattern = Array.isArray(flow.from) ? flow.from[0] : flow.from;
+        if (!fromPattern) continue;
+        
+        // Check if this file matches the full pattern (using relative path)
+        if (!matchesFlowPattern(relativePath, fromPattern)) {
+          continue;
+        }
+        
+        // Extract universal subdir from 'to' pattern
+        const toPattern = typeof flow.to === 'string' ? flow.to : Object.keys(flow.to)[0];
+        if (!toPattern) continue;
+        
+        const toParts = toPattern.split('/');
+        const subdir = toParts[0];
+        
+        // Extract the relative path by mapping from fromPattern to toPattern
+        const relPath = mapPathUsingFlowPattern(relativePath, fromPattern, toPattern);
+        
+        if (relPath) {
+          return { platform, subdir, relPath };
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Check if a path matches a flow pattern (supports globs)
+ */
+function matchesFlowPattern(normalizedPath: string, pattern: string): boolean {
+  // Convert glob pattern to regex
+  let regexPattern = pattern
+    .replace(/\./g, '\\.')
+    .replace(/\*\*\//g, '___DOUBLESTAR_SLASH___')
+    .replace(/\/\*\*/g, '___SLASH_DOUBLESTAR___')
+    .replace(/\*\*/g, '___DOUBLESTAR___')
+    .replace(/\*/g, '[^/]+')
+    .replace(/___DOUBLESTAR_SLASH___/g, '(?:.*?/)?')
+    .replace(/___SLASH_DOUBLESTAR___/g, '(?:/.*)?')
+    .replace(/___DOUBLESTAR___/g, '.*');
+  
+  const regex = new RegExp(`^${regexPattern}$`);
+  return regex.test(normalizedPath);
+}
+
+/**
+ * Map a path from one pattern to another (workspace → package)
+ * Handles glob patterns and extension transformations
+ */
+function mapPathUsingFlowPattern(
+  sourcePath: string,
+  fromPattern: string,
+  toPattern: string
+): string | null {
+  // Handle ** recursive patterns
+  if (fromPattern.includes('**') && toPattern.includes('**')) {
+    const fromParts = fromPattern.split('**');
+    const toParts = toPattern.split('**');
+    const fromBase = fromParts[0].replace(/\/$/, '');
+    const toBase = toParts[0].replace(/\/$/, '');
+    
+    // Get the file pattern after **
+    const fromSuffix = fromParts[1] || '';
+    const toSuffix = toParts[1] || '';
+    
+    // Extract the relative path after the base directory
+    let relativeSubpath = sourcePath;
+    if (fromBase) {
+      if (!sourcePath.startsWith(fromBase + '/') && !sourcePath.startsWith('/' + fromBase + '/')) {
+        return null;
+      }
+      const startPos = sourcePath.indexOf(fromBase);
+      relativeSubpath = sourcePath.slice(startPos + fromBase.length + 1);
+    }
+    
+    // Handle extension mapping if suffixes specify extensions
+    if (fromSuffix && toSuffix) {
+      const fromExt = fromSuffix.replace(/^\/?\*+/, '');
+      const toExt = toSuffix.replace(/^\/?\*+/, '');
+      if (fromExt && toExt && fromExt !== toExt) {
+        relativeSubpath = relativeSubpath.replace(new RegExp(fromExt.replace('.', '\\.') + '$'), toExt);
+      }
+    }
+    
+    // Build target path (package-relative, no base)
+    return relativeSubpath;
+  }
+  
+  // Handle single-level * patterns
+  if (fromPattern.includes('*') && toPattern.includes('*')) {
+    const sourceFileName = basename(sourcePath);
+    const sourceExt = extname(sourcePath);
+    const sourceBase = basename(sourcePath, sourceExt);
+    
+    const toParts = toPattern.split('*');
+    const toPrefix = toParts[0];
+    const toSuffix = toParts[1] || '';
+    
+    const targetExt = toSuffix.startsWith('.') ? toSuffix : (sourceExt + toSuffix);
+    const targetFileName = sourceBase + targetExt;
+    
+    // Get directory structure from toPrefix (remove leading platform dir)
+    const toPrefixParts = toPrefix.split('/').filter(p => p);
+    // First part is the subdir, rest is the directory structure
+    const targetRelPath = toPrefixParts.slice(1).concat([targetFileName]).join('/');
+    
+    return targetRelPath;
+  }
+  
+  // No globs - exact mapping
+  // Extract just the filename and map it
+  const fileName = basename(sourcePath);
+  const toFileName = basename(toPattern);
+  
+  // Check if extensions differ
+  const sourceExt = extname(fileName);
+  const targetExt = extname(toFileName);
+  
+  let mappedFileName = fileName;
+  if (sourceExt !== targetExt && targetExt) {
+    mappedFileName = basename(fileName, sourceExt) + targetExt;
+  }
+  
+  // Get directory from toPattern
+  const toDir = dirname(toPattern);
+  const toDirParts = toDir.split('/').filter(p => p && p !== '.');
+  // First part is the subdir, rest is directory structure
+  const relDir = toDirParts.slice(1).join('/');
+  
+  return relDir ? `${relDir}/${mappedFileName}` : mappedFileName;
 }
 
 /**

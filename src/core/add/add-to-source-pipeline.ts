@@ -1,18 +1,15 @@
 import { resolve as resolvePath, join, basename } from 'path';
 
 import type { CommandResult } from '../../types/index.js';
-import { FILE_PATTERNS, DIR_PATTERNS } from '../../constants/index.js';
+import { FILE_PATTERNS } from '../../constants/index.js';
 import { resolveMutableSource } from '../source-resolution/resolve-mutable-source.js';
 import { resolvePackageSource } from '../source-resolution/resolve-package-source.js';
 import { assertMutableSourceOrThrow } from '../../utils/source-mutability.js';
-import { collectSourceEntries, type SourceEntry } from './source-collector.js';
+import { collectSourceEntries } from './source-collector.js';
 import { copyFilesWithConflictResolution } from './add-conflict-handler.js';
-import { normalizePathForProcessing } from '../../utils/path-normalization.js';
-import { getPlatformRootFileNames } from '../../utils/platform-root-files.js';
-import { getAllUniversalSubdirs, getAllPlatforms } from '../platforms.js';
 import type { AddPackageContext } from './add-context.js';
 import { parsePackageYml } from '../../utils/package-yml.js';
-import { exists, ensureDir } from '../../utils/fs.js';
+import { exists } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
 import { buildApplyContext } from '../install/unified/context-builders.js';
 import { runUnifiedInstallPipeline } from '../install/unified/pipeline.js';
@@ -89,8 +86,8 @@ export async function runAddToSourcePipeline(
     });
   }
 
-  const rawEntries = await collectSourceEntries(absInputPath, cwd);
-  const entries = applyCopyToRootRule(rawEntries, cwd);
+  // Collect entries - source-collector now handles flow-based mapping
+  const entries = await collectSourceEntries(absInputPath, cwd);
 
   const changed = await copyFilesWithConflictResolution(packageContext, entries);
 
@@ -244,27 +241,6 @@ async function buildPackageContextFromSource(
   };
 }
 
-function applyCopyToRootRule(entries: SourceEntry[], cwd: string): SourceEntry[] {
-  const universalSubdirs = getAllUniversalSubdirs(cwd);
-  const rootFileNames = getPlatformRootFileNames(getAllPlatforms(undefined, cwd), cwd);
 
-  return entries.map(entry => {
-    const normalized = normalizePathForProcessing(entry.registryPath) || entry.registryPath;
-
-    const isUniversal =
-      universalSubdirs.has(normalized.split('/')[0] || '') ||
-      normalized.startsWith(`${FILE_PATTERNS.AGENTS_MD}`) ||
-      normalized.startsWith('root/');
-
-    const isRootFile = rootFileNames.has(normalized);
-
-    if (isUniversal || isRootFile) {
-      return { ...entry, registryPath: normalized };
-    }
-
-    // Everything else → copy-to-root
-    return { ...entry, registryPath: normalizePathForProcessing(`root/${normalized}`) || `root/${normalized}` };
-  });
-}
 
 
