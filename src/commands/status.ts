@@ -5,27 +5,16 @@ import { withErrorHandling, ValidationError } from '../utils/errors.js';
 import { runStatusPipeline, type StatusPackageReport } from '../core/status/status-pipeline.js';
 import { logger } from '../utils/logger.js';
 
-interface CommandOptions {
-  verbose?: boolean;
-}
-
-function printPackageLine(
-  pkg: StatusPackageReport,
-  verbose: boolean
-): void {
-  const icon = pkg.state === 'synced' ? '✅' : pkg.state === 'missing' ? '❌' : '⚠️';
+function printPackageLine(pkg: StatusPackageReport): void {
+  const icon = pkg.state === 'synced' ? '✓' : pkg.state === 'missing' ? '✗' : '~';
   const version = pkg.version ? `@${pkg.version}` : '';
-  console.log(`${icon} ${pkg.name}${version}  ${pkg.state}  ${pkg.path}`);
-
-  if (verbose && pkg.diffs.length > 0) {
-    for (const diff of pkg.diffs) {
-      const reason = diff.reason === 'missing' ? 'missing' : 'changed';
-      console.log(`   - ${reason}: ${diff.workspacePath || diff.sourcePath}`);
-    }
-  }
+  const suffix = pkg.state === 'partial' 
+    ? `  (${pkg.existingFiles}/${pkg.totalFiles} files)`
+    : '';
+  console.log(`${icon} ${pkg.name}${version}  ${pkg.state}  ${pkg.path}${suffix}`);
 }
 
-async function statusCommand(options: CommandOptions = {}): Promise<CommandResult> {
+async function statusCommand(): Promise<CommandResult> {
   const cwd = process.cwd();
   logger.info(`Checking package status for directory: ${cwd}`);
 
@@ -41,11 +30,20 @@ async function statusCommand(options: CommandOptions = {}): Promise<CommandResul
     }
 
     for (const pkg of packages) {
-      printPackageLine(pkg, Boolean(options.verbose));
+      printPackageLine(pkg);
     }
 
     const synced = packages.filter(p => p.state === 'synced').length;
-    console.log(`Summary: ${synced}/${packages.length} synced`);
+    const partial = packages.filter(p => p.state === 'partial').length;
+    const missing = packages.filter(p => p.state === 'missing').length;
+
+    // Build summary message
+    const parts: string[] = [];
+    if (synced > 0) parts.push(`${synced} synced`);
+    if (partial > 0) parts.push(`${partial} partial`);
+    if (missing > 0) parts.push(`${missing} missing`);
+    
+    console.log(`Summary: ${parts.join(', ')} (${packages.length} total)`);
 
     return { success: true, data: { packages } };
   } catch (error) {
@@ -59,10 +57,8 @@ async function statusCommand(options: CommandOptions = {}): Promise<CommandResul
 export function setupStatusCommand(program: Command): void {
   program
     .command('status')
-    .description('Show package sync state')
-    .option('--verbose', 'show file-level differences')
-    .action(withErrorHandling(async (options: CommandOptions) => {
-      await statusCommand(options);
+    .description('Show package installation status')
+    .action(withErrorHandling(async () => {
+      await statusCommand();
     }));
 }
-
