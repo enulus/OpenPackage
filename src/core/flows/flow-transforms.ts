@@ -116,6 +116,7 @@ export const yamlTransform: Transform = {
       // stringify
       return yaml.dump(input, {
         indent: 2,
+        flowLevel: 1,  // Use compact flow style for arrays
         lineWidth: -1, // Disable line wrapping
         noRefs: true,  // Disable anchors/aliases
       });
@@ -356,6 +357,7 @@ export const bodyTransform: Transform = {
 export function serializeMarkdownWithFrontmatter(frontmatter: any, body: string): string {
   const frontmatterYaml = yaml.dump(frontmatter, {
     indent: 2,
+    flowLevel: 1,  // Use compact flow style for arrays
     lineWidth: -1,
     noRefs: true,
   });

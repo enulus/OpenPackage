@@ -169,13 +169,23 @@
             }
           },
           
-          // Reverse tools transformation: "bash, read" → { bash: true, read: true }
+          // Reverse tools transformation: "Bash, Read" → [bash, read]
           {
             "$pipeline": {
               "field": "tools",
               "operations": [
+                // Step 1: Split "Read, Write, Bash" → ["Read", "Write", "Bash"]
                 { "$reduce": { "type": "split", "separator": ", " } },
-                { "$arrayToObject": { "value": true } }
+                // Step 2: Lowercase all (Read→read, Bash→bash, AskUserQuestion→askuserquestion)
+                { "$map": { "each": "lowercase" } },
+                // Step 3: Replace special cases AFTER lowercase
+                { "$map": {
+                    "replace": {
+                      "askuserquestion": "question",
+                      "notebookedit": "notebook",
+                      "exitplanmode": "exitplan"
+                    }
+                }}
               ]
             }
           }
@@ -233,35 +243,100 @@
           "$ne": ["$$source", "claude-plugin"]
         },
         "map": [
-          // Set name from context
+          // 1. Inject filename as name (Claude requirement)
           { "$set": { "name": "$$filename" } },
-          // Transform model conditionally:
-          // - If it starts with "anthropic/", apply regex transformations
-          // - Otherwise, set to "default"
+          
+          // 2. Transform model: "provider/model-id" → Claude short names
           {
             "$pipeline": {
               "field": "model",
               "operations": [
-                // First, check if it's an Anthropic model. If not, replace with "default"
-                { "$replace": { "pattern": "^(?!anthropic/).*$", "with": "default" } },
-                // Then apply Anthropic transformations (these only affect anthropic/* models)
+                // Check if it's an Anthropic model, otherwise set to "inherit"
+                { "$replace": { "pattern": "^(?!anthropic/).*$", "with": "inherit" } },
+                // Remove anthropic/ prefix
                 { "$replace": { "pattern": "^anthropic/", "with": "" } },
+                // Convert version dots to hyphens: claude-sonnet-4.20250514 → claude-sonnet-4-20250514
                 { "$replace": { "pattern": "(-[0-9]+)\\.([0-9]+)", "with": "$1-$2", "flags": "g" } }
               ]
             }
           },
-          // Transform tools: object → string
+          
+          // 3. Transform tools: [read, write, bash] → "Read, Write, Bash"
           {
             "$pipeline": {
               "field": "tools",
               "operations": [
-                { "$filter": { "match": { "value": true } } },
-                { "$objectToArray": { "extract": "keys" } },
+                // Step 1: Replace special cases BEFORE capitalization
+                { "$map": { 
+                    "replace": {
+                      "question": "AskUserQuestion",
+                      "notebook": "NotebookEdit", 
+                      "exitplan": "ExitPlanMode"
+                    }
+                }},
+                // Step 2: Capitalize everything (handles read→Read, bash→Bash, etc.)
+                { "$map": { "each": "capitalize" } },
+                // Step 3: Join with comma-space
                 { "$reduce": { "type": "join", "separator": ", " } }
               ]
             }
           },
-          { "$unset": "permission" }
+          
+          // 4. Smart map permissions object → permissionMode string
+          {
+            "$switch": {
+              "field": "permissions",
+              "cases": [
+                // Full automation: all allow
+                { 
+                  "pattern": { "edit": "allow", "bash": "allow", "webfetch": "allow" }, 
+                  "value": "bypassPermissions" 
+                },
+                { 
+                  "pattern": { "edit": "allow", "bash": "allow" }, 
+                  "value": "bypassPermissions" 
+                },
+                
+                // Auto-accept edits
+                { 
+                  "pattern": { "edit": "allow", "bash": "ask" }, 
+                  "value": "acceptEdits" 
+                },
+                { 
+                  "pattern": { "edit": "allow" }, 
+                  "value": "acceptEdits" 
+                },
+                
+                // Read-only mode
+                { 
+                  "pattern": { "edit": "deny", "bash": "deny" }, 
+                  "value": "plan" 
+                },
+                
+                // Deny unclear operations
+                { 
+                  "pattern": { "edit": "deny", "bash": "ask" }, 
+                  "value": "dontAsk" 
+                },
+                { 
+                  "pattern": { "edit": "deny", "bash": "allow" }, 
+                  "value": "dontAsk" 
+                },
+                
+                // Standard prompting
+                { 
+                  "pattern": { "edit": "ask", "bash": "ask" }, 
+                  "value": "default" 
+                },
+                { 
+                  "pattern": { "edit": "ask" }, 
+                  "value": "default" 
+                }
+              ],
+              "default": "default"
+            }
+          },
+          { "$rename": { "permissions": "permissionMode" } }
         ]
       },
       {
@@ -303,37 +378,60 @@
         "from": ".claude/agents/**/*.md",
         "to": "agents/**/*.md",
         "map": [
-          // Remove the name field added during export
+          // 1. Remove name field (derived from filename in universal)
           { "$unset": "name" },
           
-          // Reverse model transformation
+          // 2. Reverse model transformation: Claude short names → "anthropic/model-id"
           {
             "$pipeline": {
               "field": "model",
               "operations": [
-                // Step 1: Convert version hyphens back to dots
-                // claude-sonnet-4-20250514 → claude-sonnet-4.20250514
+                // Convert version hyphens back to dots: claude-sonnet-4-20250514 → claude-sonnet-4.20250514
                 { "$replace": { "pattern": "(-[0-9]+)-([0-9]+)", "with": "$1.$2", "flags": "g" } },
                 
-                // Step 2: Add anthropic/ prefix ONLY if:
-                //   - It starts with "claude-" (Claude model without prefix)
-                //   - NOT if it's "default"
-                //   - NOT if it already has "anthropic/"
+                // Add anthropic/ prefix if it's a Claude model (starts with "claude-")
+                // Skip if it's "inherit" or already has "anthropic/"
                 { "$replace": { "pattern": "^(claude-.+)$", "with": "anthropic/$1" } }
               ]
             }
           },
           
-          // Reverse tools transformation: "bash, read" → { bash: true, read: true }
+          // 3. Reverse tools transformation: "Read, Write, Bash" → [read, write, bash]
           {
             "$pipeline": {
               "field": "tools",
               "operations": [
+                // Step 1: Split "Read, Write, Bash" → ["Read", "Write", "Bash"]
                 { "$reduce": { "type": "split", "separator": ", " } },
-                { "$arrayToObject": { "value": true } }
+                // Step 2: Lowercase all (Read→read, Bash→bash, AskUserQuestion→askuserquestion)
+                { "$map": { "each": "lowercase" } },
+                // Step 3: Replace special cases AFTER lowercase
+                { "$map": {
+                    "replace": {
+                      "askuserquestion": "question",
+                      "notebookedit": "notebook",
+                      "exitplanmode": "exitplan"
+                    }
+                }}
               ]
             }
-          }
+          },
+          
+          // 4. Transform permissionMode → permissions object (best effort)
+          {
+            "$switch": {
+              "field": "permissionMode",
+              "cases": [
+                { "pattern": "bypassPermissions", "value": { "edit": "allow", "bash": "allow" } },
+                { "pattern": "acceptEdits", "value": { "edit": "allow", "bash": "ask" } },
+                { "pattern": "plan", "value": { "edit": "deny", "bash": "deny" } },
+                { "pattern": "dontAsk", "value": { "edit": "deny", "bash": "ask" } },
+                { "pattern": "default", "value": { "edit": "ask", "bash": "ask" } }
+              ],
+              "default": { "edit": "ask", "bash": "ask" }
+            }
+          },
+          { "$rename": { "permissionMode": "permissions" } }
         ]
       },
       {
@@ -674,7 +772,22 @@
       },
       {
         "from": "agents/**/*.md",
-        "to": ".opencode/agent/**/*.md"
+        "to": ".opencode/agent/**/*.md",
+        "map": [
+          // 1. Transform tools: [read, write, bash] → { read: true, write: true, bash: true }
+          {
+            "$pipeline": {
+              "field": "tools",
+              "operations": [
+                { "$arrayToObject": { "value": true } }
+              ]
+            }
+          },
+          
+          // 2. Model field: pass through as-is (already in OpenCode format)
+          // 3. Permissions: pass through as-is (already in OpenCode format)
+          // 4. Claude-specific fields preserved (skills, hooks, disallowedTools) - ignored by OpenCode but kept for information preservation
+        ]
       },
       {
         "from": "skills/**/*",
@@ -693,7 +806,24 @@
       },
       {
         "from": ".opencode/agent/**/*.md",
-        "to": "agents/**/*.md"
+        "to": "agents/**/*.md",
+        "map": [
+          // 1. Reverse tools transformation: { read: true, write: false, bash: true } → [read, bash]
+          {
+            "$pipeline": {
+              "field": "tools",
+              "operations": [
+                // Filter to only enabled tools
+                { "$filter": { "match": { "value": true } } },
+                // Extract keys
+                { "$objectToArray": { "extract": "keys" } }
+              ]
+            }
+          }
+          
+          // 2. Model field: pass through as-is (already in universal format)
+          // 3. Permissions: pass through as-is (already in universal format)
+        ]
       },
       {
         "from": ".opencode/skill/**/*",

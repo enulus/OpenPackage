@@ -634,7 +634,7 @@ export class DefaultFlowExecutor implements FlowExecutor {
 
         case 'yaml':
         case 'yml':
-          return yaml.dump(content, { indent: 2, lineWidth: -1 });
+          return yaml.dump(content, { indent: 2, flowLevel: 1, lineWidth: -1 });
 
         case 'toml':
           // If a pipeline already produced TOML text (e.g. via domain transforms),
@@ -1116,7 +1116,7 @@ export class DefaultFlowExecutor implements FlowExecutor {
       return content;
     }
     if (content.frontmatter) {
-      const frontmatterStr = yaml.dump(content.frontmatter, { indent: 2, lineWidth: -1 });
+      const frontmatterStr = yaml.dump(content.frontmatter, { indent: 2, flowLevel: 1, lineWidth: -1 });
       return `---\n${frontmatterStr}---\n${content.body || ''}`;
     }
 

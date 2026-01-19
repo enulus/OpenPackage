@@ -1,0 +1,250 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://openpackage.dev/schemas/agent-frontmatter-v1.json",
+  "title": "OpenPackage Universal Agent Frontmatter",
+  "description": "Universal agent configuration schema for OpenPackage, compatible with Claude Code and OpenCode platforms",
+  "type": "object",
+  "required": ["description"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Agent identifier (lowercase-hyphen format). Typically derived from filename and not required in frontmatter."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Brief explanation of what the agent does and when to use it. Should be 1-2 sentences with specific trigger phrases."
+    },
+    "model": {
+      "type": "string",
+      "description": "Model identifier in provider/model-id format (e.g., anthropic/claude-3.5-sonnet, openai/gpt-4) or 'inherit' to use parent conversation model",
+      "examples": [
+        "anthropic/claude-3.5-sonnet",
+        "anthropic/claude-3-opus",
+        "anthropic/claude-3-haiku",
+        "openai/gpt-4",
+        "opencode/gpt-5.1-codex",
+        "inherit"
+      ]
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Array of tool names (strict lowercase). Common tools: read, write, edit, bash, grep, glob. Custom and MCP tools are supported.",
+      "examples": [
+        ["read", "grep", "glob", "bash"],
+        ["read", "write", "edit", "bash"],
+        ["bash"]
+      ]
+    },
+    "disallowedTools": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Array of tool names to deny (Claude Code specific). Blacklist of tools to remove from inherited or specified list."
+    },
+    "permissions": {
+      "type": "object",
+      "description": "Granular permissions control (OpenCode format canonical). Defines ask/allow/deny behavior for different operation types.",
+      "properties": {
+        "edit": {
+          "enum": ["ask", "allow", "deny"],
+          "description": "Permission for file edit operations"
+        },
+        "bash": {
+          "oneOf": [
+            {
+              "enum": ["ask", "allow", "deny"],
+              "description": "Simple bash permission"
+            },
+            {
+              "type": "object",
+              "description": "Command-specific bash permissions with pattern matching",
+              "patternProperties": {
+                "^.*$": {
+                  "enum": ["ask", "allow", "deny"]
+                }
+              }
+            }
+          ],
+          "description": "Permission for bash command execution. Can be simple (ask/allow/deny) or object with command patterns."
+        },
+        "webfetch": {
+          "enum": ["ask", "allow", "deny"],
+          "description": "Permission for web fetch operations"
+        },
+        "task": {
+          "type": "string",
+          "description": "Controls which subagents this agent can invoke. Use glob patterns or 'allow'/'deny'."
+        }
+      },
+      "additionalProperties": false
+    },
+    "hidden": {
+      "type": "boolean",
+      "description": "Hide agent from @ autocomplete menu. Useful for internal agents only invoked programmatically.",
+      "default": false
+    },
+    "permissionMode": {
+      "enum": ["default", "acceptEdits", "dontAsk", "bypassPermissions", "plan"],
+      "description": "Claude Code permission mode. Alternative to permissions object. Transforms to permissions on export to OpenCode."
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Claude Code specific. Skills to load into agent context at startup. Full skill content is injected."
+    },
+    "hooks": {
+      "type": "object",
+      "description": "Claude Code specific. Lifecycle hooks that run during agent execution.",
+      "properties": {
+        "PreToolUse": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["matcher", "hooks"],
+            "properties": {
+              "matcher": {
+                "type": "string",
+                "description": "Tool name pattern to match (e.g., 'Bash', 'Edit|Write')"
+              },
+              "hooks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["type", "command"],
+                  "properties": {
+                    "type": {
+                      "const": "command"
+                    },
+                    "command": {
+                      "type": "string",
+                      "description": "Shell command to execute"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "description": "Hooks that run before agent uses a tool"
+        },
+        "PostToolUse": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["matcher", "hooks"],
+            "properties": {
+              "matcher": {
+                "type": "string"
+              },
+              "hooks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["type", "command"],
+                  "properties": {
+                    "type": {
+                      "const": "command"
+                    },
+                    "command": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "description": "Hooks that run after agent uses a tool"
+        },
+        "Stop": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["type", "command"],
+            "properties": {
+              "type": {
+                "const": "command"
+              },
+              "command": {
+                "type": "string"
+              }
+            }
+          },
+          "description": "Hooks that run when agent finishes"
+        }
+      },
+      "additionalProperties": false
+    },
+    "temperature": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "OpenCode specific. Controls randomness and creativity of LLM responses. 0.0-0.2 for deterministic, 0.3-0.5 for balanced, 0.6-1.0 for creative."
+    },
+    "maxSteps": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "OpenCode specific. Maximum number of agentic iterations before forcing text-only response. Used for cost control."
+    },
+    "disabled": {
+      "type": "boolean",
+      "description": "OpenCode specific. Disable the agent from being used.",
+      "default": false
+    },
+    "mode": {
+      "enum": ["primary", "subagent", "all"],
+      "description": "OpenCode specific. Determines how the agent can be used. 'primary' for Tab-switchable, 'subagent' for @mention, 'all' for both.",
+      "default": "all"
+    },
+    "prompt": {
+      "type": "string",
+      "description": "OpenCode specific. Path to external prompt file (relative to config location) or inline prompt string."
+    }
+  },
+  "additionalProperties": true,
+  "examples": [
+    {
+      "description": "Expert code review specialist. Use proactively for quality and security checks.",
+      "model": "anthropic/claude-3.5-sonnet",
+      "tools": ["read", "grep", "glob", "bash"],
+      "permissions": {
+        "edit": "ask",
+        "bash": "ask"
+      },
+      "temperature": 0.1,
+      "skills": ["code-quality-standards"]
+    },
+    {
+      "description": "Fast read-only code exploration",
+      "model": "anthropic/claude-3-haiku",
+      "tools": ["read", "grep", "glob"],
+      "permissions": {
+        "edit": "deny",
+        "bash": "deny"
+      },
+      "temperature": 0
+    },
+    {
+      "description": "Git operations assistant with granular bash permissions",
+      "model": "inherit",
+      "tools": ["read", "bash"],
+      "permissions": {
+        "edit": "ask",
+        "bash": {
+          "*": "ask",
+          "git": "allow",
+          "git status": "allow",
+          "git diff": "allow",
+          "rm": "deny",
+          "docker": "deny"
+        }
+      }
+    }
+  ]
+}

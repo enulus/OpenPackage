@@ -23,7 +23,7 @@ export function computeStableVersion(version: string): string {
  * Dump YAML with proper quoting for scoped names (e.g., @scope/name)
  */
 export function dumpYamlWithScopedQuoting(config: PackageYml, options: yaml.DumpOptions = {}): string {
-  let dumped = yaml.dump(config, { ...options, quotingType: '"' });
+  let dumped = yaml.dump(config, { flowLevel: 1, ...options, quotingType: '"' });
   
   // Ensure scoped names are quoted
   if (isScopedName(config.name)) {

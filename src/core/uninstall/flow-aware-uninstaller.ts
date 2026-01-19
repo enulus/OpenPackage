@@ -76,7 +76,7 @@ function serializeContent(data: any, format: FileFormat): string {
       
       case 'yaml':
       case 'yml':
-        return yaml.dump(data, { indent: 2, lineWidth: -1 });
+        return yaml.dump(data, { indent: 2, flowLevel: 1, lineWidth: -1 });
       
       case 'toml':
         return TOML.stringify(data);

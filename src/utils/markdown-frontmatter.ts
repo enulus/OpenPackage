@@ -62,12 +62,13 @@ export function stripFrontmatter(content: string): string {
 
 /**
  * Serialize YAML data with consistent formatting.
+ * Arrays are rendered in compact flow style: [item1, item2, item3]
  */
 export function dumpYaml(data: any): string {
   return yaml
     .dump(data, {
       indent: 2,
-      noArrayIndent: true,
+      flowLevel: 1,  // Use flow style for arrays and nested structures
       sortKeys: false,
       quotingType: '"',
       lineWidth: -1  // Disable line wrapping to prevent folded scalar style (>-)
