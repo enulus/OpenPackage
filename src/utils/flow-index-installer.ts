@@ -83,7 +83,12 @@ export async function installPackageByIndexWithFlows(
   options: InstallOptions,
   includePaths?: string[],
   contentRoot?: string,
-  packageFormat?: any  // Optional format metadata from plugin transformer
+  packageFormat?: any,  // Optional format metadata from plugin transformer
+  marketplaceMetadata?: {  // Optional marketplace source metadata
+    url: string;
+    commitSha: string;
+    pluginName: string;
+  }
 ): Promise<IndexInstallResult> {
   logger.debug(`Installing ${packageName}@${version} with flows for platforms: ${platforms.join(', ')}`);
 
@@ -265,7 +270,8 @@ export async function installPackageByIndexWithFlows(
       packageName,
       version,
       resolvedContentRoot,
-      fileMapping
+      fileMapping,
+      marketplaceMetadata
     );
   }
 
@@ -288,7 +294,12 @@ async function updateWorkspaceIndexForFlows(
   packageName: string,
   version: string,
   packagePath: string,
-  fileMapping: Record<string, (string | WorkspaceIndexFileMapping)[]>
+  fileMapping: Record<string, (string | WorkspaceIndexFileMapping)[]>,
+  marketplaceMetadata?: {
+    url: string;
+    commitSha: string;
+    pluginName: string;
+  }
 ): Promise<void> {
   try {
     const wsRecord = await readWorkspaceIndex(cwd);
@@ -306,12 +317,19 @@ async function updateWorkspaceIndexForFlows(
     const formattedPath = formatPathForYaml(packagePath, cwd);
     
     // Update package entry
-    wsRecord.index.packages[packageName] = {
+    const packageEntry: any = {
       ...wsRecord.index.packages[packageName],
       path: formattedPath,
       version,
       files: sortMapping(files)
     };
+    
+    // Add marketplace metadata if present
+    if (marketplaceMetadata) {
+      packageEntry.marketplace = marketplaceMetadata;
+    }
+    
+    wsRecord.index.packages[packageName] = packageEntry;
     
     await writeWorkspaceIndex(wsRecord);
     logger.debug(`Updated workspace index for ${packageName}@${version}`);

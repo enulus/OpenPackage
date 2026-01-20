@@ -53,6 +53,15 @@ function buildManifestFields(ctx: InstallationContext, mainPackage: any) {
     gitSubdirectory: undefined
   };
   
+  // Check for git source override first (for marketplace plugins)
+  // This allows path-based loading with git-based manifest recording
+  if (ctx.source.gitSourceOverride) {
+    fields.gitUrl = ctx.source.gitSourceOverride.gitUrl;
+    fields.gitRef = ctx.source.gitSourceOverride.gitRef;
+    fields.gitSubdirectory = ctx.source.gitSourceOverride.gitSubdirectory;
+    return fields;
+  }
+  
   switch (ctx.source.type) {
     case 'registry':
       // Registry packages get version range

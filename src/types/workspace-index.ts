@@ -44,6 +44,19 @@ export interface WorkspaceIndexPackage {
    * Each entry can be a simple string (for non-merged files) or an object with key tracking (for merged files).
    */
   files: Record<string, (string | WorkspaceIndexFileMapping)[]>;
+  /**
+   * Marketplace source metadata for plugins defined in marketplace.json
+   * When present, indicates this plugin came from a marketplace and may need
+   * marketplace metadata for apply operations.
+   */
+  marketplace?: {
+    /** Git URL of the marketplace repository */
+    url: string;
+    /** Commit SHA of the cached marketplace */
+    commitSha: string;
+    /** Plugin name within the marketplace (before scoping) */
+    pluginName: string;
+  };
 }
 
 export interface WorkspaceIndex {

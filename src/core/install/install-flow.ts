@@ -215,7 +215,8 @@ export async function performIndexBasedInstallationPhases(params: InstallationPh
         options,
         filtersForPackage,
         resolved.contentRoot,  // Pass contentRoot for path-based packages
-        resolved.pkg._format   // Pass format metadata from Package object
+        resolved.pkg._format,   // Pass format metadata from Package object
+        resolved.marketplaceMetadata  // Pass marketplace metadata if present
       );
 
       totalInstalled += installResult.installed;

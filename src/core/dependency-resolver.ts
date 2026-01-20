@@ -51,6 +51,14 @@ export interface ResolvedPackage {
   conflictResolution?: 'kept' | 'overwritten' | 'skipped';
   requiredVersion?: string; // The version required by the parent package
   requiredRange?: string; // The version range required by the parent package
+  /**
+   * Marketplace source metadata for plugins defined in marketplace.json
+   */
+  marketplaceMetadata?: {
+    url: string;
+    commitSha: string;
+    pluginName: string;
+  };
 }
 
 /**

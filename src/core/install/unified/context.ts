@@ -28,6 +28,15 @@ export interface PackageSource {
   gitRef?: string;
   gitSubdirectory?: string;
   
+  // Git source override for manifest recording
+  // Used when physical source is path-based but logical source is git
+  // (e.g., marketplace plugins loaded from already-cloned repos)
+  gitSourceOverride?: {
+    gitUrl: string;
+    gitRef?: string;
+    gitSubdirectory?: string;
+  };
+  
   // Resolved content root (populated after loading)
   contentRoot?: string;
   
@@ -37,13 +46,26 @@ export interface PackageSource {
     isPlugin: boolean;
     
     /** Type of plugin */
-    pluginType?: 'individual' | 'marketplace';
+    pluginType?: 'individual' | 'marketplace' | 'marketplace-defined';
     
     /** Package format metadata (from plugin transformer) */
     format?: any;
     
     /** Manifest path (for marketplaces) */
     manifestPath?: string;
+    
+    /** Marketplace entry for marketplace-defined plugins */
+    marketplaceEntry?: any; // Will be MarketplacePluginEntry but avoiding circular dependency
+    
+    /** Marketplace name (for proper scoping of marketplace plugins) */
+    marketplaceName?: string;
+    
+    /** Marketplace source info (for workspace index) */
+    marketplaceSource?: {
+      url: string;
+      commitSha: string;
+      pluginName: string;
+    };
   };
 }
 

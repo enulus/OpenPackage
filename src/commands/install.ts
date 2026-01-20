@@ -10,6 +10,7 @@ import { normalizePathForProcessing } from '../utils/path-normalization.js';
 import type { InstallationContext } from '../core/install/unified/context.js';
 import type { LoadedPackage } from '../core/install/sources/base.js';
 import { getLoaderForSource } from '../core/install/sources/loader-factory.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * Validate that target directory is not inside .openpackage metadata
@@ -79,6 +80,11 @@ async function installCommand(
     contexts.source.contentRoot = loaded.contentRoot;
     contexts.source.pluginMetadata = loaded.pluginMetadata;
     
+    // Store commitSha for marketplace handling
+    if (loaded.sourceMetadata?.commitSha) {
+      (contexts.source as any)._commitSha = loaded.sourceMetadata.commitSha;
+    }
+    
     // Check if marketplace - handle at command level
     if (contexts.source.pluginMetadata?.pluginType === 'marketplace') {
       return await handleMarketplaceInstallation(contexts, options, cwd);
@@ -144,12 +150,24 @@ async function handleMarketplaceInstallation(
     throw new Error('Marketplace must be from a git source');
   }
   
+  // Get commitSha from source metadata
+  const commitSha = (context.source as any)._commitSha || '';
+  if (!commitSha) {
+    logger.error('Marketplace commit SHA not available', { 
+      source: context.source,
+      hasSourceMetadata: !!(context.source as any).sourceMetadata,
+      _commitSha: (context.source as any)._commitSha
+    });
+    throw new Error('Marketplace commit SHA not available. Please report this issue.');
+  }
+  
   return await installMarketplacePlugins(
     context.source.contentRoot!,
     marketplace,
     selectedPlugins,
     context.source.gitUrl,
     context.source.gitRef,
+    commitSha,
     options,
     cwd
   );

@@ -9,7 +9,6 @@ import { safePrompts } from '../../utils/prompts.js';
 import { Spinner } from '../../utils/spinner.js';
 import type { CommandResult, InstallOptions } from '../../types/index.js';
 import { CLAUDE_PLUGIN_PATHS } from '../../constants/index.js';
-import { generatePluginName } from '../../utils/plugin-naming.js';
 import {
   normalizePluginSource,
   isRelativePathSource,
@@ -32,20 +31,40 @@ export interface MarketplaceManifest {
 /**
  * Marketplace plugin entry.
  * Each entry defines a plugin and where to find it.
+ * When strict is false, all plugin metadata can be defined here instead of in plugin.json.
  */
 export interface MarketplacePluginEntry {
+  // Required fields
   name: string;
   source: PluginSourceSpec;
+  
+  // Standard metadata fields
   description?: string;
   version?: string;
   author?: {
     name?: string;
     email?: string;
+    url?: string;
   };
+  homepage?: string;
+  repository?: string | {
+    type?: string;
+    url?: string;
+  };
+  license?: string;
   keywords?: string[];
   category?: string;
+  tags?: string[];
+  
+  // Component configuration fields
+  commands?: string | string[];
+  agents?: string | string[];
+  hooks?: string | object;
+  mcpServers?: string | object;
+  lspServers?: string | object;
+  
+  // Strictness control
   strict?: boolean;
-  // Additional plugin manifest fields can be included here
 }
 
 /**
@@ -174,6 +193,7 @@ export async function promptPluginSelection(
  * @param selectedNames - Names of plugins to install
  * @param marketplaceGitUrl - Git URL of the marketplace repository
  * @param marketplaceGitRef - Git ref (branch/tag/sha) if specified
+ * @param marketplaceCommitSha - Commit SHA of cached marketplace
  * @param options - Install options
  * @param cwd - Current working directory for installation
  */
@@ -183,6 +203,7 @@ export async function installMarketplacePlugins(
   selectedNames: string[],
   marketplaceGitUrl: string,
   marketplaceGitRef: string | undefined,
+  marketplaceCommitSha: string,
   options: InstallOptions,
   cwd: string
 ): Promise<CommandResult> {
@@ -242,6 +263,7 @@ export async function installMarketplacePlugins(
           normalizedSource,
           marketplaceGitUrl,
           marketplaceGitRef,
+          marketplaceCommitSha,
           options,
           cwd
         );
@@ -306,6 +328,7 @@ async function installRelativePathPlugin(
   normalizedSource: NormalizedPluginSource,
   marketplaceGitUrl: string,
   marketplaceGitRef: string | undefined,
+  marketplaceCommitSha: string,
   options: InstallOptions,
   cwd: string
 ): Promise<CommandResult> {
@@ -328,65 +351,91 @@ async function installRelativePathPlugin(
     return { success: false, error };
   }
   
-  // Validate plugin structure
-  const detection = await detectPluginType(pluginDir);
-  if (!detection.isPlugin || detection.type !== 'individual') {
-    const error = `Subdirectory '${pluginSubdir}' does not contain a valid plugin ` +
-      `(missing ${CLAUDE_PLUGIN_PATHS.PLUGIN_MANIFEST})`;
+  // Validate plugin structure with marketplace context
+  const { detectPluginWithMarketplace } = await import('./plugin-detector.js');
+  const detection = await detectPluginWithMarketplace(pluginDir, pluginEntry);
+  
+  if (!detection.isPlugin) {
+    const strictInfo = pluginEntry.strict === false 
+      ? ' Set "strict": false in marketplace entry if this plugin is defined entirely in marketplace.json.'
+      : '';
+    const error = `Subdirectory '${pluginSubdir}' does not contain a valid plugin.${strictInfo}`;
     logger.error('Invalid plugin structure', { 
       plugin: pluginEntry.name, 
-      subdirectory: pluginSubdir 
+      subdirectory: pluginSubdir,
+      strict: pluginEntry.strict
     });
     spinner.stop();
     console.error(`❌ ${pluginEntry.name}: ${error}`);
     return { success: false, error };
   }
   
-  // Validate plugin manifest is parseable
-  if (!(await validatePluginManifest(detection.manifestPath!))) {
-    const error = `Invalid plugin manifest in '${pluginSubdir}' (cannot parse JSON)`;
-    logger.error('Invalid plugin manifest', { plugin: pluginEntry.name });
-    spinner.stop();
-    console.error(`❌ ${pluginEntry.name}: ${error}`);
-    return { success: false, error };
+  // For plugins with plugin.json, validate it's parseable
+  if (detection.manifestPath) {
+    if (!(await validatePluginManifest(detection.manifestPath))) {
+      const error = `Invalid plugin manifest in '${pluginSubdir}' (cannot parse JSON)`;
+      logger.error('Invalid plugin manifest', { plugin: pluginEntry.name });
+      spinner.stop();
+      console.error(`❌ ${pluginEntry.name}: ${error}`);
+      return { success: false, error };
+    }
   }
   
-  // Generate scoped name
-  const scopedName = generatePluginName({
-    gitUrl: marketplaceGitUrl,
-    subdirectory: pluginSubdir,
-    pluginManifestName: pluginEntry.name,
-    marketplaceName: marketplace.name,
-    repoPath: marketplaceDir
-  });
-  
-  spinner.update(`✓ Installing ${scopedName}`);
+  spinner.update(`✓ Installing ${pluginEntry.name}`);
   logger.info('Installing relative path plugin', {
     plugin: pluginEntry.name,
-    scopedName,
     subdirectory: pluginSubdir
   });
   
-  // Build git context with subdirectory to properly track git source
-  const ctx = await buildGitInstallContext(
+  // Build path context for the already-cloned plugin directory
+  // Use path-based loading (efficient, no re-clone) with git source override for manifest
+  const { buildPathInstallContext } = await import('./unified/context-builders.js');
+  const ctx = await buildPathInstallContext(
     cwd,
-    marketplaceGitUrl,
+    pluginDir,
     {
       ...options,
-      gitRef: marketplaceGitRef,
-      gitSubdirectory: pluginSubdir
+      sourceType: 'directory' as const
     }
   );
+  
+  // Add git source override for manifest recording
+  // This ensures the plugin is recorded in openpackage.yml with git/subdirectory fields
+  // even though we're loading from a path (already-cloned repo)
+  ctx.source.gitSourceOverride = {
+    gitUrl: marketplaceGitUrl,
+    gitRef: marketplaceGitRef,
+    gitSubdirectory: pluginSubdir
+  };
+  
+  // Add marketplace metadata to context for passing to loader and workspace index
+  // This will be used by the path source loader to pass marketplace entry and marketplace name
+  // to plugin transformer for proper scoped naming
+  ctx.source.pluginMetadata = {
+    isPlugin: true,
+    pluginType: detection.type as any,
+    manifestPath: detection.manifestPath,
+    marketplaceEntry: pluginEntry,
+    marketplaceName: marketplace.name,
+    marketplaceSource: {
+      url: marketplaceGitUrl,
+      commitSha: marketplaceCommitSha,
+      pluginName: pluginEntry.name
+    }
+  };
   
   // Stop spinner before pipeline (which has its own output)
   spinner.stop();
   
   const pipelineResult = await runUnifiedInstallPipeline(ctx);
   
+  // Get the actual generated name from the loaded package
+  const installedName = ctx.source.packageName || pluginEntry.name;
+  
   if (pipelineResult.success) {
-    console.log(`✓ ${scopedName}`);
+    console.log(`✓ ${installedName}`);
   } else {
-    console.error(`❌ ${scopedName}: ${pipelineResult.error || 'Unknown error'}`);
+    console.error(`❌ ${installedName}: ${pipelineResult.error || 'Unknown error'}`);
   }
   
   return {
@@ -409,20 +458,11 @@ async function installGitPlugin(
   const gitRef = normalizedSource.gitRef;
   const gitSubdirectory = normalizedSource.gitSubdirectory;
   
-  // Generate scoped name
-  const scopedName = generatePluginName({
-    gitUrl,
-    subdirectory: gitSubdirectory,
-    pluginManifestName: pluginEntry.name,
-    marketplaceName: marketplace.name
-  });
-  
-  const spinner = new Spinner(`Installing ${scopedName}`);
+  const spinner = new Spinner(`Installing ${pluginEntry.name}`);
   spinner.start();
   
   logger.info('Installing git plugin', {
     plugin: pluginEntry.name,
-    scopedName,
     gitUrl,
     gitRef,
     gitSubdirectory
@@ -439,21 +479,78 @@ async function installGitPlugin(
     }
   );
   
+  // Add marketplace metadata for proper scoping
+  ctx.source.pluginMetadata = {
+    isPlugin: true,
+    marketplaceEntry: pluginEntry,
+    marketplaceName: marketplace.name
+  };
+  
   // Stop spinner before pipeline (which has its own output)
   spinner.stop();
   
   const pipelineResult = await runUnifiedInstallPipeline(ctx);
   
+  // Get the actual generated name from the loaded package
+  const installedName = ctx.source.packageName || pluginEntry.name;
+  
   if (pipelineResult.success) {
-    console.log(`✓ ${scopedName}`);
+    console.log(`✓ ${installedName}`);
   } else {
-    console.error(`❌ ${scopedName}: ${pipelineResult.error || 'Unknown error'}`);
+    console.error(`❌ ${installedName}: ${pipelineResult.error || 'Unknown error'}`);
   }
   
   return {
     success: pipelineResult.success,
     error: pipelineResult.error
   };
+}
+
+/**
+ * Load marketplace manifest from git cache.
+ * The marketplace.json is part of the cloned repo content.
+ * 
+ * @param gitUrl - Git URL of marketplace repository
+ * @param commitSha - Commit SHA of cached version
+ * @returns Parsed marketplace manifest
+ */
+export async function loadMarketplaceFromCache(
+  gitUrl: string,
+  commitSha: string
+): Promise<MarketplaceManifest> {
+  const { getGitCommitCacheDir } = await import('../../utils/git-cache.js');
+  
+  const commitDir = getGitCommitCacheDir(gitUrl, commitSha);
+  const manifestPath = join(commitDir, CLAUDE_PLUGIN_PATHS.MARKETPLACE_MANIFEST);
+  
+  if (!(await exists(manifestPath))) {
+    throw new ValidationError(
+      `Marketplace manifest not found in cache. ` +
+      `Expected at: ${manifestPath}. ` +
+      `The repository may need to be re-cloned.`
+    );
+  }
+  
+  logger.debug('Loading marketplace from cache', { gitUrl, commitSha, manifestPath });
+  
+  return await parseMarketplace(manifestPath, {
+    gitUrl,
+    repoPath: commitDir
+  });
+}
+
+/**
+ * Find a plugin entry in marketplace by name.
+ * 
+ * @param marketplace - Parsed marketplace manifest
+ * @param pluginName - Plugin name to find
+ * @returns Plugin entry or undefined if not found
+ */
+export function findPluginInMarketplace(
+  marketplace: MarketplaceManifest,
+  pluginName: string
+): MarketplacePluginEntry | undefined {
+  return marketplace.plugins.find(p => p.name === pluginName);
 }
 
 /**

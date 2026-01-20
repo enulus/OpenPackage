@@ -37,6 +37,17 @@ export async function loadPackagePhase(ctx: InstallationContext): Promise<void> 
     ctx.source.contentRoot = loaded.contentRoot;
     ctx.source.pluginMetadata = loaded.pluginMetadata;
     
+    // Store commit SHA for git sources (needed for workspace index marketplace metadata)
+    if (loaded.sourceMetadata?.commitSha) {
+      if (!ctx.source.pluginMetadata) {
+        ctx.source.pluginMetadata = { isPlugin: false };
+      }
+      if (!ctx.source.pluginMetadata.marketplaceSource && loaded.sourceMetadata.commitSha) {
+        // Store commit SHA for potential marketplace source tracking
+        (ctx.source as any)._commitSha = loaded.sourceMetadata.commitSha;
+      }
+    }
+    
     // Map source type to ResolvedPackage source format
     let resolvedSource: 'local' | 'remote' | 'path' | 'git' | undefined;
     switch (ctx.source.type) {
@@ -55,14 +66,21 @@ export async function loadPackagePhase(ctx: InstallationContext): Promise<void> 
     }
     
     // Create root resolved package (simplified - full dependency resolution in next phase)
-    ctx.resolvedPackages = [{
+    const rootPackage: any = {
       name: loaded.packageName,
       version: loaded.version,
       pkg: { metadata: loaded.metadata, files: [], _format: (loaded.metadata as any)._format || ctx.source.pluginMetadata?.format },
       isRoot: true,
       source: resolvedSource,
       contentRoot: loaded.contentRoot
-    }];
+    };
+    
+    // Add marketplace metadata if present
+    if (ctx.source.pluginMetadata?.marketplaceSource) {
+      rootPackage.marketplaceMetadata = ctx.source.pluginMetadata.marketplaceSource;
+    }
+    
+    ctx.resolvedPackages = [rootPackage];
     
     logger.info(`Loaded ${loaded.packageName}@${loaded.version} from ${loaded.source}`);
     

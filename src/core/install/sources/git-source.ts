@@ -46,7 +46,8 @@ export class GitSourceLoader implements PackageSourceLoader {
             manifestPath: pluginDetection.manifestPath
           },
           sourceMetadata: {
-            repoPath: result.repoPath
+            repoPath: result.repoPath,
+            commitSha: result.commitSha
           }
         };
       }
@@ -56,7 +57,9 @@ export class GitSourceLoader implements PackageSourceLoader {
       let sourcePackage = await loadPackageFromPath(result.sourcePath, {
         gitUrl: source.gitUrl,
         subdirectory: source.gitSubdirectory,
-        repoPath: result.sourcePath
+        repoPath: result.sourcePath,
+        marketplaceEntry: source.pluginMetadata?.marketplaceEntry,
+        marketplaceName: source.pluginMetadata?.marketplaceName
       });
       
       // Detect plugin type
@@ -74,11 +77,12 @@ export class GitSourceLoader implements PackageSourceLoader {
         source: 'git',
         pluginMetadata: pluginDetection.isPlugin ? {
           isPlugin: true,
-          pluginType: pluginDetection.type,
+          pluginType: pluginDetection.type as any,  // Can be 'individual', 'marketplace', or 'marketplace-defined'
           manifestPath: pluginDetection.manifestPath
         } : undefined,
         sourceMetadata: {
-          repoPath: result.repoPath
+          repoPath: result.repoPath,
+          commitSha: result.commitSha
         }
       };
     } catch (error) {

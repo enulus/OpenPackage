@@ -8,20 +8,23 @@ import { isJunk } from 'junk';
 import { logger } from '../../utils/logger.js';
 import { ValidationError } from '../../utils/errors.js';
 import { FILE_PATTERNS, PACKAGE_PATHS, CLAUDE_PLUGIN_PATHS } from '../../constants/index.js';
-import { detectPluginType } from './plugin-detector.js';
+import { detectPluginType, detectPluginWithMarketplace } from './plugin-detector.js';
 import { transformPluginToPackage } from './plugin-transformer.js';
+import type { MarketplacePluginEntry } from './marketplace-handler.js';
 import * as yaml from 'js-yaml';
 
 export type PathSourceType = 'directory' | 'tarball';
 
 /**
- * Context for loading packages with naming information.
+ * Context for loading packages with naming information and marketplace metadata.
  */
 export interface PackageLoadContext {
   gitUrl?: string;
   subdirectory?: string;
   repoPath?: string;
-  packageName?: string;
+  packageName?: string;  // Optional override (avoid using - let transformer generate)
+  marketplaceEntry?: MarketplacePluginEntry;
+  marketplaceName?: string;
 }
 
 /**
@@ -46,10 +49,11 @@ export async function loadPackageFromDirectory(
 ): Promise<Package> {
   logger.debug(`Loading package from directory: ${dirPath}`, { context });
   
-  // Check if this is a Claude Code plugin
-  const pluginDetection = await detectPluginType(dirPath);
-  if (pluginDetection.isPlugin && pluginDetection.type === 'individual') {
-    logger.info('Detected Claude Code plugin, transforming to OpenPackage format', { dirPath });
+  // Check if this is a Claude Code plugin (with marketplace context if available)
+  const pluginDetection = await detectPluginWithMarketplace(dirPath, context?.marketplaceEntry);
+  
+  if (pluginDetection.isPlugin && (pluginDetection.type === 'individual' || pluginDetection.type === 'marketplace-defined')) {
+    logger.info(`Detected Claude Code plugin (${pluginDetection.type}), transforming to OpenPackage format`, { dirPath });
     const { package: pkg } = await transformPluginToPackage(dirPath, context);
     return pkg;
   }

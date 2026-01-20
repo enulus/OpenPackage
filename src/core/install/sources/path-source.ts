@@ -29,10 +29,21 @@ export class PathSourceLoader implements PackageSourceLoader {
       // Detect if this is a Claude Code plugin
       const pluginDetection = await detectPluginType(resolvedPath);
       
-      // Load package from path
-      let sourcePackage = await loadPackageFromPath(resolvedPath, {
-        repoPath: resolvedPath
-      });
+      // Build context for package loading
+      // If gitSourceOverride exists, use it for proper git-based naming
+      const loadContext: any = {
+        repoPath: resolvedPath,
+        marketplaceEntry: source.pluginMetadata?.marketplaceEntry,
+        marketplaceName: source.pluginMetadata?.marketplaceName
+      };
+      
+      if (source.gitSourceOverride) {
+        loadContext.gitUrl = source.gitSourceOverride.gitUrl;
+        loadContext.subdirectory = source.gitSourceOverride.gitSubdirectory;
+      }
+      
+      // Load package from path, passing git context for proper scoping
+      let sourcePackage = await loadPackageFromPath(resolvedPath, loadContext);
       
       const packageName = sourcePackage.metadata.name;
       const version = sourcePackage.metadata.version || '0.0.0';
@@ -46,7 +57,7 @@ export class PathSourceLoader implements PackageSourceLoader {
         source: 'path',
         pluginMetadata: pluginDetection.isPlugin ? {
           isPlugin: true,
-          pluginType: pluginDetection.type
+          pluginType: pluginDetection.type as any  // Can be 'individual', 'marketplace', or 'marketplace-defined'
         } : undefined,
         sourceMetadata: {
           wasTarball: source.sourceType === 'tarball'

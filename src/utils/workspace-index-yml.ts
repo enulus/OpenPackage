@@ -111,6 +111,20 @@ function sanitizeWorkspaceIndexPackage(entry: any): WorkspaceIndexPackage | null
     pkg.files = sortFilesMapping(files);
   }
 
+  // Parse marketplace metadata if present
+  const rawMarketplace = (entry as { marketplace?: unknown }).marketplace;
+  if (rawMarketplace && typeof rawMarketplace === 'object') {
+    const url = (rawMarketplace as any).url;
+    const commitSha = (rawMarketplace as any).commitSha;
+    const pluginName = (rawMarketplace as any).pluginName;
+    
+    if (typeof url === 'string' && url.trim().length > 0 &&
+        typeof commitSha === 'string' && commitSha.trim().length > 0 &&
+        typeof pluginName === 'string' && pluginName.trim().length > 0) {
+      pkg.marketplace = { url, commitSha, pluginName };
+    }
+  }
+
   return pkg;
 }
 
@@ -174,6 +188,9 @@ export async function writeWorkspaceIndex(record: WorkspaceIndexRecord): Promise
     }
     if (pkg.dependencies && pkg.dependencies.length > 0) {
       sortedPkg.dependencies = sortAndDedupeStrings(pkg.dependencies);
+    }
+    if (pkg.marketplace) {
+      sortedPkg.marketplace = pkg.marketplace;
     }
     sortedPackages[pkgName] = sortedPkg;
   }
