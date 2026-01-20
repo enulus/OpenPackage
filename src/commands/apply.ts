@@ -1,7 +1,8 @@
 import { Command } from 'commander';
-import type { CommandResult } from '../types/index.js';
+import type { CommandResult, InstallOptions } from '../types/index.js';
 import type { InstallationContext } from '../core/install/unified/context.js';
 import { withErrorHandling } from '../utils/errors.js';
+import { normalizePlatforms } from '../utils/platform-mapper.js';
 import { buildApplyContext } from '../core/install/unified/context-builders.js';
 import { runUnifiedInstallPipeline } from '../core/install/unified/pipeline.js';
 
@@ -10,7 +11,7 @@ import { runUnifiedInstallPipeline } from '../core/install/unified/pipeline.js';
  */
 async function applyCommand(
   packageName: string | undefined,
-  options: { force?: boolean; dryRun?: boolean }
+  options: InstallOptions
 ): Promise<CommandResult> {
   const cwd = process.cwd();
   
@@ -64,8 +65,12 @@ export function setupApplyCommand(program: Command): void {
     )
     .option('-f, --force', 'overwrite existing files without prompting')
     .option('--dry-run', 'plan apply without writing files')
+    .option('--platforms <platforms...>', 'apply to specific platforms (e.g., cursor claudecode opencode)')
     .action(
-      withErrorHandling(async (packageName: string | undefined, options: any) => {
+      withErrorHandling(async (packageName: string | undefined, options: InstallOptions) => {
+        // Normalize platforms
+        options.platforms = normalizePlatforms(options.platforms);
+        
         const result = await applyCommand(packageName, options);
         
         if (!result.success) {
