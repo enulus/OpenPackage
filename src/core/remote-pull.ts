@@ -83,7 +83,7 @@ export interface RemotePullSuccess {
   registryUrl: string;
   profile: string;
   downloadUrl: string;
-  tarballSize: number;
+  tarballSize: number | undefined;
 }
 
 export type RemotePullResult = RemotePullSuccess | RemotePullFailure;

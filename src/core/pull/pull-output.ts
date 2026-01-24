@@ -55,7 +55,10 @@ export function displayPullResults(
     console.log(`  • Version: ${formatVersionLabel(manifestVersion)}`);
   }
   console.log(`  • Description: ${response.package.description || '(no description)'}`);
-  console.log(`  • Size: ${formatFileSize(result.size)}`);
+  // Only display size if available (omit for GitHub-indexed packages)
+  if (result.size > 0) {
+    console.log(`  • Size: ${formatFileSize(result.size)}`);
+  }
   const keywords = Array.isArray(response.package.keywords) ? response.package.keywords : [];
   if (keywords.length > 0) {
     console.log(`  • Keywords: ${keywords.join(', ')}`);

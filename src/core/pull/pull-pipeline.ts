@@ -64,7 +64,7 @@ export async function runPullPipeline(
           packageName: parsedName,
           version: versionToPull,
           files: 0,
-          size: response.version.tarballSize,
+          size: response.version.tarballSize ?? 0,
           checksum: '',
           registry: registryUrl,
           profile,
