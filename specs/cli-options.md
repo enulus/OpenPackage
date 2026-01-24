@@ -129,6 +129,5 @@ See [Flow Reference](./platforms/flow-reference.md) for details on `$$targetRoot
 
 This document primarily defines global flags, but some global-option-sensitive behavior is worth calling out:
 
-- **`opkg save`**: sync workspace edits back to a **mutable package source** based on `.openpackage/openpackage.index.yml` mappings.
-- **`opkg pack`**: write a snapshot of a package source to the local registry (no platform apply/sync is performed as part of packing). Use `opkg apply` to materialize content into platform directories.
+- **`opkg save`**: sync workspace edits back to a **mutable package source** based on `.openpackage/openpackage.index.yml` mappings. Save does not modify platform workspaces unless combined with `--apply`.
 - **`opkg apply`**: applies/syncs the current/root package to detected platforms from the effective cwd. Supports `--dry-run` and `--force`.

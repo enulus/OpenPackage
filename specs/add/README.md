@@ -197,8 +197,8 @@ Available locations:
 
 Registry packages are immutable and cannot be modified directly.
 To edit a registry package:
-  1. Install it with a mutable source: opkg install my-pkg --path <local-path>
-  2. Or copy it to workspace: opkg pull my-pkg
+  1. Install it with a mutable source: opkg install git:<repo-url> or opkg install path:<local-path>
+  2. Or use workspace packages to create an editable version
 ```
 
 ### Immutable source (registry)

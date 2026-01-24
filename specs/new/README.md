@@ -475,7 +475,7 @@ $ opkg new my-tools
 
 💡 Next steps:
    1. Add files to your package in current directory
-   2. Save to registry: opkg pack
+   2. Use `opkg save` to save changes
    3. Install in other workspaces: opkg install my-tools
 ```
 
@@ -519,7 +519,7 @@ $ opkg new my-package --scope root
 
 💡 Next steps:
    1. Add files to your package in current directory
-   2. Save to registry: opkg pack
+   2. Use `opkg save` to save changes
    3. Install in other workspaces: opkg install my-package
 ```
 
@@ -652,7 +652,6 @@ cd .openpackage/packages/my-package/
 # Add files (rules, commands, etc.)
 opkg install my-package           # Install to workspace
 opkg save my-package              # Save changes back to package
-opkg pack my-package              # Create stable release
 ```
 
 **Global Package Workflow:**
@@ -660,8 +659,6 @@ opkg pack my-package              # Create stable release
 opkg new shared-utils --scope global  # Create global package
 cd ~/.openpackage/packages/shared-utils/
 # Add files
-opkg pack shared-utils            # Pack to registry
-
 # In any workspace:
 # Add to .openpackage/openpackage.yml:
 # - name: shared-utils
@@ -674,20 +671,7 @@ opkg install                      # Install all deps including shared-utils
 mkdir my-package && cd my-package
 opkg new --scope root             # Create root package
 # Add files to current directory
-opkg pack                         # Pack to registry
-opkg push my-package              # Share to remote registry
-```
-
-**Custom Path Package Workflow:**
-```bash
-opkg new my-package --path ./custom-location  # Create at custom path
-cd custom-location/
-# Add files (rules, commands, etc.)
-opkg save --path ./custom-location           # Save changes (if applicable)
-opkg pack --path ./custom-location           # Create stable release
-
-# In any workspace:
-opkg install --path /path/to/custom-location  # Install by path
+# Package ready for distribution via git or registry
 ```
 
 ### Auto-Creation by Other Commands

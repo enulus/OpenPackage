@@ -21,9 +21,9 @@ assert.equal(isAllowedRegistryPath('README.md'), false, 'README.md not in flows 
 assert.equal(isAllowedRegistryPath('root/tools/helper.sh'), false, 'root/* is copy-to-root (handled separately)');
 assert.equal(isAllowedRegistryPath('random-file.txt'), false, 'random files not in flows');
 
-// Root registry files remain blocked (handled separately)
-assert.equal(isAllowedRegistryPath('AGENTS.md'), false, 'AGENTS.md is root file');
-assert.equal(isAllowedRegistryPath('CLAUDE.md'), false, 'CLAUDE.md is root file');
+// Root registry files are now allowed in flow-based system (handled via global export flows)
+assert.equal(isAllowedRegistryPath('AGENTS.md'), true, 'AGENTS.md is allowed via global flows');
+assert.equal(isAllowedRegistryPath('CLAUDE.md'), true, 'CLAUDE.md is allowed via platform flows');
 
 // YAML override paths under universal subdirs are blocked
 assert.equal(isAllowedRegistryPath('rules/agent.cursor.yml'), false, 'platform-specific yml files blocked');

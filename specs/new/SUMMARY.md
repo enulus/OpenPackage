@@ -85,9 +85,6 @@ echo "# Rule" > .cursor/rules/rule1.md
 # Save and apply
 opkg save my-package
 opkg apply my-package
-
-# Pack for registry
-opkg pack my-package
 ```
 
 ### Global Package Usage
@@ -100,9 +97,6 @@ opkg new shared-prompts --scope global
 cd ~/.openpackage/packages/shared-prompts/
 mkdir -p .cursor/prompts
 echo "# Prompt" > .cursor/prompts/prompt1.md
-
-# Pack to registry
-opkg pack shared-prompts
 
 # Use in any workspace
 cd ~/projects/any-project/
@@ -124,9 +118,7 @@ opkg new --scope root
 mkdir -p .cursor/rules
 echo "# Rule" > .cursor/rules/rule1.md
 
-# Pack and publish
-opkg pack
-opkg push my-package
+# Package ready for distribution via git or registry
 ```
 
 ## Comparison with Deprecated `opkg init`
@@ -145,11 +137,10 @@ opkg push my-package
 ### After Creation
 
 ```bash
-# Create → Add content → Save → Pack → Apply
+# Create → Add content → Save → Apply
 opkg new my-pkg
 # ... add files ...
 opkg save my-pkg
-opkg pack my-pkg
 opkg apply my-pkg
 ```
 

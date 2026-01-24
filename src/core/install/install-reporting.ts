@@ -131,7 +131,7 @@ export function displayInstallationResults(
     }
     console.log(`\n💡 To resolve missing dependencies:`);
     console.log(`   • Create locally: opkg new <package-name> && opkg save <package-name>`);
-    console.log(`   • Pull from remote: opkg pull ${missingPackages.join(' ')}`);
+    console.log(`   • Install from registry/git: opkg install ${missingPackages.join(' ')}`);
     console.log(`   • Remove from openpackage.yml`);
     console.log('');
   }

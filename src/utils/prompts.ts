@@ -7,7 +7,6 @@ import type { PlatformDefinition } from '../core/platforms.js';
 import { normalizePackageName, validatePackageName } from './package-name.js';
 import { readTextFile } from './fs.js';
 import type { PackageScope } from './scope-resolution.js';
-import { formatPathForDisplay } from './formatters.js';
 
 /**
  * Common prompt types and utilities for user interaction
@@ -57,31 +56,6 @@ export async function promptPackageOverwrite(packageName: string, existingVersio
   return await promptConfirmation(
     `Package '${packageName}' already exists${versionSuffix}. Overwrite all files?`,
     false
-  );
-}
-
-/**
- * Prompt for pack overwrite confirmation with detailed context
- */
-export async function promptPackOverwrite(
-  packageName: string,
-  version: string,
-  destination: string,
-  existingFileCount: number,
-  isCustomOutput: boolean
-): Promise<boolean> {
-  const locationType = isCustomOutput ? 'output directory' : 'registry';
-  const displayPath = formatPathForDisplay(destination, process.cwd());
-  
-  console.log(''); // Spacing for readability
-  console.log(`⚠️  Package '${packageName}@${version}' already exists in ${locationType}`);
-  console.log(`   Location: ${displayPath}`);
-  console.log(`   Existing files: ${existingFileCount}`);
-  console.log('');
-  
-  return await promptConfirmation(
-    `Overwrite '${packageName}@${version}'? This action cannot be undone.`,
-    false  // Default to no
   );
 }
 
@@ -365,52 +339,6 @@ export async function promptVersionSelection(
   });
 
   return response.version;
-}
-
-/**
- * Prompt for confirmation when deleting specific version
- */
-export async function promptVersionDelete(
-  packageName: string, 
-  version: string
-): Promise<boolean> {
-  return await promptConfirmation(
-    `Are you sure you want to delete version '${version}' of package '${packageName}'? This action cannot be undone.`,
-    false
-  );
-}
-
-/**
- * Prompt for confirmation when deleting all versions
- */
-export async function promptAllVersionsDelete(
-  packageName: string, 
-  versionCount: number
-): Promise<boolean> {
-  const versionText = versionCount === 1 ? 'version' : 'versions';
-  return await promptConfirmation(
-    `Are you sure you want to delete all ${versionCount} ${versionText} of package '${packageName}'? This action cannot be undone.`,
-    false
-  );
-}
-
-/**
- * Prompt for confirmation when deleting prerelease versions of a base version
- */
-export async function promptPrereleaseVersionsDelete(
-  packageName: string,
-  baseVersion: string,
-  prereleaseVersions: string[]
-): Promise<boolean> {
-  const versionText = prereleaseVersions.length === 1 ? 'version' : 'versions';
-  const versionsList = prereleaseVersions.join(', ');
-  
-  return await promptConfirmation(
-    `Are you sure you want to delete ${prereleaseVersions.length} prerelease ${versionText} of '${packageName}@${baseVersion}'?\n` +
-    `Versions to delete: ${versionsList}\n` +
-    `This action cannot be undone.`,
-    false
-  );
 }
 
 /**

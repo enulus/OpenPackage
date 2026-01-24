@@ -64,54 +64,6 @@ export interface PackageTableEntry {
 }
 
 /**
- * Format and display a simple package table (used by list and search commands)
- */
-export function displayPackageTable(packages: PackageTableEntry[], title?: string, showAllVersions: boolean = false): void {
-  if (title) {
-    console.log(title);
-    console.log('');
-  }
-  
-  if (packages.length === 0) {
-    console.log('No packages found.');
-    return;
-  }
-  
-  // Calculate column widths dynamically
-  const maxNameLength = Math.max(4, ...packages.map(f => f.name.length));
-  const maxVersionLength = Math.max(7, ...packages.map(f => f.version.length));
-  const nameWidth = Math.min(maxNameLength + 2, 30); // Cap at 30 chars
-  const versionWidth = Math.min(maxVersionLength + 6, 20); // Cap at 20 chars, more spacing
-  
-  // Table header (similar to docker image ls)
-  // Add explicit spaces between columns so long names don't visually merge with versions
-  console.log(
-    'REPOSITORY'.padEnd(nameWidth) +
-    ' ' +
-    'VERSION'.padEnd(versionWidth) +
-    'DESCRIPTION'
-  );
-  console.log(
-    '-'.repeat(nameWidth) +
-    ' ' +
-    '-'.repeat(versionWidth) +
-    '-----------'
-  );
-  
-  // Display each package
-  for (const pkg of packages) {
-    const name = pkg.name.padEnd(nameWidth);
-    const version = pkg.version.padEnd(versionWidth);
-    const description = pkg.description || '(no description)';
-    // Ensure at least one space between name and version columns
-    console.log(`${name} ${version}${description}`);
-  }
-  
-  console.log('');
-  console.log(`Total: ${packages.length} package${showAllVersions ? ' versions' : 's'}`);
-}
-
-/**
  * Format and display an extended package table with status information (used by status command)
  */
 export function displayExtendedPackageTable(packages: PackageTableEntry[]): void {

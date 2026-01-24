@@ -295,31 +295,6 @@ Would skip:
   .windsurf/ (platform not detected)
 ```
 
-### Inspect Flow Execution
-
-Show detailed flow information:
-
-```bash
-opkg show platforms --platform=cursor
-```
-
-**Output:**
-```
-Platform: Cursor
-ID: cursor
-Root Directory: .cursor
-Enabled: true
-
-Flows:
-  1. rules/**/*.md → .cursor/rules/**/*.mdc
-  2. mcp.jsonc → .cursor/mcp.json
-     - namespace: true
-     - merge: deep
-  3. settings.jsonc → .cursor/settings.json
-     - map: theme → workbench.colorTheme
-     - merge: deep
-```
-
 ### Check Platform Detection
 
 ```bash
@@ -606,21 +581,8 @@ Before deploying configuration:
 
 ```bash
 opkg --help
-opkg platforms --help
-opkg validate --help
-```
-
-### Show Configuration
-
-```bash
-# Show merged configuration
-opkg show platforms
-
-# Show specific platform
-opkg show platforms --platform=cursor
-
-# JSON output
-opkg show platforms --json
+opkg status --help
+opkg install --help
 ```
 
 ### Report Issues

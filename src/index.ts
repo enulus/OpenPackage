@@ -14,15 +14,9 @@ import { setupAddCommand } from './commands/add.js';
 import { setupRemoveCommand } from './commands/remove.js';
 import { setupApplyCommand } from './commands/apply.js';
 import { setupSaveCommand } from './commands/save.js';
-import { setupPackCommand } from './commands/pack.js';
-import { setupListCommand } from './commands/list.js';
-import { setupDeleteCommand } from './commands/delete.js';
-import { setupShowCommand } from './commands/show.js';
 import { setupInstallCommand } from './commands/install.js';
 import { setupUninstallCommand } from './commands/uninstall.js';
 import { setupStatusCommand } from './commands/status.js';
-import { setupPushCommand } from './commands/push.js';
-import { setupPullCommand } from './commands/pull.js';
 import { setupConfigureCommand } from './commands/configure.js';
 import { setupLoginCommand } from './commands/login.js';
 import { setupLogoutCommand } from './commands/logout.js';
@@ -104,9 +98,6 @@ program
       output += 'opkg install <pkg>     install a specific package\n';
       output += 'opkg new               create a new package\n';
       output += 'opkg save <pkg>        save workspace edits back to package\n';
-      output += 'opkg pack              snapshot package to registry\n';
-      output += 'opkg list              list local packages\n';
-      output += 'opkg show <pkg>        show package details\n';
       output += 'opkg <command> -h      help on <command>\n\n';
       
       // Global options (must stay visible even with custom root help)
@@ -115,9 +106,8 @@ program
       
       // All commands section - ultra compact
       output += 'All commands:\n\n';
-      output += '    new, add, remove, save, set, pack, apply, status,\n';
-      output += '    install, uninstall, list, show, delete,\n';
-      output += '    push, pull, configure, login, logout\n\n';
+      output += '    new, add, remove, save, set, apply, status,\n';
+      output += '    install, uninstall, configure, login, logout\n\n';
       
       // Version
       const version = cmd.version();
@@ -136,19 +126,9 @@ setupRemoveCommand(program);
 setupApplyCommand(program);
 setupSaveCommand(program);
 setupSetCommand(program);
-setupPackCommand(program);
 setupInstallCommand(program);
 setupUninstallCommand(program);
 setupStatusCommand(program);
-
-// === LOCAL REGISTRY OPERATIONS ===
-setupListCommand(program);
-setupShowCommand(program);
-setupDeleteCommand(program);
-
-// === REMOTE REGISTRY OPERATIONS ===
-setupPushCommand(program);
-setupPullCommand(program);
 
 // === CONFIGURATION ===
 setupConfigureCommand(program);

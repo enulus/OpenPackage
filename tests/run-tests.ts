@@ -18,13 +18,6 @@ const testFiles: string[] = [
   'tests/core/install/install-selection.test.ts',
   'tests/core/install/workspace-level-install.test.ts',
   
-  // Core - Push
-  'tests/core/push/stable-selection.test.ts',
-  'tests/core/push/partial-tarball.test.ts',
-  
-  // Core - Pull
-  'tests/core/pull/partial.test.ts',
-  
   // Core - Platforms
   'tests/core/platforms/platform-extension-filter.test.ts',
   'tests/core/platforms/platform-flows-config.test.ts',
@@ -48,12 +41,10 @@ const testFiles: string[] = [
   'tests/core/flows/integration/flow-save-apply-pipeline.test.ts',
   
   // Commands
-  'tests/commands/pack.test.ts',
   'tests/commands/status.test.ts',
   
   // Utils
   'tests/utils/version-selection.test.ts',
-  'tests/utils/paths-option.test.ts',
   'tests/utils/path-resolution.test.ts',
   
   // Integration

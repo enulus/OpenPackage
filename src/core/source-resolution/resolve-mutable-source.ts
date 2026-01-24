@@ -62,8 +62,8 @@ export async function resolveMutableSource(
       `  - Global packages: ~/.openpackage/packages/\n\n` +
       `Registry packages are immutable and cannot be modified directly.\n` +
       `To edit a registry package:\n` +
-      `  1. Install it with a mutable source: opkg install ${packageName} --path <local-path>\n` +
-      `  2. Or copy it to workspace: opkg pull ${packageName}`
+      `  1. Install it with a mutable source: opkg install git:<repo-url> or opkg install path:<local-path>\n` +
+      `  2. Or create a workspace/global package copy`
     );
   }
 

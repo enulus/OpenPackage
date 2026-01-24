@@ -6,7 +6,7 @@ Apply can be triggered in two ways:
 
 - `opkg apply` – explicit apply/sync.
 
-> `opkg pack` writes registry snapshots; `opkg save` syncs workspace edits back to a mutable source. Neither mutates platform workspaces unless you run `opkg apply` (or `opkg add --apply` when adding new files).
+> `opkg save` syncs workspace edits back to a mutable source. Save does not mutate platform workspaces unless you run `opkg apply` (or `opkg add --apply` when adding new files).
 
 ---
 

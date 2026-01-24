@@ -128,18 +128,6 @@ export interface PackageYml {
 
 // Command option types
 
-export interface ListOptions {
-  format: 'table' | 'json';
-  filter?: string;
-  all?: boolean;
-  packageName?: string;
-}
-
-export interface DeleteOptions {
-  force?: boolean;
-  interactive?: boolean;   // Interactive version selection
-}
-
 export interface InstallOptions {
   dryRun?: boolean;
   force?: boolean;
@@ -163,31 +151,11 @@ export interface UninstallOptions {
   global?: boolean;
 }
 
-export interface PushOptions {
-  profile?: string;
-  apiKey?: string;
-  paths?: string[];
-}
-
-export interface PullOptions {
-  profile?: string;
-  apiKey?: string;
-  recursive?: boolean;
-  paths?: string[];
-}
-
 export interface SaveOptions {
   force?: boolean;
   rename?: string;
   platformSpecific?: boolean;
   apply?: boolean;
-}
-
-export interface PackOptions {
-  force?: boolean; // Skip overwrite confirmation prompts
-  rename?: string; // legacy flag (ignored by pack)
-  output?: string;
-  dryRun?: boolean;
 }
 
 // Registry types

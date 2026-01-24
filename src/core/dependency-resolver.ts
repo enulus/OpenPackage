@@ -8,8 +8,7 @@ import { getInstalledPackageVersion, scanOpenPackagePackages } from './openpacka
 import { logger } from '../utils/logger.js';
 import { PackageNotFoundError, VersionConflictError } from '../utils/errors.js';
 import { hasExplicitPrereleaseIntent } from '../utils/version-ranges.js';
-import { listPackageVersions } from './directory.js';
-import { registryManager } from './registry.js';
+import { listPackageVersions, getLatestPackageVersion, findPackageByName, hasPackageVersion } from './directory.js';
 import { selectInstallVersionUnified, RemoteVersionLookupError } from './install/version-selection.js';
 import { InstallResolutionMode, type PackageRemoteResolutionOutcome } from './install/types.js';
 import { extractRemoteErrorReason } from '../utils/error-reasons.js';
@@ -524,15 +523,21 @@ export async function resolveDependencies(
       logger.debug(`Package '${packageName}' not found in local registry, attempting repair`);
 
       try {
-        // Check if package exists in registry metadata (but files might be missing)
-        const hasPackage = await registryManager.hasPackage(packageName);
+        // Check if package exists in registry (but files might be missing)
+        // First try direct lookup (works for normalized names)
+        let hasPackage = await getLatestPackageVersion(packageName) !== null;
+        if (!hasPackage) {
+          // If not found, try case-insensitive lookup
+          const foundPackage = await findPackageByName(packageName);
+          hasPackage = foundPackage !== null;
+        }
         logger.debug(`Registry check for '${packageName}': hasPackage=${hasPackage}, requiredVersion=${version}`);
 
         if (hasPackage) {
           // Check if the resolved version exists (use resolvedVersion if available, otherwise fall back to version)
           const versionToCheck = resolvedVersion || version;
           if (versionToCheck) {
-            const hasSpecificVersion = await registryManager.hasPackageVersion(packageName, versionToCheck);
+            const hasSpecificVersion = await hasPackageVersion(packageName, versionToCheck);
             if (!hasSpecificVersion) {
               // Package exists but not in the required/resolved version - treat as a missing dependency
               const dependencyChain = Array.from(visitedStack);
@@ -567,9 +572,7 @@ export async function resolveDependencies(
             }
           }
 
-          logger.info(`Found package '${packageName}' in registry metadata, attempting repair`);
-          // Try to reload the package metadata using resolved version (or original version if not resolved)
-          const metadata = await registryManager.getPackageMetadata(packageName, resolvedVersion || version);
+          logger.info(`Found package '${packageName}' in registry, attempting repair`);
           // Attempt to load again with the resolved version - this might succeed if it was a temporary issue
           pkg = await packageManager.loadPackage(packageName, resolvedVersion || version, {
             packageRootDir: contentRoot

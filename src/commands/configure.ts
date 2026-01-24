@@ -63,14 +63,10 @@ async function setupProfile(profileName: string): Promise<CommandResult> {
     
     if (profileName === 'default') {
       console.log('');
-      console.log('💡 You can now use:');
-      console.log('  opkg push <package-name>');
-      console.log('  opkg pull <package-name>');
+      console.log('💡 You can now use remote registry features with this profile.');
     } else {
       console.log('');
-      console.log('💡 You can now use:');
-      console.log(`  opkg push <package-name> --profile ${profileName}`);
-      console.log(`  opkg pull <package-name> --profile ${profileName}`);
+      console.log(`💡 You can now use remote registry features with --profile ${profileName}`);
     }
 
     return {

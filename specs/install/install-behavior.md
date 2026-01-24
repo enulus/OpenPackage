@@ -106,7 +106,7 @@ Resolving <name>...
   • Registry: 0.5.0 (stable)
 ✓ Using <name>@0.5.0 from registry (newer version)
 ⚠️  Global packages has older version (0.2.0)
-💡 To update global: cd ~/.openpackage/packages/<name> && opkg pack
+💡 To update global: cd ~/.openpackage/packages/<name> && opkg save
 ```
 
 **User Feedback** (tie-breaker):
@@ -545,7 +545,7 @@ This section ties pre-release version selection to **how content is loaded** whe
       - Treat this data exactly as it would for a stable registry copy for the purposes of installation and dependency resolution.
   - If the registry directory is missing or malformed for a selected version:
     - Install MUST **fail clearly**, indicating the broken registry copy and suggesting:
-      - Re-running `opkg pack` (or re-pulling from remote) to regenerate the version, or
+      - Re-saving the package source with `opkg save` (or re-pulling from remote) to regenerate the version, or
       - Using a different available version instead.
 
 - **Remote considerations**:
