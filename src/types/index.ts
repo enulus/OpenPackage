@@ -122,7 +122,12 @@ export interface PackageYml {
   homepage?: string;
   repository?: PackageRepository;
 
+  dependencies?: PackageDependency[];
+  'dev-dependencies'?: PackageDependency[];
+  
+  // Deprecated: Use dependencies instead
   packages?: PackageDependency[];
+  // Deprecated: Use dev-dependencies instead
   'dev-packages'?: PackageDependency[];
 }
 

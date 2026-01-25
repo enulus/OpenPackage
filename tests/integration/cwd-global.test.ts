@@ -111,8 +111,8 @@ console.log('All --cwd tests passed!');
       [
         `name: ${pkgName}`,
         `version: ${version}`,
-        `packages: []`,
-        `dev-packages: []`,
+        `dependencies: []`,
+        `dev-dependencies: []`,
         ``
       ].join('\n'),
       'utf8'
@@ -177,8 +177,8 @@ console.log('All --cwd tests passed!');
       [
         `name: ${pkgName}`,
         `version: ${version}`,
-        `packages: []`,
-        `dev-packages: []`,
+        `dependencies: []`,
+        `dev-dependencies: []`,
         ``
       ].join('\n'),
       'utf8'
@@ -246,8 +246,8 @@ console.log('All --global tests passed!');
       [
         `name: ${pkgName}`,
         `version: ${version}`,
-        `packages: []`,
-        `dev-packages: []`,
+        `dependencies: []`,
+        `dev-dependencies: []`,
         ``
       ].join('\n'),
       'utf8'

@@ -217,8 +217,8 @@ export async function resolveDependencies(
       // Recursively resolve dependencies
       visitedStack.add(packageName);
       
-      // Only process 'packages' array (NOT 'dev-packages' for transitive dependencies)
-      const dependencies = config.packages || [];
+      // Only process 'dependencies' array (NOT 'dev-dependencies' for transitive dependencies)
+      const dependencies = config.dependencies || [];
       
       // Determine the source directory for resolving relative paths
       const baseDir = currentPackageSourcePath ? dirname(currentPackageSourcePath) : targetDir;
@@ -313,9 +313,9 @@ export async function resolveDependencies(
         await processDependencyEntry(dep);
       }
       
-      // For root package, also process dev-packages
+      // For root package, also process dev-dependencies
       if (isRoot) {
-        const devDependencies = config['dev-packages'] || [];
+        const devDependencies = config['dev-dependencies'] || [];
         for (const dep of devDependencies) {
           await processDependencyEntry(dep);
         }
@@ -709,8 +709,8 @@ export async function resolveDependencies(
     // 6. Recursively resolve dependencies
     visitedStack.add(packageName);
     
-    // Only process 'packages' array (NOT 'dev-packages' for transitive dependencies)
-    const dependencies = config.packages || [];
+    // Only process 'dependencies' array (NOT 'dev-dependencies' for transitive dependencies)
+    const dependencies = config.dependencies || [];
     
     // Determine the source directory for resolving relative paths
     // If currentPackageSourcePath is provided, use its directory; otherwise use targetDir
@@ -806,9 +806,9 @@ export async function resolveDependencies(
       await processDependencyEntry(dep);
     }
     
-    // For root package, also process dev-packages
+    // For root package, also process dev-dependencies
     if (isRoot) {
-      const devDependencies = config['dev-packages'] || [];
+      const devDependencies = config['dev-dependencies'] || [];
       for (const dep of devDependencies) {
         await processDependencyEntry(dep);
       }
@@ -901,10 +901,10 @@ export async function buildDependencyTree(openpackagePath: string, protectedPack
   for (const [packageName, pkg] of packages) {
     const dependencies = new Set<string>();
     
-    // Collect dependencies from both packages and dev-packages
+    // Collect dependencies from both dependencies and dev-dependencies
     const allDeps = [
-      ...(pkg.packages || []),
-      ...(pkg['dev-packages'] || [])
+      ...(pkg.dependencies || []),
+      ...(pkg['dev-dependencies'] || [])
     ];
     
     for (const dep of allDeps) {

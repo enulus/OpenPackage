@@ -12,7 +12,7 @@ import { exists } from './fs.js';
 export function extractPackagesFromConfig(config: PackageYml): Array<{ name: string; version?: string; path?: string; git?: string; ref?: string; subdirectory?: string; isDev: boolean }> {
   const packages: Array<{ name: string; version?: string; path?: string; git?: string; ref?: string; subdirectory?: string; isDev: boolean }> = [];
   
-  const processSection = (section: 'packages' | 'dev-packages', isDev: boolean) => {
+  const processSection = (section: 'dependencies' | 'dev-dependencies', isDev: boolean) => {
     const deps = config[section];
     if (deps) {
       for (const pkg of deps) {
@@ -29,8 +29,8 @@ export function extractPackagesFromConfig(config: PackageYml): Array<{ name: str
     }
   };
 
-  processSection('packages', false);
-  processSection('dev-packages', true);
+  processSection('dependencies', false);
+  processSection('dev-dependencies', true);
   
   return packages;
 }
@@ -89,7 +89,7 @@ export async function findExistingPathOrGitSource(
   }
 
   const config = await parsePackageYml(packageYmlPath);
-  const allDeps = [...(config.packages || []), ...(config['dev-packages'] || [])];
+  const allDeps = [...(config.dependencies || []), ...(config['dev-dependencies'] || [])];
   
   const dep = allDeps.find(d => arePackageNamesEquivalent(d.name, packageName));
   if (!dep) {

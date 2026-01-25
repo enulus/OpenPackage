@@ -20,8 +20,8 @@ function setupWorkspace(): string {
 
   const manifest: PackageYml = {
     name: 'test-workspace',
-    packages: [],
-    'dev-packages': []
+    dependencies: [],
+    'dev-dependencies': []
   };
 
   const manifestPath = path.join(opkgDir, 'openpackage.yml');
@@ -84,10 +84,10 @@ async function testTildePathInManifest(): Promise<void> {
   const manifestPath = getLocalPackageYmlPath(workspaceDir);
   const manifest = await parsePackageYml(manifestPath);
 
-  assert.ok(manifest.packages, 'packages array should exist');
-  assert.equal(manifest.packages.length, 1, 'should have one package');
+  assert.ok(manifest.dependencies, 'dependencies array should exist');
+  assert.equal(manifest.dependencies.length, 1, 'should have one package');
   
-  const pkg = manifest.packages[0];
+  const pkg = manifest.dependencies[0];
   assert.equal(pkg.name, packageName, 'package name should match');
   assert.ok(pkg.path, 'path field should be set');
   assert.ok(pkg.path.startsWith('~/.openpackage/'), 
@@ -139,10 +139,10 @@ async function testRelativePathPreserved(): Promise<void> {
   const manifestPath = getLocalPackageYmlPath(workspaceDir);
   const manifest = await parsePackageYml(manifestPath);
 
-  assert.ok(manifest.packages, 'packages array should exist');
-  assert.equal(manifest.packages.length, 1, 'should have one package');
+  assert.ok(manifest.dependencies, 'dependencies array should exist');
+  assert.equal(manifest.dependencies.length, 1, 'should have one package');
   
-  const pkg = manifest.packages[0];
+  const pkg = manifest.dependencies[0];
   assert.equal(pkg.name, packageName, 'package name should match');
   assert.ok(pkg.path, 'path field should be set');
   assert.ok(pkg.path.startsWith('./'), 
@@ -192,10 +192,10 @@ async function testWorkspaceRelativePath(): Promise<void> {
   const manifestPath = getLocalPackageYmlPath(workspaceDir);
   const manifest = await parsePackageYml(manifestPath);
 
-  assert.ok(manifest.packages, 'packages array should exist');
-  assert.equal(manifest.packages.length, 1, 'should have one package');
+  assert.ok(manifest.dependencies, 'dependencies array should exist');
+  assert.equal(manifest.dependencies.length, 1, 'should have one package');
   
-  const pkg = manifest.packages[0];
+  const pkg = manifest.dependencies[0];
   assert.equal(pkg.name, packageName, 'package name should match');
   assert.ok(pkg.path, 'path field should be set');
   assert.equal(pkg.path, './vendor/workspace-package',

@@ -4,14 +4,23 @@ import { readTextFile, writeTextFile } from './fs.js';
 import { isScopedName } from '../core/scoping/package-scoping.js';
 
 /**
- * Parse openpackage.yml file with validation
+ * Parse openpackage.yml file with validation and backward compatibility
  */
 export async function parsePackageYml(packageYmlPath: string): Promise<PackageYml> {
   try {
     const content = await readTextFile(packageYmlPath);
     const parsed = yaml.load(content) as PackageYml;
     const isPartial = (parsed as any).partial === true;
-    const validateDependencies = (deps: PackageDependency[] | undefined, section: 'packages' | 'dev-packages'): void => {
+    
+    // Backward compatibility: migrate old keys to new keys
+    if (parsed.packages && !parsed.dependencies) {
+      parsed.dependencies = parsed.packages;
+    }
+    if (parsed['dev-packages'] && !parsed['dev-dependencies']) {
+      parsed['dev-dependencies'] = parsed['dev-packages'];
+    }
+    
+    const validateDependencies = (deps: PackageDependency[] | undefined, section: string): void => {
       if (!deps) return;
       for (const dep of deps) {
         const sources = [dep.version, dep.path, dep.git].filter(Boolean);
@@ -39,6 +48,9 @@ export async function parsePackageYml(packageYmlPath: string): Promise<PackageYm
       delete (parsed as any).partial;
     }
 
+    // Validate both old and new keys
+    validateDependencies(parsed.dependencies, 'dependencies');
+    validateDependencies(parsed['dev-dependencies'], 'dev-dependencies');
     validateDependencies(parsed.packages, 'packages');
     validateDependencies(parsed['dev-packages'], 'dev-packages');
     
@@ -116,7 +128,22 @@ export function serializePackageYml(config: PackageYml): string {
 }
 
 export async function writePackageYml(packageYmlPath: string, config: PackageYml): Promise<void> {
-  const content = serializePackageYml(config);
+  // Auto-migrate old keys to new keys when writing
+  const migratedConfig = { ...config };
+  
+  // Rename packages -> dependencies
+  if (migratedConfig.packages && !migratedConfig.dependencies) {
+    migratedConfig.dependencies = migratedConfig.packages;
+  }
+  delete migratedConfig.packages;
+  
+  // Rename dev-packages -> dev-dependencies
+  if (migratedConfig['dev-packages'] && !migratedConfig['dev-dependencies']) {
+    migratedConfig['dev-dependencies'] = migratedConfig['dev-packages'];
+  }
+  delete migratedConfig['dev-packages'];
+  
+  const content = serializePackageYml(migratedConfig);
   await writeTextFile(packageYmlPath, content);
 }
 

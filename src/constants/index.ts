@@ -87,6 +87,9 @@ export const CLAUDE_PLUGIN_PATHS = {
 } as const;
 
 export const DEPENDENCY_ARRAYS = {
+  DEPENDENCIES: 'dependencies',
+  DEV_DEPENDENCIES: 'dev-dependencies',
+  // Deprecated - kept for backward compatibility
   PACKAGES: 'packages',
   DEV_PACKAGES: 'dev-packages'
 } as const;

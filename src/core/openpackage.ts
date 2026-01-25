@@ -17,8 +17,8 @@ export interface OpenPackagePackage {
   name: string;
   version?: string;
   description?: string;
-  packages?: PackageDependency[];
-  'dev-packages'?: PackageDependency[];
+  dependencies?: PackageDependency[];
+  'dev-dependencies'?: PackageDependency[];
   path: string;
 }
 
@@ -136,8 +136,8 @@ export async function scanOpenPackagePackages(openpackagePath: string): Promise<
           name: packageConfig.name,
           version: packageConfig.version,
           description: packageConfig.description,
-          packages: packageConfig.packages || [],
-          'dev-packages': packageConfig['dev-packages'] || [],
+          dependencies: packageConfig.dependencies || [],
+          'dev-dependencies': packageConfig['dev-dependencies'] || [],
           path: dirPath
         });
       }
@@ -179,8 +179,8 @@ export async function gatherGlobalVersionConstraints(cwd: string, includeResolut
       return;
     }
 
-    config.packages?.forEach(dep => addConstraint(dep.name, dep.version));
-    config['dev-packages']?.forEach(dep => addConstraint(dep.name, dep.version));
+    config.dependencies?.forEach(dep => addConstraint(dep.name, dep.version));
+    config['dev-dependencies']?.forEach(dep => addConstraint(dep.name, dep.version));
   };
 
   // Collect from main .openpackage/openpackage.yml if present
@@ -248,8 +248,8 @@ export async function gatherRootVersionConstraints(cwd: string): Promise<Map<str
   if (await exists(mainPackagePath)) {
     try {
       const mainConfig = await parsePackageYml(mainPackagePath);
-      mainConfig.packages?.forEach(dep => addConstraint(dep.name, dep.version));
-      mainConfig['dev-packages']?.forEach(dep => addConstraint(dep.name, dep.version));
+      mainConfig.dependencies?.forEach(dep => addConstraint(dep.name, dep.version));
+      mainConfig['dev-dependencies']?.forEach(dep => addConstraint(dep.name, dep.version));
     } catch (error) {
       logger.debug(`Failed to parse main openpackage.yml for root constraints: ${error}`);
     }

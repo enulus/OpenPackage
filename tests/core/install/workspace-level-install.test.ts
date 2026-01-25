@@ -32,8 +32,8 @@ async function setup() {
   const manifestPath = join(openpackageDir, 'openpackage.yml');
   await writeFile(manifestPath, `name: test-workspace
 version: 1.0.0
-packages: []
-dev-packages: []
+dependencies: []
+dev-dependencies: []
 `);
   
   // Create some workspace-level files
@@ -90,12 +90,12 @@ async function testWorkspacePackageNotInManifest() {
   // Ensure workspace name is in manifest
   assert.equal(manifest.name, 'test-workspace', 'Workspace should have name');
   
-  // Check that packages array doesn't contain the workspace package itself
-  const hasWorkspaceInPackages = manifest.packages?.some(
+  // Check that dependencies array doesn't contain the workspace package itself
+  const hasWorkspaceInPackages = manifest.dependencies?.some(
     (pkg: any) => pkg.name === 'test-workspace'
   );
   
-  assert.equal(hasWorkspaceInPackages, false, 'Workspace package should not be in packages array');
+  assert.equal(hasWorkspaceInPackages, false, 'Workspace package should not be in dependencies array');
   
   console.log('✓ Workspace package not added to its own manifest');
 }

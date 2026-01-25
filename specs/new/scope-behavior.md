@@ -117,7 +117,7 @@ Root packages do NOT auto-integrate with workspaces. To use in a workspace:
 
 ```yaml
 # Manually add to .openpackage/openpackage.yml
-packages:
+dependencies:
   - name: my-package
     path: /absolute/path/to/my-package/
     # or relative to workspace
@@ -189,10 +189,10 @@ $ opkg new my-package
 **Workspace Manifest Entry:**
 ```yaml
 name: my-project
-packages:
+dependencies:
   - name: my-package
     path: ./.openpackage/packages/my-package/
-dev-packages: []
+dev-dependencies: []
 ```
 
 ### Use Case Patterns
@@ -336,7 +336,7 @@ opkg pack personal-rules
 # Use in any project
 cd ~/projects/any-project/
 # Add to .openpackage/openpackage.yml:
-# packages:
+# dependencies:
 #   - name: personal-rules
 #     path: ~/.openpackage/packages/personal-rules/
 opkg install
@@ -365,7 +365,7 @@ git clone git@github.com:team/conventions.git team-conventions
 # Use in projects
 cd ~/projects/any-project/
 # Add to .openpackage/openpackage.yml:
-# packages:
+# dependencies:
 #   - name: team-conventions
 #     path: ~/.openpackage/packages/team-conventions/
 ```
@@ -399,7 +399,7 @@ Global packages require **manual integration**:
 
 ```yaml
 # Add to any workspace's .openpackage/openpackage.yml
-packages:
+dependencies:
   - name: shared-utils
     path: ~/.openpackage/packages/shared-utils/
 ```

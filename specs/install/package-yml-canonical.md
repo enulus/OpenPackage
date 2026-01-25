@@ -13,8 +13,8 @@ The aim is to make behavior predictable and avoid “CLI overrides” that silen
     - Which **direct dependencies** exist.
     - Which **source** and **version intent** apply to those dependencies.
   - This applies to both:
-    - `packages` (regular dependencies).
-    - `dev-packages` (development dependencies).
+    - `dependencies` (regular dependencies).
+    - `dev-dependencies` (development dependencies).
 
 - **Install’s role**:
   - `install` **never changes intent by itself**:
@@ -125,8 +125,8 @@ For git dependencies:
 
 - **Adding new dependencies**:
   - `install` may **append** new entries to:
-    - `packages` (by default), or
-    - `dev-packages` (when `--dev` is provided).
+    - `dependencies` (by default), or
+    - `dev-dependencies` (when `--dev` is provided).
   - It **must not**:
     - Remove existing entries.
     - Rewrite existing version ranges.
@@ -197,7 +197,7 @@ For git dependencies:
 
 - **Scenario**:
   - `foo` used to be in `openpackage.yml`.
-  - User removes `foo` from both `packages` and `dev-packages`.
+  - User removes `foo` from both `dependencies` and `dev-dependencies`.
   - `foo` may still be installed under `.openpackage` from a previous state.
 
 - **Behavior on `opkg install`**:
@@ -210,7 +210,7 @@ For git dependencies:
 ## 6. Partial installs via `files`
 
 - **Meaning**:
-  - `files` is an optional array of **registry-relative paths** on a dependency entry (`packages` or `dev-packages`).
+  - `files` is an optional array of **registry-relative paths** on a dependency entry (`dependencies` or `dev-dependencies`).
   - When present, the dependency is treated as a **partial install**: only the listed registry paths are installed (root files are included only if explicitly listed).
 
 - **Canonical behavior**:

@@ -18,7 +18,7 @@ async function setupWorkspaceWithPathDependency(): Promise<{
   await fs.mkdir(pkgDir, { recursive: true });
   await fs.writeFile(
     path.join(openpackageDir, 'openpackage.yml'),
-    ['name: root', 'packages:', '  - name: pkg-a', '    version: ^1.0.0', ''].join('\n'),
+    ['name: root', 'dependencies:', '  - name: pkg-a', '    version: ^1.0.0', ''].join('\n'),
     'utf8'
   );
 
@@ -57,7 +57,7 @@ async function setupWorkspaceWithPathDependency(): Promise<{
   // Root workspace index has pkg-a entry (resolved relative to workspace root)
   await fs.writeFile(
     path.join(openpackageDir, 'openpackage.yml'),
-    ['name: root', 'packages:', '  - name: pkg-a', '    version: ^1.0.0', ''].join('\n'),
+    ['name: root', 'dependencies:', '  - name: pkg-a', '    version: ^1.0.0', ''].join('\n'),
     'utf8'
   );
 
@@ -72,14 +72,14 @@ async function setupWorkspaceWithPathDependency(): Promise<{
   await fs.mkdir(pkgADir, { recursive: true });
   await fs.writeFile(
     path.join(pkgADir, 'openpackage.yml'),
-    ['name: pkg-a', 'packages:', '  - name: pkg-b', '    path: ../pkg-b/', ''].join('\n'),
+    ['name: pkg-a', 'dependencies:', '  - name: pkg-b', '    path: ../pkg-b/', ''].join('\n'),
     'utf8'
   );
 
   // pkg-b has no deps
   const pkgBDir = path.join(openpackageDir, 'packages', 'pkg-b');
   await fs.mkdir(pkgBDir, { recursive: true });
-  await fs.writeFile(path.join(pkgBDir, 'openpackage.yml'), ['name: pkg-b', 'packages: []', ''].join('\n'), 'utf8');
+  await fs.writeFile(path.join(pkgBDir, 'openpackage.yml'), ['name: pkg-b', 'dependencies: []', ''].join('\n'), 'utf8');
 
   try {
     const graph = await resolveDependencyGraph(workspace, 'pkg-a');

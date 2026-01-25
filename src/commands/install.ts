@@ -180,8 +180,8 @@ async function runBulkInstall(contexts: InstallationContext[]): Promise<CommandR
   if (contexts.length === 0) {
     console.log('⚠️  No packages found in openpackage.yml');
     console.log('\n💡 Tips:');
-    console.log('  • Add packages to the "packages" array in openpackage.yml');
-    console.log('  • Add development packages to the "dev-packages" array');
+    console.log('  • Add packages to the "dependencies" array in openpackage.yml');
+    console.log('  • Add development packages to the "dev-dependencies" array');
     console.log('  • Use "opkg install <package-name>" to install a specific package');
     return { success: true, data: { installed: 0, skipped: 0 } };
   }
@@ -238,7 +238,7 @@ export function setupInstallCommand(program: Command): void {
     .option('--dry-run', 'preview changes without applying them')
     .option('--force', 'overwrite existing files')
     .option('--conflicts <strategy>', 'conflict handling strategy: keep-both, overwrite, skip, or ask')
-    .option('--dev', 'add package to dev-packages instead of packages')
+    .option('--dev', 'add package to dev-dependencies instead of dependencies')
     .option('--platforms <platforms...>', 'prepare specific platforms (e.g., cursor claudecode opencode)')
     .option('--remote', 'pull and install from remote registry, ignoring local versions')
     .option('--local', 'resolve and install using only local registry versions, skipping remote metadata and pulls')

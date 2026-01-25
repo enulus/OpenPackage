@@ -43,8 +43,8 @@ export async function createWorkspacePackageYml(cwd: string, force: boolean = fa
   const projectName = basename(cwd);
   const basicPackageYml: PackageYml = {
     name: projectName,
-    packages: [],
-    'dev-packages': []
+    dependencies: [],
+    'dev-dependencies': []
   };
 
   if (await exists(packageYmlPath)) {
@@ -187,25 +187,25 @@ export async function addPackageToYml(
     logger.debug(`Skipping manifest update: package '${packageName}' is the workspace package itself`);
     return;
   }
-  if (!config.packages) config.packages = [];
-  if (!config[DEPENDENCY_ARRAYS.DEV_PACKAGES]) config[DEPENDENCY_ARRAYS.DEV_PACKAGES] = [];
+  if (!config.dependencies) config.dependencies = [];
+  if (!config[DEPENDENCY_ARRAYS.DEV_DEPENDENCIES]) config[DEPENDENCY_ARRAYS.DEV_DEPENDENCIES] = [];
 
   const normalizedPackageName = normalizePackageName(packageName);
   const nameWithVersion = packageVersion ? `${packageName}@${packageVersion}` : packageName;
-  const packagesArray = config.packages;
-  const devPackagesArray = config[DEPENDENCY_ARRAYS.DEV_PACKAGES]!;
+  const dependenciesArray = config.dependencies;
+  const devDependenciesArray = config[DEPENDENCY_ARRAYS.DEV_DEPENDENCIES]!;
 
   const findIndex = (arr: PackageDependency[]): number =>
     arr.findIndex(dep => arePackageNamesEquivalent(dep.name, normalizedPackageName));
 
-  let currentLocation: 'packages' | 'dev-packages' | null = null;
-  let existingIndex = findIndex(packagesArray);
+  let currentLocation: 'dependencies' | 'dev-dependencies' | null = null;
+  let existingIndex = findIndex(dependenciesArray);
   if (existingIndex >= 0) {
-    currentLocation = DEPENDENCY_ARRAYS.PACKAGES;
+    currentLocation = DEPENDENCY_ARRAYS.DEPENDENCIES;
   } else {
-    existingIndex = findIndex(devPackagesArray);
+    existingIndex = findIndex(devDependenciesArray);
     if (existingIndex >= 0) {
-      currentLocation = DEPENDENCY_ARRAYS.DEV_PACKAGES;
+      currentLocation = DEPENDENCY_ARRAYS.DEV_DEPENDENCIES;
     } else {
       existingIndex = -1;
     }
@@ -277,17 +277,17 @@ export async function addPackageToYml(
     ...(subdirectory ? { subdirectory } : {})
   };
   
-  // Determine target location (packages vs dev-packages)
+  // Determine target location (dependencies vs dev-dependencies)
   
-  let targetArray: 'packages' | 'dev-packages';
-  if (currentLocation === DEPENDENCY_ARRAYS.DEV_PACKAGES && !isDev) {
-    targetArray = DEPENDENCY_ARRAYS.DEV_PACKAGES;
-    logger.info(`Keeping package in dev-packages: ${nameWithVersion}`);
-  } else if (currentLocation === DEPENDENCY_ARRAYS.PACKAGES && isDev) {
-    targetArray = DEPENDENCY_ARRAYS.DEV_PACKAGES;
-    logger.info(`Moving package from packages to dev-packages: ${nameWithVersion}`);
+  let targetArray: 'dependencies' | 'dev-dependencies';
+  if (currentLocation === DEPENDENCY_ARRAYS.DEV_DEPENDENCIES && !isDev) {
+    targetArray = DEPENDENCY_ARRAYS.DEV_DEPENDENCIES;
+    logger.info(`Keeping package in dev-dependencies: ${nameWithVersion}`);
+  } else if (currentLocation === DEPENDENCY_ARRAYS.DEPENDENCIES && isDev) {
+    targetArray = DEPENDENCY_ARRAYS.DEV_DEPENDENCIES;
+    logger.info(`Moving package from dependencies to dev-dependencies: ${nameWithVersion}`);
   } else {
-    targetArray = isDev ? DEPENDENCY_ARRAYS.DEV_PACKAGES : DEPENDENCY_ARRAYS.PACKAGES;
+    targetArray = isDev ? DEPENDENCY_ARRAYS.DEV_DEPENDENCIES : DEPENDENCY_ARRAYS.DEPENDENCIES;
   }
   
   // Remove from current location if moving between arrays
@@ -379,7 +379,7 @@ export async function writePartialLocalPackageFromRegistry(
 export async function updatePackageDependencyInclude(
   cwd: string,
   packageName: string,
-  target: 'packages' | 'dev-packages',
+  target: 'dependencies' | 'dev-dependencies',
   include: string[] | null | undefined
 ): Promise<void> {
   if (include === undefined) return;
@@ -405,7 +405,7 @@ export async function updatePackageDependencyInclude(
 }
 
 /**
- * Remove a dependency entry from openpackage.yml (both packages and dev-packages).
+ * Remove a dependency entry from openpackage.yml (both dependencies and dev-dependencies).
  */
 export async function removePackageFromOpenpackageYml(
   cwd: string,
@@ -416,7 +416,7 @@ export async function removePackageFromOpenpackageYml(
 
   try {
     const config = await parsePackageYml(packageYmlPath);
-    const sections: Array<'packages' | 'dev-packages'> = [DEPENDENCY_ARRAYS.PACKAGES, DEPENDENCY_ARRAYS.DEV_PACKAGES];
+    const sections: Array<'dependencies' | 'dev-dependencies'> = [DEPENDENCY_ARRAYS.DEPENDENCIES, DEPENDENCY_ARRAYS.DEV_DEPENDENCIES];
     let removed = false;
 
     for (const section of sections) {
@@ -462,7 +462,7 @@ export async function isPathBasedDependency(cwd: string, packageName: string): P
 
   try {
     const config = await parsePackageYml(packageYmlPath);
-    const allDeps = [...(config.packages || []), ...(config['dev-packages'] || [])];
+    const allDeps = [...(config.dependencies || []), ...(config['dev-dependencies'] || [])];
     const dep = allDeps.find(d => arePackageNamesEquivalent(d.name, packageName));
     return Boolean(dep?.path);
   } catch {
