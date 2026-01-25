@@ -589,7 +589,7 @@ ls -la .cursor
 
 **Check detection:**
 ```bash
-opkg status
+opkg list
 ```
 
 ## Next Steps

@@ -73,7 +73,7 @@ Consult git history (e.g., commit 9d23bf2) for prior version details. See [Archi
   - `set` (update manifest metadata): `set/`
     - Behavior and validation: `set-behavior.md`
   - `push`: `push/`
-  - `status`: `status/`
+  - `list`: `list/`
   - `uninstall`: `uninstall/`
 - **Other**:
   - Auth: `auth/`

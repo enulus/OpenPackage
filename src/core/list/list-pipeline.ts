@@ -14,28 +14,28 @@ import { arePackageNamesEquivalent } from '../../utils/package-name.js';
 
 export type PackageSyncState = 'synced' | 'partial' | 'missing';
 
-export interface StatusFileMapping {
+export interface ListFileMapping {
   source: string;
   target: string;
   exists: boolean;
 }
 
-export interface StatusPackageReport {
+export interface ListPackageReport {
   name: string;
   version?: string;
   path: string;
   state: PackageSyncState;
   totalFiles: number;
   existingFiles: number;
-  fileList?: StatusFileMapping[];
+  fileList?: ListFileMapping[];
 }
 
-export interface StatusPipelineResult {
-  packages: StatusPackageReport[];
+export interface ListPipelineResult {
+  packages: ListPackageReport[];
 }
 
 /**
- * Check package status by verifying file existence
+ * Check package list status by verifying file existence
  * Does not compare content - only checks if expected files exist
  */
 async function checkPackageStatus(
@@ -43,7 +43,7 @@ async function checkPackageStatus(
   pkgName: string,
   entry: WorkspaceIndexPackage,
   includeFileList: boolean = false
-): Promise<StatusPackageReport> {
+): Promise<ListPackageReport> {
   const resolved = resolveDeclaredPath(entry.path, cwd);
   const sourceRoot = resolved.absolute;
 
@@ -65,7 +65,7 @@ async function checkPackageStatus(
   // Check workspace file existence
   let totalFiles = 0;
   let existingFiles = 0;
-  const fileList: StatusFileMapping[] = [];
+  const fileList: ListFileMapping[] = [];
   
   const filesMapping = entry.files || {};
 
@@ -106,7 +106,7 @@ async function checkPackageStatus(
   };
 }
 
-export async function runStatusPipeline(packageName?: string): Promise<CommandResult<StatusPipelineResult>> {
+export async function runListPipeline(packageName?: string): Promise<CommandResult<ListPipelineResult>> {
   const cwd = process.cwd();
   const openpkgDir = getLocalOpenPackageDir(cwd);
   const manifestPath = getLocalPackageYmlPath(cwd);
@@ -119,7 +119,7 @@ export async function runStatusPipeline(packageName?: string): Promise<CommandRe
 
   const { index } = await readWorkspaceIndex(cwd);
   const packages = index.packages || {};
-  const reports: StatusPackageReport[] = [];
+  const reports: ListPackageReport[] = [];
 
   // Get workspace package name to filter it out
   let workspacePackageName: string | undefined;
@@ -144,7 +144,7 @@ export async function runStatusPipeline(packageName?: string): Promise<CommandRe
       const report = await checkPackageStatus(cwd, packageName, pkgEntry, true);
       reports.push(report);
     } catch (error) {
-      logger.warn(`Failed to compute status for ${packageName}: ${error}`);
+      logger.warn(`Failed to check package ${packageName}: ${error}`);
       reports.push({
         name: packageName,
         version: pkgEntry?.version,
@@ -160,7 +160,7 @@ export async function runStatusPipeline(packageName?: string): Promise<CommandRe
     for (const [pkgName, pkgEntry] of Object.entries(packages)) {
       // Skip the workspace package itself
       if (workspacePackageName && arePackageNamesEquivalent(pkgName, workspacePackageName)) {
-        logger.debug(`Skipping workspace package '${pkgName}' in status list`);
+        logger.debug(`Skipping workspace package '${pkgName}' in list`);
         continue;
       }
 
@@ -168,7 +168,7 @@ export async function runStatusPipeline(packageName?: string): Promise<CommandRe
         const report = await checkPackageStatus(cwd, pkgName, pkgEntry, false);
         reports.push(report);
       } catch (error) {
-        logger.warn(`Failed to compute status for ${pkgName}: ${error}`);
+        logger.warn(`Failed to check package ${pkgName}: ${error}`);
         reports.push({
           name: pkgName,
           version: pkgEntry?.version,

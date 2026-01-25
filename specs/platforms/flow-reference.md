@@ -1305,7 +1305,7 @@ opkg validate platforms --strict
 
 **Check conditions:**
 ```bash
-opkg status  # Shows detected platforms
+opkg list  # Shows detected platforms
 ```
 
 **Check syntax:**

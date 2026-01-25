@@ -11,7 +11,7 @@ This file provides high-level semantics for core commands in the path-based mode
 | `remove` | Source → Deletion | Remove files from source (source-only, path-only for workspace root) | ✅ | ❌ Error |
 | `set` | N/A | Update manifest metadata | ✅ | ❌ Error |
 | `install` | Registry → Workspace | Install version (git/path too) + update index | N/A | ✅ |
-| `status` | N/A | Report sync state | ✅ | ✅ |
+| `list` | N/A | Report sync state | ✅ | ✅ |
 | `uninstall` | Workspace | Remove package files/mappings | ✅ | ✅ |
 | `configure` | N/A | Configure settings | N/A | N/A |
 
@@ -85,13 +85,13 @@ Resolve/install from registry/git/path to workspace.
   - `opkg install github:anthropics/claude-code` (marketplace with interactive selection)
 - See [Install](install/).
 
-### `status`
+### `list`
 
 Check package states.
 
 - Flow: Read index → Validate paths → Hash compare source vs. workspace → Report (synced/modified/missing).
-- Example: `opkg status` (✅/⚠️/❌ output).
-- See [Status](status/).
+- Example: `opkg list` (✅/⚠️/❌ output).
+- See [List](list/).
 
 ### `uninstall`
 
@@ -124,7 +124,7 @@ Create a new package with manifest.
 | `remove` | ✅ Removes from source | ❌ Error | N/A (deletes) |
 | `set` | ✅ Updates manifest | ❌ Error | Source path |
 | `install` | N/A | ✅ Syncs to workspace | Workspace |
-| `status` | ✅ Shows status | ✅ Shows status | N/A |
+| `list` | ✅ Shows status | ✅ Shows status | N/A |
 | `uninstall` | ✅ Removes | ✅ Removes | N/A (deletes) |
 | `configure` | ✅ Updates config | ✅ Updates config | Config files |
 

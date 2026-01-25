@@ -9,7 +9,7 @@ Tests for CLI commands (user-facing functionality):
 - `pack.test.ts` - Package creation and packing
 - `set.test.ts` - Configuration setting
 - `show.test.ts` - Package display functionality
-- `status.test.ts` - Status checking
+- `list.test.ts` - List checking
 
 ### `core/`
 Tests for core business logic and internal functionality:

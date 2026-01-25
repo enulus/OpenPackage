@@ -282,7 +282,7 @@ project/
 ### Check Detected Platforms
 
 ```bash
-opkg status
+opkg list
 ```
 
 **Output:**
@@ -460,7 +460,7 @@ QWEN.md
 
 Always verify detection before assuming:
 ```bash
-opkg status
+opkg list
 ```
 
 ### 4. Document Custom Directories

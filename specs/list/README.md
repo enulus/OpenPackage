@@ -1,6 +1,6 @@
-# Status Command
+# List Command
 
-`opkg status` reports the state of installed packages, validating sources and sync status via hashes. Helps debug drifts between source and workspace.
+`opkg list` reports the state of installed packages, validating sources and sync status via hashes. Helps debug drifts between source and workspace.
 
 ## Purpose
 - N/A direction: Read-only inspection.
@@ -35,4 +35,4 @@
 - Useful before save (see modified) or uninstall.
 - See [Commands Overview](commands-overview.md).
 
-Impl: [Status Pipeline](../core/status/status-pipeline.ts).
+Impl: [List Pipeline](../core/list/list-pipeline.ts).

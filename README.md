@@ -96,10 +96,10 @@ opkg install github:anthropics/claude-code -g
 
 ### Show installed packages and files
 ```bash title="Terminal"
-opkg status             # Lists packages installed to workspace at cwd
-opkg status <package>   # Lists installed files for specified package
+opkg list             # Lists packages installed to workspace at cwd
+opkg list <package>   # Lists installed files for specified package
 ```  
-Use the status command to show an overview of packages and files installed.
+Use the list command to show an overview of packages and files installed.
 
 ### Uninstall packages
 ```bash title="Terminal"

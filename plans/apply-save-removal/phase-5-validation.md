@@ -362,7 +362,7 @@ Use this checklist to track validation progress:
 - [ ] `opkg install` works
 - [ ] `opkg add` works (no --apply)
 - [ ] `opkg remove` works (no --apply)
-- [ ] `opkg status` works
+- [ ] `opkg list` works
 - [ ] `opkg new` works
 - [ ] `opkg uninstall` works
 

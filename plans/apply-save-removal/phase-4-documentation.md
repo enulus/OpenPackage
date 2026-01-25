@@ -57,7 +57,7 @@ specs/apply/             (5 spec files)
    - opkg add
    - opkg remove
    - opkg new
-   - opkg status
+   - opkg list
    - opkg uninstall
    ```
 

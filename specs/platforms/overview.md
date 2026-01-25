@@ -149,7 +149,7 @@ Platforms are detected using two signals:
 
 ```bash
 # Check detected platforms
-opkg status
+opkg list
 ```
 
 **Detection result:**

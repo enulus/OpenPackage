@@ -157,7 +157,7 @@ opkg install  # Installs all deps including my-pkg
 ```bash
 opkg new my-pkg
 # ... make changes ...
-opkg status my-pkg  # Check sync state
+opkg list my-pkg  # Check sync state
 ```
 
 ## Options Reference

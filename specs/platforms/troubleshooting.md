@@ -8,7 +8,7 @@ Debug, validate, and fix common issues with the platform system.
 
 **Symptom:**
 ```bash
-opkg status
+opkg list
 # Output:
 ✗ Cursor not detected
 ```
@@ -298,7 +298,7 @@ Would skip:
 ### Check Platform Detection
 
 ```bash
-opkg status
+opkg list
 ```
 
 **Output:**
@@ -452,7 +452,7 @@ Actual:   typescript.md
 
 **Debug:**
 ```bash
-opkg status  # Check detected platforms
+opkg list  # Check detected platforms
 ```
 
 **Solution:** Fix condition to match environment
@@ -569,7 +569,7 @@ Before deploying configuration:
 
 - [ ] Run `opkg validate platforms --strict`
 - [ ] Test with `--dry-run`
-- [ ] Check platform detection with `opkg status`
+- [ ] Check platform detection with `opkg list`
 - [ ] Verify files written to correct locations
 - [ ] Test with multiple packages for conflicts
 - [ ] Enable debug logging for complex flows
@@ -581,7 +581,7 @@ Before deploying configuration:
 
 ```bash
 opkg --help
-opkg status --help
+opkg list --help
 opkg install --help
 ```
 
@@ -596,7 +596,7 @@ When reporting issues, include:
 
 2. **Platform detection**
    ```bash
-   opkg status
+   opkg list
    ```
 
 3. **Validation output**
@@ -623,7 +623,7 @@ When reporting issues, include:
 opkg validate platforms --strict
 
 # Check detection
-opkg status
+opkg list
 
 # Show platform details
 opkg show platforms --platform=cursor

@@ -520,7 +520,7 @@ opkg validate platforms
 
 **Check platform detection:**
 ```bash
-opkg status  # Shows detected platforms
+opkg list  # Shows detected platforms
 ```
 
 **Check enabled flag:**

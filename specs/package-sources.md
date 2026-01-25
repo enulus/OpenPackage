@@ -196,7 +196,7 @@ Fix: Copy to ~/.openpackage/packages/, update path:, edit, then pack.
 
 ```
 Error: Source not found for 'my-rules': ~/.openpackage/packages/my-rules/
-Run `opkg status` to verify.
+Run `opkg list` to verify.
 ```
 
 ## Path Resolution

@@ -2,7 +2,7 @@ import { Command } from 'commander';
 
 import { CommandResult } from '../types/index.js';
 import { withErrorHandling, ValidationError } from '../utils/errors.js';
-import { runStatusPipeline, type StatusPackageReport } from '../core/status/status-pipeline.js';
+import { runListPipeline, type ListPackageReport } from '../core/list/list-pipeline.js';
 import { logger } from '../utils/logger.js';
 import { parsePackageYml } from '../utils/package-yml.js';
 import { getLocalPackageYmlPath } from '../utils/paths.js';
@@ -15,7 +15,7 @@ function dim(text: string): string {
   return `${DIM}${text}${RESET}`;
 }
 
-function printTreeView(workspaceName: string, workspaceVersion: string | undefined, packages: StatusPackageReport[], cwd: string): void {
+function printTreeView(workspaceName: string, workspaceVersion: string | undefined, packages: ListPackageReport[], cwd: string): void {
   // Omit version if it's 0.0.0 (unversioned)
   const version = workspaceVersion && workspaceVersion !== '0.0.0' ? `@${workspaceVersion}` : '';
   console.log(`${workspaceName}${version} ${cwd}`);
@@ -43,7 +43,7 @@ function printTreeView(workspaceName: string, workspaceVersion: string | undefin
   });
 }
 
-function printDetailedView(pkg: StatusPackageReport): void {
+function printDetailedView(pkg: ListPackageReport): void {
   // Omit version if it's 0.0.0 (unversioned)
   const version = pkg.version && pkg.version !== '0.0.0' ? `@${pkg.version}` : '';
   console.log(`${pkg.name}${version}`);
@@ -68,12 +68,12 @@ function printDetailedView(pkg: StatusPackageReport): void {
   }
 }
 
-async function statusCommand(packageName?: string): Promise<CommandResult> {
+async function listCommand(packageName?: string): Promise<CommandResult> {
   const cwd = process.cwd();
-  logger.info(`Checking package status for directory: ${cwd}`);
+  logger.info(`Listing packages for directory: ${cwd}`);
 
   try {
-    const result = await runStatusPipeline(packageName);
+    const result = await runListPipeline(packageName);
     const packages = result.data?.packages ?? [];
 
     // If specific package requested, show detailed view
@@ -109,12 +109,12 @@ async function statusCommand(packageName?: string): Promise<CommandResult> {
   }
 }
 
-export function setupStatusCommand(program: Command): void {
+export function setupListCommand(program: Command): void {
   program
-    .command('status')
-    .description('Show package installation status')
-    .argument('[package]', 'Optional package name to show detailed status')
+    .command('list')
+    .description('Show installed packages and files')
+    .argument('[package]', 'Optional package name to show installed per package')
     .action(withErrorHandling(async (packageName?: string) => {
-      await statusCommand(packageName);
+      await listCommand(packageName);
     }));
 }
