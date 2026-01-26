@@ -3,14 +3,13 @@ import { Command } from 'commander';
 import { UninstallOptions } from '../types/index.js';
 import { withErrorHandling, ValidationError } from '../utils/errors.js';
 import { runUninstallPipeline } from '../core/uninstall/uninstall-pipeline.js';
-import { validatePackageName } from '../utils/package-name.js';
 import { formatPathForDisplay } from '../utils/formatters.js';
 
 async function uninstallPackageCommand(
   packageName: string,
   options: UninstallOptions
 ) {
-  validatePackageName(packageName);
+  // No validation - let the pipeline normalize and look up the package
   const result = await runUninstallPipeline(packageName, options);
   if (!result.success) {
     throw new ValidationError(result.error || 'Uninstall failed');

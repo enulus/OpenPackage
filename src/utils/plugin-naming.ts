@@ -16,7 +16,7 @@ export interface PluginNamingContext {
  * Generate a scoped name for a Claude Code plugin.
  * 
  * Format:
- * - GitHub repo with subdirectory: gh@username/repo/plugin-name
+ * - GitHub repo with subdirectory: gh@username/repo/p/plugin-name
  * - GitHub repo (plugin is the repo): gh@username/repo
  * - Non-GitHub or local: plugin-name (no scoping)
  * 
@@ -72,9 +72,9 @@ export function generatePluginName(
       pluginName = repo;
     }
     
-    // Format: gh@username/repo/plugin-name
+    // Format: gh@username/repo/p/plugin-name
     const plugin = pluginName.toLowerCase();
-    const generated = `gh@${username}/${repo}/${plugin}`;
+    const generated = `gh@${username}/${repo}/p/${plugin}`;
     return generated;
   } else {
     // Format: gh@username/repo
@@ -118,35 +118,70 @@ export function generateMarketplaceName(
 
 /**
  * Parse a scoped plugin name into its components.
- * Supports both new (gh@username/...) and old (@username/...) formats.
+ * Supports new (gh@username/repo/p/plugin), new standalone (gh@username/repo),
+ * legacy (gh@username/repo/plugin), and old (@username/...) formats.
  * Returns null if the name is not scoped.
  */
 export function parseScopedPluginName(name: string): {
   username: string;
-  marketplace?: string;
-  plugin: string;
+  repo: string;
+  plugin?: string;
   isGitHub: boolean;
 } | null {
-  // New format: gh@username/marketplace/plugin or gh@username/plugin
-  const ghMatch = name.match(/^gh@([^\/]+)\/(?:([^\/]+)\/)?([^\/]+)$/);
+  // New GitHub format: gh@username/repo or gh@username/repo/...
+  const ghMatch = name.match(/^gh@([^\/]+)\/([^\/]+)(?:\/(.+))?$/);
   if (ghMatch) {
-    const [, username, marketplace, plugin] = ghMatch;
+    const [, username, repo, rest] = ghMatch;
+    
+    // Check if it has /p/ prefix (new format with plugin)
+    if (rest?.startsWith('p/')) {
+      return {
+        username,
+        repo,
+        plugin: rest.substring(2), // Remove 'p/' prefix
+        isGitHub: true
+      };
+    }
+    
+    // Legacy format: gh@username/repo/plugin (no /p/ prefix)
+    if (rest) {
+      return {
+        username,
+        repo,
+        plugin: rest,
+        isGitHub: true
+      };
+    }
+    
+    // Standalone repo: gh@username/repo
     return {
       username,
-      marketplace,
-      plugin,
+      repo,
+      plugin: undefined,
       isGitHub: true
     };
   }
   
-  // Old format: @username/marketplace/plugin or @username/plugin
-  const oldMatch = name.match(/^@([^\/]+)\/(?:([^\/]+)\/)?([^\/]+)$/);
-  if (oldMatch) {
-    const [, username, marketplace, plugin] = oldMatch;
+  // Old format with plugin: @username/repo/plugin
+  const oldPluginMatch = name.match(/^@([^\/]+)\/([^\/]+)\/(.+)$/);
+  if (oldPluginMatch) {
+    const [, username, repo, plugin] = oldPluginMatch;
     return {
       username,
-      marketplace,
+      repo,
       plugin,
+      isGitHub: false
+    };
+  }
+  
+  // Old format standalone: @username/repo
+  const oldRepoMatch = name.match(/^@([^\/]+)\/([^\/]+)$/);
+  if (oldRepoMatch) {
+    const [, username, repo] = oldRepoMatch;
+    return {
+      username,
+      repo,
+      plugin: undefined,
       isGitHub: false
     };
   }
@@ -228,7 +263,7 @@ export function detectOldPluginNaming(dep: { name: string; git?: string; subdire
  * Returns the correct new name if migration needed, null otherwise.
  * 
  * Old format: @username/repo or @username/repo/plugin
- * New format: gh@username/repo or gh@username/repo/plugin
+ * New format: gh@username/repo or gh@username/repo/p/plugin
  */
 export function detectOldGitHubNaming(dep: { name: string; git?: string; subdirectory?: string }): string | null {
   // Skip if already using new format
@@ -246,6 +281,22 @@ export function detectOldGitHubNaming(dep: { name: string; git?: string; subdire
     return null;
   }
   
-  // Old format detected - prepend gh to create new format
-  return 'gh' + dep.name;
+  const { username, repo } = githubInfo;
+  
+  // Check if old format has plugin segment: @username/repo/plugin
+  const oldPluginMatch = dep.name.match(/^@([^\/]+)\/([^\/]+)\/(.+)$/);
+  if (oldPluginMatch) {
+    const [, , , pluginPath] = oldPluginMatch;
+    // Convert to new format with /p/ infix
+    return `gh@${username}/${repo}/p/${pluginPath}`;
+  }
+  
+  // Check if old format is standalone: @username/repo
+  const oldRepoMatch = dep.name.match(/^@([^\/]+)\/([^\/]+)$/);
+  if (oldRepoMatch) {
+    // Convert to new format without /p/
+    return `gh@${username}/${repo}`;
+  }
+  
+  return null;
 }

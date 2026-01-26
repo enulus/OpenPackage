@@ -197,14 +197,23 @@ export function parseDownloadIdentifier(
   let packageName: string;
   let namePath: string | undefined;
   if (rawName.startsWith('gh@')) {
-    // GitHub format: gh@username/repo or gh@username/repo/plugin
+    // GitHub format: gh@username/repo or gh@username/repo/p/plugin
     const segments = rawName.split('/');
     if (segments.length < 2) {
       throw new Error(`Invalid GitHub package in download name '${downloadName}'.`);
     }
     // Take first two segments: gh@username/repo
     packageName = segments.slice(0, 2).join('/');
-    namePath = segments.length > 2 ? segments.slice(2).join('/') : undefined;
+    // Check if there's a plugin path (p/...)
+    if (segments.length > 2) {
+      if (segments[2] === 'p' && segments.length > 3) {
+        // Plugin format: gh@username/repo/p/plugin → path is p/plugin
+        namePath = segments.slice(2).join('/');
+      } else {
+        // Legacy or other format
+        namePath = segments.slice(2).join('/');
+      }
+    }
   } else if (rawName.startsWith('@')) {
     // Scoped format: @scope/pkg
     const segments = rawName.split('/');

@@ -178,7 +178,7 @@ opkg install github:anthropics/claude-code#subdirectory=plugins/commit-commands
 Result in `openpackage.yml`:
 ```yaml
 packages:
-  - name: "gh@anthropics/claude-code/commit-commands"  # Scoped name
+  - name: "gh@anthropics/claude-code/p/commit-commands"  # Scoped name with /p/ infix
     git: https://github.com/anthropics/claude-code.git
     subdirectory: plugins/commit-commands
 ```
@@ -221,10 +221,10 @@ Select plugins to install (space to select, enter to confirm):
 Result in `openpackage.yml` (if user selected commit-commands and pr-review-toolkit):
 ```yaml
 packages:
-  - name: "gh@anthropics/claude-code/commit-commands"  # Scoped name
+  - name: "gh@anthropics/claude-code/p/commit-commands"  # Scoped name with /p/ infix
     git: https://github.com/anthropics/claude-code.git
     subdirectory: plugins/commit-commands
-  - name: "gh@anthropics/claude-code/pr-review-toolkit"  # Scoped name
+  - name: "gh@anthropics/claude-code/p/pr-review-toolkit"  # Scoped name with /p/ infix
     git: https://github.com/anthropics/claude-code.git
     subdirectory: plugins/pr-review-toolkit
 ```
@@ -240,14 +240,14 @@ Installed to cache:
 **Scoped naming for GitHub plugins**: Plugins installed from GitHub repositories use scoped names to provide clear provenance and prevent naming conflicts.
 
 **Naming formats**:
-- **Marketplace plugin**: `gh@<username>/<repo>/<plugin-name>`
+- **Marketplace plugin**: `gh@<username>/<repo>/p/<plugin-name>`
 - **Standalone plugin**: `gh@<username>/<repo>`
 - **Non-GitHub source**: `<plugin-name>` (no scoping)
 
 **Examples**:
 | Source | Plugin Name | Scoped Name |
 |--------|-------------|-------------|
-| `github:anthropics/claude-code#subdirectory=plugins/commit-commands` | `commit-commands` | `gh@anthropics/claude-code/commit-commands` |
+| `github:anthropics/claude-code#subdirectory=plugins/commit-commands` | `commit-commands` | `gh@anthropics/claude-code/p/commit-commands` |
 | `github:anthropics/my-plugin` | `my-plugin` | `gh@anthropics/my-plugin` |
 | `git:https://gitlab.com/user/plugin.git` | `cool-plugin` | `cool-plugin` (no scoping) |
 | `./local-plugin/` | `local-plugin` | `local-plugin` (no scoping) |
@@ -258,14 +258,21 @@ Installed to cache:
 
 **Automatic migration**: 
 - **Marketplace name migration**: If an existing installation uses the old naming format (e.g., `@username/marketplace-name/plugin` where marketplace name differs from repo name), the system will automatically migrate to use the repo name when the manifest is read and written.
-- **GitHub prefix migration**: If an existing installation uses the old format without the `gh` prefix (e.g., `@username/repo`), the system will automatically migrate to the new format (`gh@username/repo`) when the manifest is read and written.
+- **GitHub prefix migration**: If an existing installation uses the old format without the `gh` prefix (e.g., `@username/repo` or `@username/repo/plugin`), the system will automatically migrate to the new format with `/p/` infix for plugins (`gh@username/repo` or `gh@username/repo/p/plugin`) when the manifest is read and written.
 
 **Benefits**:
 - Clear GitHub provenance at a glance
 - Repository name directly corresponds to scoped name (no ambiguity)
+- `/p/` infix clearly distinguishes plugins from standalone repos
 - No name conflicts between authors
 - Easy to identify plugin source
-- Consistent with npm/yarn scoping patterns
+- Deterministic structure: segment 1 = username, segment 2 = repo, `/p/` + rest = plugin path
+
+**Backward compatibility**:
+- **Validation**: Package names are validated flexibly to accept both new (`/p/`) and legacy (no `/p/`) formats
+- **Lookup**: Commands like `uninstall` accept any format and normalize for workspace lookup
+- **Generation**: New installations always use `/p/` format for clarity
+- **Migration**: Old format names are automatically converted when reading/writing manifests
 
 ### 4.5 Plugin transformation details
 

@@ -3,17 +3,24 @@ import { PackageDependency } from '../types/index.js';
 
 /**
  * Regex pattern for scoped package names (@scope/name or @scope/name/subname/...)
- * Supports multiple slashes for hierarchical names like @anthropics/claude-code/commit-commands
+ * Supports multiple slashes for hierarchical names (old format, for backward compatibility)
  */
 export const SCOPED_PACKAGE_REGEX = /^@([^\/]+)\/(.+)$/;
 
 /**
- * Regex pattern for GitHub-prefixed package names (gh@username/repo or gh@username/repo/plugin)
+ * Regex pattern for GitHub-prefixed package names
+ * Accepts any structure after gh@username/
+ * 
+ * Captures:
+ * - Group 1: username
+ * - Group 2: everything after username/ (repo and optional plugin path)
  */
 export const GITHUB_PACKAGE_REGEX = /^gh@([^\/]+)\/(.+)$/;
 
 /**
- * Validate package name according to naming rules
+ * Validate package name according to naming rules.
+ * Validates segment structure but doesn't enforce strict /p/ spacer format.
+ * 
  * @param name - The package name to validate
  * @throws ValidationError if the name is invalid
  */
@@ -32,28 +39,36 @@ export function validatePackageName(name: string): void {
     throw new ValidationError(`Package name '${name}' cannot have leading or trailing spaces`);
   }
 
-  // Check if it's a GitHub-prefixed name (gh@username/repo format)
-  const githubMatch = name.match(GITHUB_PACKAGE_REGEX);
-  if (githubMatch) {
+  // Check if it's a GitHub-prefixed name (gh@username/repo/... format)
+  if (name.startsWith('gh@')) {
+    const githubMatch = name.match(GITHUB_PACKAGE_REGEX);
+    if (!githubMatch) {
+      throw new ValidationError(`Package name '${name}' has invalid GitHub format (expected gh@username/repo)`);
+    }
+    
     const [, username, rest] = githubMatch;
-
+    
     // Validate username part
     validatePackageNamePart(username, name, 'username');
-
-    // Validate rest (repo/plugin path)
-    validatePackageNamePart(rest, name, 'name');
-
+    
+    // Validate rest (repo and optional plugin path)
+    validatePackageNamePart(rest, name, 'repo/plugin');
+    
     return;
   }
 
   // Check if it's a scoped name (@scope/name format)
-  const scopedMatch = name.match(SCOPED_PACKAGE_REGEX);
-  if (scopedMatch) {
+  if (name.startsWith('@')) {
+    const scopedMatch = name.match(SCOPED_PACKAGE_REGEX);
+    if (!scopedMatch) {
+      throw new ValidationError(`Package name '${name}' has invalid scoped format (expected @scope/name)`);
+    }
+    
     const [, scope, localName] = scopedMatch;
 
     // Validate scope part
     validatePackageNamePart(scope, name, 'scope');
-
+    
     // Validate local name part
     validatePackageNamePart(localName, name, 'name');
 
@@ -259,8 +274,12 @@ export function normalizePackageName(name: string): string {
 
 /**
  * Normalize package name for lookup/resolution with backward compatibility.
- * Converts old GitHub format (@username/...) to new format (gh@username/...).
+ * Converts old GitHub format to new format with p/ prefix for plugins.
  * This allows commands to accept old format names and still match workspace entries.
+ * 
+ * Conversions:
+ * - @username/repo → gh@username/repo
+ * - @username/repo/plugin → gh@username/repo/p/plugin
  * 
  * @param name - Package name to normalize
  * @returns Normalized name in new format if applicable
@@ -273,9 +292,18 @@ export function normalizePackageNameForLookup(name: string): string {
     return normalized;
   }
   
-  // If using old GitHub format (@username/...), convert to new format
-  if (normalized.startsWith('@') && normalized.match(/^@([^\/]+)\/(.+)$/)) {
-    return 'gh' + normalized;
+  // If using old GitHub format (@username/repo/plugin), convert to new format with /p/
+  const oldPluginMatch = normalized.match(/^@([^\/]+)\/([^\/]+)\/(.+)$/);
+  if (oldPluginMatch) {
+    const [, username, repo, pluginPath] = oldPluginMatch;
+    return `gh@${username}/${repo}/p/${pluginPath}`;
+  }
+  
+  // If using old GitHub format (@username/repo), convert to new format
+  const oldRepoMatch = normalized.match(/^@([^\/]+)\/([^\/]+)$/);
+  if (oldRepoMatch) {
+    const [, username, repo] = oldRepoMatch;
+    return `gh@${username}/${repo}`;
   }
   
   // Otherwise return normalized as-is

@@ -178,7 +178,9 @@ export async function readWorkspaceIndex(cwd: string): Promise<WorkspaceIndexRec
 
 /**
  * Migrate old GitHub package names to new format.
- * Converts @username/repo to gh@username/repo for GitHub sources.
+ * Converts:
+ * - @username/repo → gh@username/repo
+ * - @username/repo/plugin → gh@username/repo/p/plugin
  */
 function migrateGitHubPackageNames(index: WorkspaceIndex): WorkspaceIndex {
   const migratedPackages: Record<string, WorkspaceIndexPackage> = {};
@@ -201,7 +203,17 @@ function migrateGitHubPackageNames(index: WorkspaceIndex): WorkspaceIndex {
                          normalizedPath.includes('.openpackage/cache/git/');
       
       if (isGitSource || isGitCache) {
-        // Migrate to new format: @username/... -> gh@username/...
+        // Check if this has a plugin segment (3+ segments)
+        const pluginMatch = pkgName.match(/^@([^\/]+)\/([^\/]+)\/(.+)$/);
+        if (pluginMatch) {
+          // Migrate with /p/ infix: @username/repo/plugin → gh@username/repo/p/plugin
+          const [, username, repo, pluginPath] = pluginMatch;
+          const newName = `gh@${username}/${repo}/p/${pluginPath}`;
+          migratedPackages[newName] = pkgData;
+          continue;
+        }
+        
+        // Migrate standalone repo: @username/repo → gh@username/repo
         const newName = 'gh' + pkgName;
         migratedPackages[newName] = pkgData;
         continue;
