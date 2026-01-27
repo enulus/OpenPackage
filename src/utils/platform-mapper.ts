@@ -103,6 +103,10 @@ export function mapPlatformFileToUniversal(
         // Check if the path contains this platform subdir
         const subdirIndex = findSubpathIndex(normalizedPath, platformSubdirPath);
         if (subdirIndex !== -1) {
+          // Skip switch expressions
+          if (typeof flow.from === 'object' && '$switch' in flow.from) {
+            continue;
+          }
           // Extract universal subdir from 'from' pattern
           // For array patterns, use the first pattern
           const fromPattern = Array.isArray(flow.from) ? flow.from[0] : flow.from;
@@ -158,7 +162,7 @@ export function mapPlatformFileToUniversal(
 export function mapWorkspaceFileToUniversal(
   workspaceFilePath: string,
   cwd = process.cwd()
-): { platform: Platform; subdir: string; relPath: string } | null {
+): { platform: Platform; subdir: string; relPath: string; flow: Flow } | null {
   // Resolve symlinks to get real paths for consistent comparison
   const absolutePath = realpathSync(workspaceFilePath);
   const absoluteCwd = realpathSync(cwd);
@@ -172,6 +176,10 @@ export function mapWorkspaceFileToUniversal(
 
     if (definition.import && definition.import.length > 0) {
       for (const flow of definition.import) {
+        // Skip switch expressions
+        if (typeof flow.from === 'object' && '$switch' in flow.from) {
+          continue;
+        }
         const fromPattern = Array.isArray(flow.from) ? flow.from[0] : flow.from;
         if (!fromPattern) continue;
         
@@ -191,7 +199,7 @@ export function mapWorkspaceFileToUniversal(
         const relPath = mapPathUsingFlowPattern(relativePath, fromPattern, toPattern);
         
         if (relPath) {
-          return { platform, subdir, relPath };
+          return { platform, subdir, relPath, flow };
         }
       }
     }
@@ -372,6 +380,10 @@ function mapUniversalToPlatformWithFlows(
   const sourcePath = `${subdir}/${relPath}`;
   
   const candidateFlows = flows.filter((flow: Flow) => {
+    // Skip switch expressions
+    if (typeof flow.from === 'object' && '$switch' in flow.from) {
+      return false;
+    }
     const fromPattern = Array.isArray(flow.from) ? flow.from[0] : flow.from;
     return fromPattern.startsWith(`${subdir}/`);
   });
@@ -381,6 +393,10 @@ function mapUniversalToPlatformWithFlows(
 
   // Find a flow that matches this source path
   const matchingFlow = candidateFlows.find((flow: Flow) => {
+    // Skip switch expressions
+    if (typeof flow.from === 'object' && '$switch' in flow.from) {
+      return false;
+    }
     const fromPattern = Array.isArray(flow.from) ? flow.from[0] : flow.from;
     
     // Check if the source path matches the pattern
@@ -411,6 +427,10 @@ function mapUniversalToPlatformWithFlows(
       new Set(
         candidateFlows
           .map((flow: Flow) => {
+            // Skip switch expressions
+            if (typeof flow.from === 'object' && '$switch' in flow.from) {
+              return '';
+            }
             const fromPattern = Array.isArray(flow.from) ? flow.from[0] : flow.from;
             return extname(fromPattern);
           })
@@ -451,6 +471,10 @@ function mapUniversalToPlatformWithFlows(
   
   // Resolve the target path from the glob pattern
   // For array patterns, use the first pattern
+  // Skip switch expressions
+  if (typeof fromPattern === 'object' && '$switch' in fromPattern) {
+    throw new Error('Cannot resolve target path from SwitchExpression - expression must be resolved first');
+  }
   const fromPatternStr = Array.isArray(fromPattern) ? fromPattern[0] : fromPattern;
   const targetPath = resolveTargetPathFromGlob(sourcePath, fromPatternStr, targetPathPattern);
 

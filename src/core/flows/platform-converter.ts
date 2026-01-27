@@ -324,9 +324,13 @@ export class PlatformConverter {
    * Discover files matching a glob pattern
    */
   private async discoverMatchingFiles(
-    pattern: string | string[],
+    pattern: string | string[] | import('../../types/flows.js').SwitchExpression,
     baseDir: string
   ): Promise<string[]> {
+    // Handle switch expressions
+    if (typeof pattern === 'object' && '$switch' in pattern) {
+      throw new Error('Cannot discover files from SwitchExpression - expression must be resolved first');
+    }
     const patterns = Array.isArray(pattern) ? pattern : [pattern];
     const matches: string[] = [];
     

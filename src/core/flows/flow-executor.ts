@@ -34,6 +34,7 @@ import type {
   ParsedContent,
   FileFormat,
   MultiTargetFlows,
+  SwitchExpression,
 } from '../../types/flows.js';
 import { logger } from '../../utils/logger.js';
 import { 
@@ -47,10 +48,12 @@ import {
   deleteNestedValue
 } from './flow-key-mapper.js';
 import { extractAllKeys } from './flow-key-extractor.js';
-import { applyMapPipeline, createMapContext, validateMapPipeline } from './map-pipeline/index.js';
+import { applyMapPipeline, createMapContext, validateMapPipeline, splitMapPipeline } from './map-pipeline/index.js';
 import { SourcePatternResolver } from './source-resolver.js';
+import { resolveSwitchExpression, validateSwitchExpression } from './switch-resolver.js';
 import { smartEquals, smartNotEquals } from '../../utils/path-comparison.js';
 import { stripPlatformSuffixFromFilename } from './platform-suffix-handler.js';
+import { parseMarkdownDocument, serializeMarkdownDocument } from './markdown.js';
 
 /**
  * Default flow executor implementation
@@ -65,25 +68,59 @@ export class DefaultFlowExecutor implements FlowExecutor {
   }
 
   /**
-   * Execute a single flow (now supports glob patterns)
+   * Execute a single flow (now supports glob patterns and switch expressions)
    */
   async executeFlow(flow: Flow, context: FlowContext): Promise<FlowResult> {
     const startTime = Date.now();
 
     try {
+      // Resolve switch expressions in 'from' field
+      let resolvedFrom = flow.from;
+      if (this.isSwitchExpression(flow.from)) {
+        try {
+          resolvedFrom = resolveSwitchExpression(flow.from as any as SwitchExpression, context);
+        } catch (error) {
+          return {
+            source: '<switch expression>',
+            target: this.normalizeToPattern(flow.to),
+            success: false,
+            transformed: false,
+            error: error instanceof Error ? error : new Error(String(error)),
+            executionTime: Date.now() - startTime,
+          };
+        }
+      }
+
+      // Resolve switch expressions in 'to' field
+      let resolvedTo = flow.to;
+      if (this.isSwitchExpression(flow.to)) {
+        try {
+          resolvedTo = resolveSwitchExpression(flow.to as SwitchExpression, context);
+        } catch (error) {
+          return {
+            source: this.normalizeFromPattern(resolvedFrom),
+            target: '<switch expression>',
+            success: false,
+            transformed: false,
+            error: error instanceof Error ? error : new Error(String(error)),
+            executionTime: Date.now() - startTime,
+          };
+        }
+      }
+
       // Check if this is a multi-target flow
-      if (typeof flow.to !== 'string') {
-        const results = await this.executeMultiTarget(flow, context);
+      if (typeof resolvedTo !== 'string') {
+        const results = await this.executeMultiTarget({ ...flow, from: resolvedFrom, to: resolvedTo }, context);
         // Aggregate results
         return this.aggregateResults(results, startTime);
       }
 
-      // Validate flow
-      const validation = this.validateFlow(flow);
+      // Validate flow (with resolved 'from' and 'to')
+      const validation = this.validateFlow({ ...flow, from: resolvedFrom, to: resolvedTo });
       if (!validation.valid) {
         return {
-          source: this.normalizeFromPattern(flow.from),
-          target: flow.to as string,
+          source: this.normalizeFromPattern(resolvedFrom),
+          target: resolvedTo as string,
           success: false,
           transformed: false,
           error: new Error(`Invalid flow: ${validation.errors.map(e => e.message).join(', ')}`),
@@ -93,11 +130,11 @@ export class DefaultFlowExecutor implements FlowExecutor {
 
       // Evaluate conditions
       if (flow.when && !this.evaluateCondition(flow.when, context)) {
-        const normalized = this.normalizeFromPattern(flow.from);
-        logger.debug(`Flow skipped due to condition: ${normalized} -> ${flow.to}`);
+        const normalized = this.normalizeFromPattern(resolvedFrom);
+        logger.debug(`Flow skipped due to condition: ${normalized} -> ${resolvedTo}`);
         return {
           source: normalized,
-          target: flow.to as string,
+          target: resolvedTo as string,
           success: true,
           transformed: false,
           warnings: ['Flow skipped due to condition'],
@@ -106,15 +143,15 @@ export class DefaultFlowExecutor implements FlowExecutor {
       }
 
       // Resolve source paths (may return multiple files for glob patterns)
-      const resolution = await this.resolveSourcePattern(flow.from, context);
+      const resolution = await this.resolveSourcePattern(resolvedFrom, context);
       const sourcePaths = resolution.paths;
       const resolutionWarnings = resolution.warnings;
 
       // If no files matched, return success with no files processed
       if (sourcePaths.length === 0) {
         return {
-          source: this.normalizeFromPattern(flow.from),
-          target: flow.to as string,
+          source: this.normalizeFromPattern(resolvedFrom),
+          target: resolvedTo as string,
           success: true,
           transformed: false,
           warnings: resolutionWarnings.length > 0 ? resolutionWarnings : ['No files matched pattern'],
@@ -124,10 +161,10 @@ export class DefaultFlowExecutor implements FlowExecutor {
 
       // Execute pipeline for each matched file
       const results: FlowResult[] = [];
-      const firstFromPattern = this.getFirstPattern(flow.from);
+      const firstFromPattern = this.getFirstPattern(resolvedFrom);
       
       for (const sourcePath of sourcePaths) {
-        const targetPath = this.resolveTargetFromGlob(sourcePath, firstFromPattern, flow.to as string, context);
+        const targetPath = this.resolveTargetFromGlob(sourcePath, firstFromPattern, resolvedTo as string, context);
         const result = await this.executePipeline(flow, sourcePath, targetPath, context);
         results.push({
           ...result,
@@ -152,8 +189,8 @@ export class DefaultFlowExecutor implements FlowExecutor {
       return this.aggregateResults(results, startTime);
     } catch (error) {
       return {
-        source: this.normalizeFromPattern(flow.from),
-        target: typeof flow.to === 'string' ? flow.to : Object.keys(flow.to).join(', '),
+        source: this.isSwitchExpression(flow.from) ? '<switch>' : this.normalizeFromPattern(flow.from),
+        target: this.normalizeToPattern(flow.to),
         success: false,
         transformed: false,
         error: error instanceof Error ? error : new Error(String(error)),
@@ -283,6 +320,19 @@ export class DefaultFlowExecutor implements FlowExecutor {
       errors.push({ message: 'Flow missing required field "to"', code: 'MISSING_TO' });
     }
 
+    // Validate switch expression in 'to' field
+    if (flow.to && this.isSwitchExpression(flow.to)) {
+      const switchValidation = validateSwitchExpression(flow.to as SwitchExpression);
+      if (!switchValidation.valid) {
+        for (const error of switchValidation.errors) {
+          errors.push({
+            message: error,
+            code: 'INVALID_SWITCH_EXPRESSION',
+          });
+        }
+      }
+    }
+
     // Validate pick/omit
     if (flow.pick && flow.omit) {
       errors.push({ message: 'Flow cannot have both "pick" and "omit"', code: 'CONFLICTING_FILTERS' });
@@ -327,6 +377,17 @@ export class DefaultFlowExecutor implements FlowExecutor {
       errors,
       warnings: [],
     };
+  }
+
+  /**
+   * Check if a value is a switch expression
+   */
+  private isSwitchExpression(value: any): boolean {
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      '$switch' in value
+    );
   }
 
   /**
@@ -384,14 +445,9 @@ export class DefaultFlowExecutor implements FlowExecutor {
       let pipeOps: any[] = [];
       
       if (flow.map) {
-        // Separate schema operations from pipe operations
-        for (const op of flow.map) {
-          if ('$pipe' in op) {
-            pipeOps.push(op);
-          } else {
-            schemaOps.push(op);
-          }
-        }
+        const split = splitMapPipeline(flow.map);
+        schemaOps = split.schemaOps;
+        pipeOps = split.pipeOps;
         
         // Apply schema operations first (before merge)
         if (schemaOps.length > 0) {
@@ -635,7 +691,7 @@ export class DefaultFlowExecutor implements FlowExecutor {
 
         case 'yaml':
         case 'yml':
-          return yaml.dump(content, { indent: 2, flowLevel: 1, lineWidth: -1 });
+          return yaml.dump(content, { indent: 2, flowLevel: -1, lineWidth: -1 });
 
         case 'toml':
           // If a pipeline already produced TOML text (e.g. via domain transforms),
@@ -975,10 +1031,15 @@ export class DefaultFlowExecutor implements FlowExecutor {
    * Returns resolved file paths (glob patterns return multiple files)
    */
   private async resolveSourcePattern(
-    pattern: string | string[],
+    pattern: string | string[] | SwitchExpression,
     context: FlowContext
   ): Promise<{ paths: string[]; warnings: string[] }> {
-    const result = await this.sourceResolver.resolve(pattern, {
+    if (this.isSwitchExpression(pattern)) {
+      throw new Error('Cannot resolve SwitchExpression - expression must be resolved first');
+    }
+    // Type narrowing: pattern is now string | string[]
+    const narrowedPattern = pattern as string | string[];
+    const result = await this.sourceResolver.resolve(narrowedPattern, {
       baseDir: context.packageRoot,
       logWarnings: true,
     });
@@ -1055,16 +1116,40 @@ export class DefaultFlowExecutor implements FlowExecutor {
    * Normalize from pattern for display in results
    * Converts array to comma-separated string
    */
-  private normalizeFromPattern(pattern: string | string[]): string {
-    return Array.isArray(pattern) ? pattern.join(', ') : pattern;
+  private normalizeFromPattern(pattern: string | string[] | SwitchExpression): string {
+    if (this.isSwitchExpression(pattern)) {
+      return '<switch>';
+    }
+    // Type narrowing: pattern is now string | string[]
+    const narrowedPattern = pattern as string | string[];
+    return Array.isArray(narrowedPattern) ? narrowedPattern.join(', ') : narrowedPattern;
+  }
+
+  /**
+   * Normalize to pattern for display in results
+   * Handles string, multi-target, and switch expressions
+   */
+  private normalizeToPattern(pattern: string | MultiTargetFlows | SwitchExpression): string {
+    if (typeof pattern === 'string') {
+      return pattern;
+    }
+    if (this.isSwitchExpression(pattern)) {
+      return '<switch>';
+    }
+    return Object.keys(pattern as MultiTargetFlows).join(', ');
   }
 
   /**
    * Get the first pattern from a pattern or array of patterns
    * Used for path resolution when multiple sources are specified
    */
-  private getFirstPattern(pattern: string | string[]): string {
-    return Array.isArray(pattern) ? pattern[0] : pattern;
+  private getFirstPattern(pattern: string | string[] | SwitchExpression): string {
+    if (this.isSwitchExpression(pattern)) {
+      throw new Error('Cannot get first pattern from SwitchExpression - expression must be resolved first');
+    }
+    // Type narrowing: pattern is now string | string[]
+    const narrowedPattern = pattern as string | string[];
+    return Array.isArray(narrowedPattern) ? narrowedPattern[0] : narrowedPattern;
   }
 
   /**
@@ -1101,31 +1186,14 @@ export class DefaultFlowExecutor implements FlowExecutor {
    * Parse markdown with frontmatter
    */
   private parseMarkdown(content: string): any {
-    const frontmatterRegex = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/;
-    const match = content.match(frontmatterRegex);
-
-    if (match) {
-      const frontmatter = yaml.load(match[1]);
-      const body = match[2];
-      return { frontmatter, body };
-    }
-
-    return { body: content };
+    return parseMarkdownDocument(content);
   }
 
   /**
    * Serialize markdown with frontmatter
    */
   private serializeMarkdown(content: any): string {
-    if (typeof content === 'string') {
-      return content;
-    }
-    if (content.frontmatter) {
-      const frontmatterStr = yaml.dump(content.frontmatter, { indent: 2, flowLevel: 1, lineWidth: -1 });
-      return `---\n${frontmatterStr}---\n${content.body || ''}`;
-    }
-
-    return content.body || '';
+    return serializeMarkdownDocument(content);
   }
 
   /**

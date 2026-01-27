@@ -6,10 +6,12 @@ import { isDirectory, isFile, walkFiles } from '../../utils/fs.js';
 import { normalizePathForProcessing } from '../../utils/path-normalization.js';
 import { mapWorkspaceFileToUniversal } from '../../utils/platform-mapper.js';
 import { isPlatformRootFile } from '../../utils/platform-utils.js';
+import type { Flow } from '../../types/flows.js';
 
 export interface SourceEntry {
   sourcePath: string;
   registryPath: string;
+  flow?: Flow;
 }
 
 /**
@@ -66,7 +68,8 @@ function deriveSourceEntry(absFilePath: string, cwd: string): SourceEntry | null
     const registryPath = [mapping.subdir, mapping.relPath].filter(Boolean).join('/');
     return {
       sourcePath: absFilePath,
-      registryPath
+      registryPath,
+      flow: mapping.flow
     };
   }
 

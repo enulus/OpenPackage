@@ -145,7 +145,7 @@ When an array of patterns is provided:
 { "from": ["config.v2.yaml", "config.yaml"] }
 ```
 
-#### `to` (string | object)
+#### `to` (string | object | switch)
 
 Target file path relative to workspace root.
 
@@ -157,6 +157,21 @@ Target file path relative to workspace root.
 **Recursive target:**
 ```jsonc
 { "to": ".cursor/rules/**/*.mdc" }    // Preserves directory structure
+```
+
+**Switch expression (conditional target):**
+```jsonc
+{
+  "to": {
+    "$switch": {
+      "field": "$$targetRoot",
+      "cases": [
+        { "pattern": "~/", "value": ".config/opencode/command/**/*.md" }
+      ],
+      "default": ".opencode/command/**/*.md"
+    }
+  }
+}
 ```
 
 **Multi-target object:**
@@ -1146,6 +1161,409 @@ packages:
 ```
 
 See [Uninstall](../uninstall/README.md) for complete uninstall behavior.
+
+## Conditional Target Paths with $switch
+
+The `$switch` expression enables conditional target path resolution based on context variables. Inspired by MongoDB's `$switch` aggregation operator, it allows choosing different target paths without duplicating entire flow definitions.
+
+### Basic Syntax
+
+```jsonc
+{
+  "from": "commands/**/*.md",
+  "to": {
+    "$switch": {
+      "field": "$$targetRoot",
+      "cases": [
+        { "pattern": "~/", "value": ".config/opencode/command/**/*.md" }
+      ],
+      "default": ".opencode/command/**/*.md"
+    }
+  }
+}
+```
+
+**Components:**
+- `field`: Context variable to evaluate (use `$$` prefix for variables)
+- `cases`: Array of pattern-value pairs (evaluated in order)
+- `default`: Fallback value if no patterns match (optional)
+
+### Use Case: Home vs Project Installation
+
+OpenCode (and some other editors) use different configuration paths for global (home directory) vs project-local installations:
+
+- **Home directory install** (`targetRoot = "~/"`) → `.config/opencode/`
+- **Project install** (`targetRoot = "/path/to/project"`) → `.opencode/`
+
+**Without `$switch` (verbose duplication):**
+```jsonc
+{
+  "export": [
+    {
+      "from": "commands/**/*.md",
+      "to": ".config/opencode/command/**/*.md",
+      "when": { "$eq": ["$$targetRoot", "~/"] }
+    },
+    {
+      "from": "commands/**/*.md",
+      "to": ".opencode/command/**/*.md",
+      "when": { "$ne": ["$$targetRoot", "~/"] }
+    },
+    // Same duplication for agents, skills, config files...
+  ]
+}
+```
+
+**With `$switch` (clean):**
+```jsonc
+{
+  "export": [
+    {
+      "from": "commands/**/*.md",
+      "to": {
+        "$switch": {
+          "field": "$$targetRoot",
+          "cases": [
+            { "pattern": "~/", "value": ".config/opencode/command/**/*.md" }
+          ],
+          "default": ".opencode/command/**/*.md"
+        }
+      }
+    }
+  ]
+}
+```
+
+### Pattern Matching
+
+#### Exact String Match
+
+```jsonc
+{
+  "$switch": {
+    "field": "$$targetRoot",
+    "cases": [
+      { "pattern": "~/", "value": ".config/app" }
+    ]
+  }
+}
+```
+
+Matches exactly `"~/"` using path-aware comparison (handles trailing slashes).
+
+#### Glob Patterns
+
+```jsonc
+{
+  "$switch": {
+    "field": "$$targetRoot",
+    "cases": [
+      { "pattern": "/home/*", "value": "home-config" },
+      { "pattern": "/opt/*", "value": "opt-config" }
+    ],
+    "default": "default-config"
+  }
+}
+```
+
+Supports minimatch glob patterns (`*`, `**`, `?`, `[...]`).
+
+#### Object Pattern Matching
+
+```jsonc
+{
+  "$switch": {
+    "field": "$$config",
+    "cases": [
+      { "pattern": { "type": "dev", "debug": true }, "value": "dev-debug-mode" },
+      { "pattern": { "type": "dev" }, "value": "dev-mode" }
+    ],
+    "default": "prod-mode"
+  }
+}
+```
+
+Deep equality check for object patterns.
+
+### Evaluation Order
+
+Cases are evaluated in order, **first match wins**:
+
+```jsonc
+{
+  "cases": [
+    { "pattern": "/home/user", "value": "specific" },
+    { "pattern": "/home/*", "value": "general" }
+  ]
+}
+```
+
+For `$$targetRoot = "/home/user"`:
+- First case matches → returns `"specific"`
+- Second case never evaluated
+
+### Available Context Variables
+
+Common variables available in `$switch`:
+
+- `$$targetRoot` - Installation target root (e.g., `"~/"`, `"/project"`)
+- `$$platform` - Current platform name (e.g., `"cursor"`, `"claude"`)
+- `$$source` - Source platform for conversion (e.g., `"claude-plugin"`)
+- Custom variables passed via `--variables` flag
+
+### Default Handling
+
+**With default:**
+```jsonc
+{
+  "$switch": {
+    "field": "$$env",
+    "cases": [
+      { "pattern": "prod", "value": "production-config" }
+    ],
+    "default": "development-config"
+  }
+}
+```
+
+If no cases match, uses default value.
+
+**Without default:**
+```jsonc
+{
+  "$switch": {
+    "field": "$$env",
+    "cases": [
+      { "pattern": "prod", "value": "production-config" }
+    ]
+  }
+}
+```
+
+If no cases match and no default, flow **fails with error**.
+
+### Switch in Both `from` and `to`
+
+Switch expressions work in both directions:
+
+**Export flow (conditional target):**
+```jsonc
+{
+  "from": "commands/**/*.md",
+  "to": {
+    "$switch": {
+      "field": "$$targetRoot",
+      "cases": [
+        { "pattern": "~/", "value": ".config/opencode/command/**/*.md" }
+      ],
+      "default": ".opencode/command/**/*.md"
+    }
+  }
+}
+```
+
+**Import flow (conditional source):**
+```jsonc
+{
+  "from": {
+    "$switch": {
+      "field": "$$targetRoot",
+      "cases": [
+        { "pattern": "~/", "value": ".config/opencode/command/**/*.md" }
+      ],
+      "default": ".opencode/command/**/*.md"
+    }
+  },
+  "to": "commands/**/*.md"
+}
+```
+
+### Complete OpenCode Example
+
+```jsonc
+{
+  "opencode": {
+    "name": "OpenCode",
+    "detection": [".opencode", "AGENTS.md"],
+    "export": [
+      {
+        "from": "commands/**/*.md",
+        "to": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/opencode/command/**/*.md" }
+            ],
+            "default": ".opencode/command/**/*.md"
+          }
+        }
+      },
+      {
+        "from": "agents/**/*.md",
+        "to": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/opencode/agent/**/*.md" }
+            ],
+            "default": ".opencode/agent/**/*.md"
+          }
+        },
+        "map": [
+          {
+            "$pipeline": {
+              "field": "tools",
+              "operations": [
+                { "$arrayToObject": { "value": true } }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "from": "skills/**/*",
+        "to": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/opencode/skill/**/*" }
+            ],
+            "default": ".opencode/skill/**/*"
+          }
+        }
+      },
+      {
+        "from": ["mcp.jsonc", "mcp.json"],
+        "to": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/opencode/opencode.json" }
+            ],
+            "default": ".opencode/opencode.json"
+          }
+        },
+        "merge": "deep"
+      }
+    ],
+    "import": [
+      {
+        "from": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/opencode/command/**/*.md" }
+            ],
+            "default": ".opencode/command/**/*.md"
+          }
+        },
+        "to": "commands/**/*.md"
+      },
+      {
+        "from": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/opencode/agent/**/*.md" }
+            ],
+            "default": ".opencode/agent/**/*.md"
+          }
+        },
+        "to": "agents/**/*.md",
+        "map": [
+          {
+            "$pipeline": {
+              "field": "tools",
+              "operations": [
+                { "$filter": { "match": { "value": true } } },
+                { "$objectToArray": { "extract": "keys" } }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "from": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/opencode/skill/**/*" }
+            ],
+            "default": ".opencode/skill/**/*"
+          }
+        },
+        "to": "skills/**/*"
+      },
+      {
+        "from": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/opencode/opencode.json" }
+            ],
+            "default": ".opencode/opencode.json"
+          }
+        },
+        "to": "mcp.jsonc"
+      }
+    ]
+  }
+}
+```
+
+### Error Handling
+
+**Missing variable:**
+```
+Error: Variable 'unknownVar' not found in flow context
+```
+
+**No match, no default:**
+```
+Error: No matching case in $switch expression for $$targetRoot="/other/path", and no default provided
+```
+
+**Invalid switch structure:**
+```
+Error: Invalid flow: Switch expression must have at least one case
+```
+
+### Best Practices
+
+1. **Always provide a default** unless you want strict matching:
+   ```jsonc
+   { "default": ".opencode/command/**/*.md" }
+   ```
+
+2. **Order cases from specific to general**:
+   ```jsonc
+   {
+     "cases": [
+       { "pattern": "/home/user/special", "value": "special-config" },
+       { "pattern": "/home/user/*", "value": "user-config" },
+       { "pattern": "/home/*", "value": "home-config" }
+     ]
+   }
+   ```
+
+3. **Use meaningful variable names** for custom variables:
+   ```bash
+   opkg install package --variables '{"installMode": "development"}'
+   ```
+
+4. **Document platform-specific patterns** in comments:
+   ```jsonc
+   {
+     // OpenCode uses .config/opencode/ for home installs (XDG convention)
+     "$switch": {
+       "field": "$$targetRoot",
+       "cases": [
+         { "pattern": "~/", "value": ".config/opencode/agent/**/*.md" }
+       ],
+       "default": ".opencode/agent/**/*.md"
+     }
+   }
+   ```
 
 ## Conditional Execution
 

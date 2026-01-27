@@ -10,6 +10,7 @@ import yaml from 'js-yaml';
 import * as TOML from 'smol-toml';
 import { logger } from '../../utils/logger.js';
 import { registerTomlDomainTransforms } from './toml-domain-transforms.js';
+import { serializeMarkdownDocument } from './markdown.js';
 
 /**
  * Transform function interface
@@ -355,14 +356,7 @@ export const bodyTransform: Transform = {
  * Serialize frontmatter and body to markdown
  */
 export function serializeMarkdownWithFrontmatter(frontmatter: any, body: string): string {
-  const frontmatterYaml = yaml.dump(frontmatter, {
-    indent: 2,
-    flowLevel: 1,  // Use compact flow style for arrays
-    lineWidth: -1,
-    noRefs: true,
-  });
-
-  return `---\n${frontmatterYaml}---\n\n${body}`;
+  return serializeMarkdownDocument({ frontmatter, body });
 }
 
 // ============================================================================

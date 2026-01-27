@@ -70,6 +70,10 @@ export function getAllPlatformDirs(cwd?: string): string[] {
 export function getPlatformRootFiles(cwd?: string): Set<string> {
   const rootFiles = new Set(getPlatformRootFileNames(cwd));  // from platforms.ts, excludes AGENTS.md
   rootFiles.add(FILE_PATTERNS.AGENTS_MD);
+  rootFiles.add(FILE_PATTERNS.CLAUDE_MD);
+  rootFiles.add(FILE_PATTERNS.GEMINI_MD);
+  rootFiles.add(FILE_PATTERNS.QWEN_MD);
+  rootFiles.add(FILE_PATTERNS.WARP_MD);
   return rootFiles;
 }
 

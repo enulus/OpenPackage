@@ -192,6 +192,28 @@ function validateOperation(operation: Operation): ValidationResult {
 }
 
 /**
+ * Split a map pipeline into schema operations and pipe operations.
+ *
+ * Convention:
+ * - schema ops (everything except $pipe) operate on structured data
+ * - $pipe ops can convert formats (e.g., json-to-toml) and are often applied later
+ */
+export function splitMapPipeline(pipeline: MapPipeline): { schemaOps: MapPipeline; pipeOps: MapPipeline } {
+  const schemaOps: MapPipeline = [];
+  const pipeOps: MapPipeline = [];
+
+  for (const op of pipeline) {
+    if (op && typeof op === 'object' && '$pipe' in op) {
+      pipeOps.push(op);
+    } else {
+      schemaOps.push(op);
+    }
+  }
+
+  return { schemaOps, pipeOps };
+}
+
+/**
  * Create a map context from file information
  */
 export function createMapContext(options: {

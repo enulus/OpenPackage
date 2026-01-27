@@ -4,22 +4,20 @@ import {
 import { isRootCopyPath } from './platform-root-files.js';
 import { normalizePathForProcessing } from './path-normalization.js';
 import { 
-  getPlatformRootFiles, 
   matchesUniversalPattern,
   isPlatformId 
 } from '../core/platforms.js';
 import { isManifestPath } from './manifest-paths.js';
+import { isPlatformRootFile } from './platform-utils.js';
 
-const ROOT_REGISTRY_FILE_NAMES = getPlatformRootFiles();
 export function normalizeRegistryPath(registryPath: string): string {
   return normalizePathForProcessing(registryPath);
 }
 
 export function isRootRegistryPath(registryPath: string): boolean {
   const normalized = normalizeRegistryPath(registryPath);
-  return ROOT_REGISTRY_FILE_NAMES.some(pattern =>
-    normalized.endsWith(`/${pattern}`) || normalized === pattern
-  );
+  const fileName = normalized.split('/').pop();
+  return !!fileName && isPlatformRootFile(fileName);
 }
 
 export function isSkippableRegistryPath(registryPath: string, cwd?: string): boolean {

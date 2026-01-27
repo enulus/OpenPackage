@@ -68,7 +68,7 @@ export function dumpYaml(data: any): string {
   return yaml
     .dump(data, {
       indent: 2,
-      flowLevel: 1,  // Use flow style for arrays and nested structures
+      flowLevel: -1,  // Use block style for all structures (better readability)
       sortKeys: false,
       quotingType: '"',
       lineWidth: -1  // Disable line wrapping to prevent folded scalar style (>-)

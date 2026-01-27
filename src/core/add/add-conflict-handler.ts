@@ -1,6 +1,5 @@
-import { dirname, join } from 'path';
+import { basename, dirname, extname, join, relative as pathRelative } from 'path';
 
-import { DIR_PATTERNS } from '../../constants/index.js';
 import type { PackageFile } from '../../types/index.js';
 import { ensureDir, exists, readTextFile, writeTextFile } from '../../utils/fs.js';
 import { safePrompts } from '../../utils/prompts.js';
@@ -8,6 +7,9 @@ import { UserCancellationError } from '../../utils/errors.js';
 import { logger } from '../../utils/logger.js';
 import type { SourceEntry } from './source-collector.js';
 import type { AddPackageContext } from './add-context.js';
+import { applyMapPipeline, createMapContext, splitMapPipeline } from '../flows/map-pipeline/index.js';
+import { defaultTransformRegistry } from '../flows/flow-transforms.js';
+import { parseMarkdownDocument, serializeMarkdownDocument } from '../flows/markdown.js';
 
 type ConflictDecision = 'keep-existing' | 'overwrite';
 
@@ -17,6 +19,50 @@ type ConflictDecision = 'keep-existing' | 'overwrite';
  */
 function resolveTargetPath(packageContext: AddPackageContext, registryPath: string): string {
   return join(packageContext.packageRootDir, registryPath);
+}
+
+function transformMarkdownWithFlowMap(
+  raw: string,
+  entry: SourceEntry,
+  workspaceRoot: string
+): { transformed: boolean; output: string } {
+  const flow = entry.flow;
+  if (!flow?.map || flow.map.length === 0) {
+    return { transformed: false, output: raw };
+  }
+
+  // Only transform markdown for now (the reported regression is agent markdown frontmatter)
+  if (extname(entry.sourcePath).toLowerCase() !== '.md') {
+    return { transformed: false, output: raw };
+  }
+
+  // Parse markdown frontmatter leniently: if frontmatter is invalid, treat as plain markdown
+  const parsed = parseMarkdownDocument(raw, { lenient: true });
+  if (!parsed.frontmatter) {
+    return { transformed: false, output: raw };
+  }
+
+  // Apply flow.map to frontmatter, same as flow executor does for markdown
+  const mapContext = createMapContext({
+    filename: basename(entry.sourcePath, extname(entry.sourcePath)),
+    dirname: basename(dirname(entry.sourcePath)),
+    path: pathRelative(workspaceRoot, entry.sourcePath).replace(/\\/g, '/'),
+    ext: extname(entry.sourcePath),
+  });
+
+  // Split schema vs pipe ops (match flow-executor semantics)
+  const { schemaOps, pipeOps } = splitMapPipeline(flow.map);
+
+  let nextFrontmatter = parsed.frontmatter;
+  if (schemaOps.length > 0) {
+    nextFrontmatter = applyMapPipeline(nextFrontmatter, schemaOps as any, mapContext, defaultTransformRegistry);
+  }
+  if (pipeOps.length > 0) {
+    nextFrontmatter = applyMapPipeline(nextFrontmatter, pipeOps as any, mapContext, defaultTransformRegistry);
+  }
+
+  const output = serializeMarkdownDocument({ frontmatter: nextFrontmatter, body: parsed.body });
+  return { transformed: true, output };
 }
 
 export async function copyFilesWithConflictResolution(
@@ -31,12 +77,14 @@ export async function copyFilesWithConflictResolution(
     const destination = resolveTargetPath(packageContext, entry.registryPath);
 
     const sourceContent = await readTextFile(entry.sourcePath);
+    const transformed = transformMarkdownWithFlowMap(sourceContent, entry, process.cwd());
+    const contentToWrite = transformed.output;
     const destExists = await exists(destination);
 
     if (destExists) {
       const existingContent = await readTextFile(destination).catch(() => '');
 
-      if (existingContent === sourceContent) {
+      if (existingContent === contentToWrite) {
         logger.debug(`Skipping unchanged file: ${entry.registryPath}`);
         continue;
       }
@@ -49,11 +97,11 @@ export async function copyFilesWithConflictResolution(
     }
 
     await ensureDir(dirname(destination));
-    await writeTextFile(destination, sourceContent);
+    await writeTextFile(destination, contentToWrite);
 
     changedFiles.push({
       path: entry.registryPath,
-      content: sourceContent,
+      content: contentToWrite,
       encoding: 'utf8'
     });
   }
