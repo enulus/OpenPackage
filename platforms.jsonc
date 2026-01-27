@@ -767,9 +767,9 @@
           "$switch": {
             "field": "$$targetRoot",
             "cases": [
-              { "pattern": "~/", "value": ".config/opencode/command/**/*.md" }
+              { "pattern": "~/", "value": ".config/opencode/commands/**/*.md" }
             ],
-            "default": ".opencode/command/**/*.md"
+            "default": ".opencode/commands/**/*.md"
           }
         }
       },
@@ -779,9 +779,9 @@
           "$switch": {
             "field": "$$targetRoot",
             "cases": [
-              { "pattern": "~/", "value": ".config/opencode/agent/**/*.md" }
+              { "pattern": "~/", "value": ".config/opencode/agents/**/*.md" }
             ],
-            "default": ".opencode/agent/**/*.md"
+            "default": ".opencode/agents/**/*.md"
           }
         },
         "map": [
@@ -806,9 +806,9 @@
           "$switch": {
             "field": "$$targetRoot",
             "cases": [
-              { "pattern": "~/", "value": ".config/opencode/skill/**/*" }
+              { "pattern": "~/", "value": ".config/opencode/skills/**/*" }
             ],
-            "default": ".opencode/skill/**/*"
+            "default": ".opencode/skills/**/*"
           }
         }
       },
@@ -832,9 +832,9 @@
           "$switch": {
             "field": "$$targetRoot",
             "cases": [
-              { "pattern": "~/", "value": ".config/opencode/command/**/*.md" }
+              { "pattern": "~/", "value": ".config/opencode/commands/**/*.md" }
             ],
-            "default": ".opencode/command/**/*.md"
+            "default": ".opencode/commands/**/*.md"
           }
         },
         "to": "commands/**/*.md"
@@ -844,9 +844,9 @@
           "$switch": {
             "field": "$$targetRoot",
             "cases": [
-              { "pattern": "~/", "value": ".config/opencode/agent/**/*.md" }
+              { "pattern": "~/", "value": ".config/opencode/agents/**/*.md" }
             ],
-            "default": ".opencode/agent/**/*.md"
+            "default": ".opencode/agents/**/*.md"
           }
         },
         "to": "agents/**/*.md",
@@ -873,9 +873,9 @@
           "$switch": {
             "field": "$$targetRoot",
             "cases": [
-              { "pattern": "~/", "value": ".config/opencode/skill/**/*" }
+              { "pattern": "~/", "value": ".config/opencode/skills/**/*" }
             ],
-            "default": ".opencode/skill/**/*"
+            "default": ".opencode/skills/**/*"
           }
         },
         "to": "skills/**/*"
