@@ -763,15 +763,28 @@
     "export": [
       {
         "from": "commands/**/*.md",
-        "to": ".opencode/command/**/*.md"
+        "to": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/opencode/command/**/*.md" }
+            ],
+            "default": ".opencode/command/**/*.md"
+          }
+        }
       },
       {
         "from": "agents/**/*.md",
-        "to": ".opencode/agent/**/*.md",
+        "to": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/opencode/agent/**/*.md" }
+            ],
+            "default": ".opencode/agent/**/*.md"
+          }
+        },
         "map": [
-          // Remove name field (derived from filename)
-          { "$unset": "name" },
-
           // 1. Transform tools: [read, write, bash] → { read: true, write: true, bash: true }
           {
             "$pipeline": {
@@ -789,21 +802,53 @@
       },
       {
         "from": "skills/**/*",
-        "to": ".opencode/skill/**/*"
+        "to": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/opencode/skill/**/*" }
+            ],
+            "default": ".opencode/skill/**/*"
+          }
+        }
       },
       {
         "from": ["mcp.jsonc", "mcp.json"],
-        "to": ".opencode/opencode.json",
+        "to": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/opencode/opencode.json" }
+            ],
+            "default": ".opencode/opencode.json"
+          }
+        },
         "merge": "deep"
       }
     ],
     "import": [
       {
-        "from": ".opencode/command/**/*.md",
+        "from": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/opencode/command/**/*.md" }
+            ],
+            "default": ".opencode/command/**/*.md"
+          }
+        },
         "to": "commands/**/*.md"
       },
       {
-        "from": ".opencode/agent/**/*.md",
+        "from": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/opencode/agent/**/*.md" }
+            ],
+            "default": ".opencode/agent/**/*.md"
+          }
+        },
         "to": "agents/**/*.md",
         "map": [
           // 1. Reverse tools transformation: { read: true, write: false, bash: true } → [read, bash]
@@ -824,11 +869,27 @@
         ]
       },
       {
-        "from": ".opencode/skill/**/*",
+        "from": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/opencode/skill/**/*" }
+            ],
+            "default": ".opencode/skill/**/*"
+          }
+        },
         "to": "skills/**/*"
       },
       {
-        "from": [".opencode/opencode.json", ".opencode/opencode.jsonc"],
+        "from": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/opencode/opencode.json" }
+            ],
+            "default": ".opencode/opencode.json"
+          }
+        },
         "to": "mcp.jsonc"
       }
     ]

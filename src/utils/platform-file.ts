@@ -102,6 +102,10 @@ export function getPlatformSpecificFilename(universalPath: string, platform: Pla
   // For now, check export flows for extension mappings (package → workspace)
   if (platformDef.export && platformDef.export.length > 0) {
     for (const flow of platformDef.export) {
+      // Skip switch expressions
+      if (typeof flow.from === 'object' && '$switch' in flow.from) {
+        continue;
+      }
       // Check if this flow matches the universal path
       // For array patterns, use the first pattern
       const fromPattern = Array.isArray(flow.from) ? flow.from[0] : flow.from;

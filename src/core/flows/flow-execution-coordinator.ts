@@ -6,7 +6,7 @@
  */
 
 import { join, dirname, basename, relative, extname } from 'path';
-import type { Flow, FlowContext, FlowResult } from '../../types/flows.js';
+import type { Flow, FlowContext, FlowResult, SwitchExpression } from '../../types/flows.js';
 import type { FlowExecutor } from '../../types/flows.js';
 import type { Platform } from '../platforms.js';
 import type { WorkspaceIndexFileMapping } from '../../types/workspace-index.js';
@@ -19,6 +19,7 @@ import {
 import { resolveRecursiveGlobTargetRelativePath } from '../../utils/glob-target-mapping.js';
 import { logger } from '../../utils/logger.js';
 import { stripPlatformSuffixFromFilename } from './platform-suffix-handler.js';
+import { resolveSwitchExpression } from './switch-resolver.js';
 
 /**
  * Execution result with enhanced metadata
@@ -156,6 +157,17 @@ interface SourceProcessingResult {
 }
 
 /**
+ * Check if a value is a switch expression
+ */
+function isSwitchExpression(value: any): value is SwitchExpression {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    '$switch' in value
+  );
+}
+
+/**
  * Process a single source file through a flow
  * 
  * @param flow - Flow to execute
@@ -188,10 +200,17 @@ async function processSourceFile(
     }
   };
   
-  // Resolve target path
-  const rawToPattern = typeof flow.to === 'string' 
-    ? flow.to 
-    : Object.keys(flow.to)[0] ?? '';
+  // Resolve target path - handle switch expressions
+  let rawToPattern: string;
+  if (typeof flow.to === 'string') {
+    rawToPattern = flow.to;
+  } else if (isSwitchExpression(flow.to)) {
+    // Resolve switch expression to concrete target path
+    rawToPattern = resolveSwitchExpression(flow.to, sourceContext);
+  } else {
+    // Multi-target flows - use first target
+    rawToPattern = Object.keys(flow.to)[0] ?? '';
+  }
   const resolvedToPattern = resolvePattern(rawToPattern, sourceContext, capturedName);
   const targetAbs = resolveTargetFromGlob(
     sourceAbs,

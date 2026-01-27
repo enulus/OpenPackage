@@ -8,7 +8,7 @@
 import { promises as fs } from 'fs';
 import { join, dirname, basename, relative } from 'path';
 import { minimatch } from 'minimatch';
-import type { Flow, FlowContext } from '../../types/flows.js';
+import type { Flow, FlowContext, SwitchExpression } from '../../types/flows.js';
 import { exists } from '../../utils/fs.js';
 import { getAllPlatforms } from '../platforms.js';
 import type { Platform } from '../platforms.js';
@@ -131,10 +131,14 @@ export async function discoverFlowSources(
  * @returns Resolved pattern
  */
 export function resolvePattern(
-  pattern: string,
+  pattern: string | SwitchExpression,
   context: FlowContext,
   capturedName?: string
 ): string {
+  // Handle switch expressions
+  if (typeof pattern === 'object' && '$switch' in pattern) {
+    throw new Error('Cannot resolve SwitchExpression in resolvePattern - expression must be resolved first');
+  }
   return pattern.replace(/{(\w+)}/g, (match, key) => {
     // If capturedName is provided and this is {name}, use the captured value
     if (key === 'name' && capturedName !== undefined) {
@@ -184,10 +188,13 @@ export function extractCapturedName(sourcePath: string, pattern: string): string
 /**
  * Get the first pattern from a flow's from field
  * 
- * @param from - Flow from field (string or array)
+ * @param from - Flow from field (string, array, or switch expression)
  * @returns First pattern
  */
-export function getFirstFromPattern(from: string | string[]): string {
+export function getFirstFromPattern(from: string | string[] | SwitchExpression): string {
+  if (typeof from === 'object' && '$switch' in from) {
+    throw new Error('Cannot get first pattern from SwitchExpression - expression must be resolved first');
+  }
   return Array.isArray(from) ? from[0] : from;
 }
 

@@ -88,6 +88,10 @@ function findReverseFlow(
 
   for (const flow of allImportFlows) {
     // Import flows use 'from' to match workspace files
+    // Skip switch expressions (they can't be used for matching in save)
+    if (typeof flow.from === 'object' && '$switch' in flow.from) {
+      continue;
+    }
     // For array patterns in 'from', try each pattern
     const fromPatterns = Array.isArray(flow.from) ? flow.from : [flow.from];
 

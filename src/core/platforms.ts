@@ -18,8 +18,9 @@ import { mapPlatformFileToUniversal } from "../utils/platform-mapper.js"
 import { parseUniversalPath } from "../utils/platform-file.js"
 import { readJsoncFileSync, readJsoncOrJson } from "../utils/jsonc.js"
 import * as os from "os"
-import type { Flow } from "../types/flows.js"
+import type { Flow, SwitchExpression } from "../types/flows.js"
 import type { GlobalFlowsConfig } from "../types/platform-flows.js"
+import { validateSwitchExpression } from "./flows/switch-resolver.js"
 import { 
   matchesAnyPattern, 
   extractSubdirectoriesFromPatterns 
@@ -297,6 +298,17 @@ function validateGlobalFlowsConfig(config: GlobalFlowsConfig): string[] {
 /**
  * Validate an array of flows
  */
+/**
+ * Check if a value is a switch expression
+ */
+function isSwitchExpression(value: any): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    '$switch' in value
+  );
+}
+
 function validateFlows(flows: Flow[], context: string): string[] {
   const errors: string[] = []
   
@@ -306,8 +318,8 @@ function validateFlows(flows: Flow[], context: string): string[] {
     // Required fields
     if (!flow.from) {
       errors.push(`${context}, flows[${i}]: Missing 'from' field`)
-    } else if (typeof flow.from !== 'string' && !Array.isArray(flow.from)) {
-      errors.push(`${context}, flows[${i}]: 'from' must be string or array of strings`)
+    } else if (typeof flow.from !== 'string' && !Array.isArray(flow.from) && !isSwitchExpression(flow.from)) {
+      errors.push(`${context}, flows[${i}]: 'from' must be string, array of strings, or $switch expression`)
     } else if (typeof flow.from === 'string' && flow.from.trim() === '') {
       errors.push(`${context}, flows[${i}]: 'from' cannot be empty`)
     } else if (Array.isArray(flow.from) && (flow.from.length === 0 || flow.from.some(p => typeof p !== 'string' || p.trim() === ''))) {
@@ -318,6 +330,14 @@ function validateFlows(flows: Flow[], context: string): string[] {
       errors.push(`${context}, flows[${i}]: Missing 'to' field`)
     } else if (typeof flow.to !== 'string' && typeof flow.to !== 'object') {
       errors.push(`${context}, flows[${i}]: 'to' must be string or object`)
+    } else if (isSwitchExpression(flow.to)) {
+      // Validate switch expression structure
+      const switchValidation = validateSwitchExpression(flow.to as any);
+      if (!switchValidation.valid) {
+        switchValidation.errors.forEach(err => {
+          errors.push(`${context}, flows[${i}]: ${err}`);
+        });
+      }
     }
     
     // Validate merge strategy
@@ -447,6 +467,10 @@ function getPlatformsState(cwd?: string | null): PlatformsState {
     // Collect all 'from' patterns from export flows
     if (def.export && def.export.length > 0) {
       for (const flow of def.export) {
+        // Skip switch expressions
+        if (typeof flow.from === 'object' && '$switch' in flow.from) {
+          continue;
+        }
         // For array patterns, add all patterns
         if (Array.isArray(flow.from)) {
           flow.from.forEach((p: string) => universalPatterns.add(p));
@@ -464,6 +488,10 @@ function getPlatformsState(cwd?: string | null): PlatformsState {
   // Add patterns from global export flows
   if (globalExportFlows && globalExportFlows.length > 0) {
     for (const flow of globalExportFlows) {
+      // Skip switch expressions
+      if (typeof flow.from === 'object' && '$switch' in flow.from) {
+        continue;
+      }
       // For array patterns, add all patterns
       if (Array.isArray(flow.from)) {
         flow.from.forEach((p: string) => universalPatterns.add(p));
@@ -673,10 +701,28 @@ export function deriveRootDirFromFlows(definition: PlatformDefinition): string {
     return definition.rootDir;
   }
   
+  // Helper to extract path from switch expression (uses default if available)
+  const extractPathFromSwitch = (switchExpr: any): string | null => {
+    if (isSwitchExpression(switchExpr)) {
+      // Use default if available, otherwise first case value
+      return switchExpr.$switch.default || (switchExpr.$switch.cases[0]?.value);
+    }
+    return null;
+  };
+  
   // Try to extract from export flows
   if (definition.export && definition.export.length > 0) {
     for (const flow of definition.export) {
-      const toPattern = typeof flow.to === 'string' ? flow.to : Object.keys(flow.to)[0];
+      let toPattern: string | null = null;
+      
+      if (typeof flow.to === 'string') {
+        toPattern = flow.to;
+      } else if (isSwitchExpression(flow.to)) {
+        toPattern = extractPathFromSwitch(flow.to);
+      } else {
+        toPattern = Object.keys(flow.to)[0];
+      }
+      
       if (toPattern) {
         // Extract root directory from pattern (e.g., ".claude/rules/**/*.md" -> ".claude")
         const match = toPattern.match(/^(\.[^/]+)/);
@@ -690,7 +736,16 @@ export function deriveRootDirFromFlows(definition: PlatformDefinition): string {
   // Try to extract from import flows
   if (definition.import && definition.import.length > 0) {
     for (const flow of definition.import) {
-      const fromPattern = Array.isArray(flow.from) ? flow.from[0] : flow.from;
+      let fromPattern: string | null = null;
+      
+      if (typeof flow.from === 'string') {
+        fromPattern = flow.from;
+      } else if (Array.isArray(flow.from)) {
+        fromPattern = flow.from[0];
+      } else if (isSwitchExpression(flow.from)) {
+        fromPattern = extractPathFromSwitch(flow.from);
+      }
+      
       if (fromPattern) {
         // Extract root directory from pattern
         const match = fromPattern.match(/^(\.[^/]+)/);
@@ -768,6 +823,10 @@ function buildDirectoryPaths(
   // Build from export flows (the flows that define workspace structure)
   if (definition.export && definition.export.length > 0) {
     for (const flow of definition.export) {
+      // Skip switch expressions
+      if (typeof flow.from === 'object' && '$switch' in flow.from) {
+        continue;
+      }
       // Extract universal subdir from 'from' pattern
       // For array patterns, use the first pattern
       const fromPattern = Array.isArray(flow.from) ? flow.from[0] : flow.from;
@@ -995,6 +1054,10 @@ export function getPlatformSubdirExts(
     const extensions = new Set<string>()
     
     for (const flow of definition.export) {
+      // Skip switch expressions
+      if (typeof flow.from === 'object' && '$switch' in flow.from) {
+        continue;
+      }
       // Check if this flow matches the universal subdir
       // For array patterns, use the first pattern
       const fromPattern = Array.isArray(flow.from) ? flow.from[0] : flow.from;

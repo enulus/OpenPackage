@@ -86,6 +86,10 @@
                 "type": "string"
               },
               "minItems": 1
+            },
+            {
+              "$ref": "#/definitions/switchExpression",
+              "description": "Switch expression for conditional source path resolution"
             }
           ]
         },
@@ -101,6 +105,10 @@
               "additionalProperties": {
                 "$ref": "#/definitions/multiTargetFlowConfig"
               }
+            },
+            {
+              "$ref": "#/definitions/switchExpression",
+              "description": "Switch expression for conditional target path resolution"
             }
           ]
         },
@@ -212,6 +220,58 @@
       }
     },
 
+    "switchExpression": {
+      "type": "object",
+      "description": "Switch expression for conditional target path resolution (MongoDB $switch inspired)",
+      "required": ["$switch"],
+      "properties": {
+        "$switch": {
+          "type": "object",
+          "required": ["field", "cases"],
+          "properties": {
+            "field": {
+              "type": "string",
+              "description": "Context variable to evaluate (e.g., '$$targetRoot')"
+            },
+            "cases": {
+              "type": "array",
+              "description": "Pattern cases to match (evaluated in order, first match wins)",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/definitions/switchCase"
+              }
+            },
+            "default": {
+              "type": "string",
+              "description": "Optional default value if no pattern matches"
+            }
+          }
+        }
+      }
+    },
+    "switchCase": {
+      "type": "object",
+      "description": "Switch case for pattern matching",
+      "required": ["pattern", "value"],
+      "properties": {
+        "pattern": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "String pattern for equality/glob matching"
+            },
+            {
+              "type": "object",
+              "description": "Object pattern for shape matching"
+            }
+          ]
+        },
+        "value": {
+          "type": "string",
+          "description": "Target path to use if pattern matches"
+        }
+      }
+    },
     "condition": {
       "type": "object",
       "description": "Conditions for flow execution",
