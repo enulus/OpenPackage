@@ -399,7 +399,12 @@ export class DefaultFlowExecutor implements FlowExecutor {
     targetPath: string,
     context: FlowContext
   ): Promise<Omit<FlowResult, 'executionTime'>> {
-    // Step 1: Load source file
+    // Check if we can skip parsing for pass-through flows
+    if (!this.needsParsing(flow, sourcePath, targetPath, context)) {
+      return await this.executePassThroughCopy(flow, sourcePath, targetPath, context);
+    }
+
+    // Step 1: Load source file with parsing
     const sourceContent = await this.loadSourceFile(sourcePath, context);
 
     return this.executePipelineWithContent(flow, sourceContent, sourcePath, targetPath, context);
@@ -614,6 +619,98 @@ export class DefaultFlowExecutor implements FlowExecutor {
 
     const serialized = this.serializeTargetContent(content, targetFormat);
     await fsUtils.writeTextFile(filePath, serialized);
+  }
+
+  /**
+   * Determine if parsing is needed for this flow
+   * Returns false for simple pass-through copies with no transformations
+   */
+  private needsParsing(flow: Flow, sourcePath: string, targetPath: string, context: FlowContext): boolean {
+    // Check for content manipulation operations
+    if (flow.map || flow.pick || flow.omit || flow.path || flow.embed) {
+      return true;
+    }
+
+    // Check for merge operations that need parsing
+    if (flow.merge) {
+      if (flow.merge === 'deep' || flow.merge === 'shallow') {
+        return true;
+      }
+      // 'composite' and 'replace' don't need parsing
+    }
+
+    // Check for format conversion
+    const sourceExt = path.extname(sourcePath).toLowerCase();
+    const targetExt = path.extname(targetPath).toLowerCase();
+    
+    // If extensions differ and source is a structured format, need to parse for conversion
+    if (sourceExt !== targetExt) {
+      const structuredFormats = ['.json', '.jsonc', '.yaml', '.yml', '.toml'];
+      if (structuredFormats.includes(sourceExt)) {
+        return true;
+      }
+    }
+
+    // Check for markdown with platform-specific frontmatter overrides
+    if ((sourceExt === '.md' || sourceExt === '.markdown') && 
+        context.platform && 
+        context.direction === 'install') {
+      // Need to parse for frontmatter override merging
+      return true;
+    }
+
+    // Simple pass-through - no parsing needed
+    return false;
+  }
+
+  /**
+   * Execute a pass-through copy without parsing
+   * Used for simple file copies with no transformations
+   */
+  private async executePassThroughCopy(
+    flow: Flow,
+    sourcePath: string,
+    targetPath: string,
+    context: FlowContext
+  ): Promise<Omit<FlowResult, 'executionTime'>> {
+    const warnings: string[] = [];
+
+    try {
+      // Check if target exists and handle merge strategy
+      const targetExists = await fsUtils.exists(targetPath);
+      
+      if (targetExists && flow.merge && flow.merge !== 'replace') {
+        // If merge strategy other than replace, we need to parse after all
+        // This is a safety check - needsParsing should have caught this
+        logger.warn(`Pass-through copy attempted with merge strategy '${flow.merge}' - falling back to parsed pipeline`);
+        const sourceContent = await this.loadSourceFile(sourcePath, context);
+        return this.executePipelineWithContent(flow, sourceContent, sourcePath, targetPath, context);
+      }
+
+      // Simple byte copy
+      if (!context.dryRun) {
+        await fsUtils.ensureDir(path.dirname(targetPath));
+        const content = await fs.readFile(sourcePath);
+        await fs.writeFile(targetPath, content);
+      }
+
+      return {
+        source: sourcePath,
+        target: targetPath,
+        success: true,
+        transformed: false,
+        warnings: warnings.length > 0 ? warnings : undefined,
+      };
+    } catch (error) {
+      return {
+        source: sourcePath,
+        target: targetPath,
+        success: false,
+        transformed: false,
+        error: error instanceof Error ? error : new Error(String(error)),
+        warnings: warnings.length > 0 ? warnings : undefined,
+      };
+    }
   }
 
   /**
