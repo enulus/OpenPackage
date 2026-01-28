@@ -554,6 +554,33 @@ export function findPluginInMarketplace(
 }
 
 /**
+ * Validate that requested plugin names exist in marketplace.
+ *
+ * @param marketplace - Parsed marketplace manifest
+ * @param requestedPlugins - Array of plugin names to validate
+ * @returns Object with valid and invalid plugin name arrays
+ */
+export function validatePluginNames(
+  marketplace: MarketplaceManifest,
+  requestedPlugins: string[]
+): { valid: string[]; invalid: string[] } {
+  const availableNames = new Set(marketplace.plugins.map(p => p.name));
+
+  const valid: string[] = [];
+  const invalid: string[] = [];
+
+  for (const name of requestedPlugins) {
+    if (availableNames.has(name)) {
+      valid.push(name);
+    } else {
+      invalid.push(name);
+    }
+  }
+
+  return { valid, invalid };
+}
+
+/**
  * Display installation summary.
  */
 function displayInstallationSummary(

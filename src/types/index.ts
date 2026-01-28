@@ -174,6 +174,11 @@ export interface InstallOptions {
   conflictDecisions?: Record<string, 'keep-both' | 'overwrite' | 'skip'>;
   resolutionMode?: 'default' | 'remote-primary' | 'local-only';
   global?: boolean;
+  /**
+   * Specific plugins to install from a marketplace (bypasses interactive selection).
+   * Comma-separated or array of plugin names.
+   */
+  plugins?: string[];
 }
 
 export interface UninstallOptions {

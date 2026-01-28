@@ -123,6 +123,48 @@ Users are presented with an interactive selection prompt:
 Select plugins to install (space to select, enter to confirm):
 ```
 
+#### Non-Interactive Plugin Selection
+
+For automated environments (CI/CD, scripts), use the `--plugins` flag to bypass interactive selection:
+
+```bash
+# Install specific plugins by name
+opkg install github:company/marketplace --plugins code-formatter,deployment-tools
+
+# Short flag
+opkg install github:company/marketplace -p code-formatter
+
+# With whitespace (shell quoting)
+opkg install github:company/marketplace --plugins "code-formatter, deployment-tools"
+```
+
+**Behavior**:
+
+1. **Validation**: Plugin names are validated against the marketplace manifest
+2. **Error on invalid**: If any plugin name doesn't exist, installation fails with helpful error:
+   ```
+   Error: The following plugins were not found in marketplace 'company-tools':
+     - invalid-plugin
+     - typo-plugin
+
+   Available plugins: code-formatter, deployment-tools, commit-hooks
+   ```
+3. **Deduplication**: Duplicate plugin names are automatically removed
+4. **Non-marketplace warning**: If `--plugins` is used with a non-marketplace source, a warning is shown and the flag is ignored
+
+**Implementation**:
+
+```typescript
+// Parse comma-separated plugin names
+function parsePluginsOption(value: string | undefined): string[] | undefined;
+
+// Validate plugin names against marketplace
+function validatePluginNames(
+  marketplace: MarketplaceManifest,
+  requestedPlugins: string[]
+): { valid: string[]; invalid: string[] };
+```
+
 #### Per-Plugin Installation
 
 Each selected plugin is installed independently based on its source type:
