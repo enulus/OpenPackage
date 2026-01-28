@@ -29,64 +29,88 @@
 
 # OpenPackage
 
-OpenPackage turns your AI coding setups into reusable modules that anyone can instantly install to any platform, any codebase, ensuring consistent workflows across projects and teams.
+OpenPackage enables simple, modular management of coding agent configs, providing unified installation, management, and packaging of rules, commands, agents, skills, and MCPs for any platform, any codebase.
 
 ## Why OpenPackage?
 
-Modern AI coding tools are powerful, but lack organization, reusability, and efficiency.
-- Rules, commands, subagents, and skills scattered across multiple projects.
-- Familiar workflows rebuilt for each project, incompatible between AI coding platforms.
-- Specs across individuals and codebases, diverging, unversioned, and incohesive.
+Modern AI coding tools are powerful and efficient when rules, commands, subagents, and skills are properly setup.  
+Unfortunately, these files remain difficult to organize and manage.  
 
-OpenPackage takes care of cross-platform conversions, config composition, and portability, freeing you to build more, faster.
+OpenPackage provides a centralized and universal interface for installing, uninstalling, and packaging coding agent config files for simplified management and distribution.
 
-- Install & sync pre-built workflows to speed up coding. No more reinventing the wheel.
-- Reuse rules, slash commands, and skills across multiple codebases and platforms.
-- Share and compose packages together to create powerful workflows that continuously evolve.
+- **Simplified config management** - Install & uninstall rules, commands, agents, skills  and MCPs with a single command
+- **Consistent dependencies** - Declare and package sets of config files for organization and reuse
+- **Universal compatability** - Built in cross-platform conversions and install target resolutions
+- **Community driven** - Compose packages together to create powerful workflows that continuously evolve
 
 ## Use cases
 
-- Install Claude Code Plugins to any coding platform
-- Sync specs, rules, commands, agents, skills, and MCPs across platforms
+- Install Agents, Skills, and Claude Plugins to any coding platform
+- Sync rules, commands, agents, skills, and MCPs across platforms
 - Reuse files and configs across multiple codebases
-- Modular management of configs and specs
+- Simplified, modular management and install/uninstall of configs and specs
 
 ## How it works
 
-At its core, OpenPackage is a lightweight CLI tool for creating versioned, AI coding platform agnostic packages, each contaning sets of coding config files and specs for simplified installs, uninstalls, and distribution.  
+At its core, OpenPackage is a lightweight CLI package manager that performs installs and uninstalls of config files, with the ability to keep track of file sources and dependencies, plus packaging capabilities.
 
-It's basically Claude Code Plugins, but universal, more powerful, and open source.
+It's basically a much more powerful, universal, and open source version of Claude Code Plugins.
 
-1. Declare a package
-2. Add rules, commands, subagents, skills, mcp configs, specs, docs etc.
-3. Install and sync to multiple codebases
-
-## Quick start
-
-### Install
+## Install OpenPackage
 
 npm
 ```bash
 npm install -g opkg 
 ```
 
-### Install packages
+## Quick start
+
+### Install resources
+
 ```bash title="Terminal"
-opkg install <package>
+opkg install <resource>
 ```  
-Installs all files from a package into the codebase at cwd, formatted and converted to per platform conventions and into their respective dirs.
+Installs all files from a specified resource into the codebase at cwd, formatted and converted to per platform conventions and into their respective dirs.
 
-The install command supports various package sources:
+#### Install packages (OpenPackage packages, Claude plugins)
+
 ```bash title="Terminal"
-opkg install essentials               # Local/remote registry
-opkg install ../packages/essentials/  # Local path
+# Packages or Claude Code plugins hosted on GitHub
+opkg install gh@<user>/<repo>
 
-# GitHub package repo
-opkg install git:https://github.com/enulus/awesome-openpackage.git    
+# Packages hosted on OpenPackage
+opkg install @<user>/<repo>
 
-# GitHub Claude Code Plugins marketplace          
-opkg install github:anthropics/claude-code
+# GitHub URLs
+opkg install https://github.com/<user>/<repo>
+
+# Local path to package or Claude Code plugin
+opkg install <path-to-dir>
+
+# Examples
+opkg install gh@anthropics/claude-code
+opkg install https://github.com/enulus/awesome-openpackage
+opkg install https://github.com/anthropics/claude-code
+opkg install ../packages/essentials/
 ```  
+
+#### Install resources (individual rules, commands, agents, and skills)
+
+```bash title="Terminal"
+# Packages or Claude Code plugins hosted on GitHub
+opkg install gh@<user>/<repo> --plugins <plugin-name>
+
+# GitHub URLs
+opkg install https://github.com/<user>/<repo>/<path-to-resource>
+
+# Examples
+opkg install gh@anthropics/claude-code --plugins code-review
+opkg install gh@vercel-labs/agent-skills --skills react-best-practices
+opkg install https://github.com/anthropics/claude-code/tree/main/plugins/code-review
+opkg install https://github.com/vercel-labs/agent-skills/tree/main/skills/react-best-practices
+```  
+
+#### Options
 
 Use the `--global` (or `-g`) option to install files to user scope:
 ```bash title="Terminal"
@@ -94,10 +118,10 @@ Use the `--global` (or `-g`) option to install files to user scope:
 opkg install github:anthropics/claude-code -g
 ```  
 
-### Show installed packages and files
+### List installed resources
 ```bash title="Terminal"
-opkg status             # Lists packages installed to workspace at cwd
-opkg status <package>   # Lists installed files for specified package
+opkg list             # Lists resources installed to workspace at cwd
+opkg list <package>   # Lists installed files for specified resource
 ```  
 Use the status command to show an overview of packages and files installed.
 
@@ -110,7 +134,7 @@ Removes all files for a package from the codebase at cwd.
 > [!TIP]  
 > Learn more by heading over to the [official docs](https://openpackage.dev/docs).
 
-### Compose a package
+### Compose packages
 
 ```bash title="Terminal"
 opkg new <package>
