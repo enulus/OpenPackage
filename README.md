@@ -95,13 +95,13 @@ opkg install https://gitlab.com/user/repo.git             # GitLab
 opkg install https://example.com/repo.git#v1.0.0          # With version tag
 ```  
 
-For marketplaces, use `--plugins` (or `-p`) to install specific plugins non-interactively:
+For marketplaces, use `--plugins` to install specific plugins non-interactively:
 ```bash title="Terminal"
 # Install specific plugins by name (bypasses interactive selection)
-opkg install github:anthropics/claude-code --plugins plugin1,plugin2
+opkg install gh@anthropics/claude-code --plugins plugin1 plugin2
 
-# Short flag with multiple plugins
-opkg install github:user/marketplace -p "plugin-a, plugin-b, plugin-c"
+# Multiple plugins with space separation
+opkg install gh@user/marketplace --plugins plugin-a plugin-b plugin-c
 ```
 
 Use the `--global` (or `-g`) option to install files to user scope:

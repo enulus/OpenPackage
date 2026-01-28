@@ -48,8 +48,8 @@ Plugins can be installed from multiple source types:
 
 1. **Git repository**:
    ```bash
-   opkg install github:owner/plugin-repo
-   opkg install git:https://gitlab.com/team/plugin.git
+   opkg install gh@owner/plugin-repo
+   opkg install https://gitlab.com/team/plugin.git
    ```
 
 2. **Local path**:
@@ -60,7 +60,9 @@ Plugins can be installed from multiple source types:
 
 3. **Git repository subdirectory**:
    ```bash
-   opkg install github:owner/repo#main&subdirectory=plugins/my-plugin
+   opkg install gh@owner/repo/plugins/my-plugin
+   # Or with explicit ref:
+   opkg install https://github.com/owner/repo.git#main&path=plugins/my-plugin
    ```
 
 #### Plugin Transformation
@@ -128,14 +130,14 @@ Select plugins to install (space to select, enter to confirm):
 For automated environments (CI/CD, scripts), use the `--plugins` flag to bypass interactive selection:
 
 ```bash
-# Install specific plugins by name
-opkg install github:company/marketplace --plugins code-formatter,deployment-tools
+# Install specific plugins by name (space-separated)
+opkg install gh@company/marketplace --plugins code-formatter deployment-tools
 
-# Short flag
-opkg install github:company/marketplace -p code-formatter
+# Single plugin
+opkg install gh@company/marketplace --plugins code-formatter
 
-# With whitespace (shell quoting)
-opkg install github:company/marketplace --plugins "code-formatter, deployment-tools"
+# Multiple plugins
+opkg install gh@company/marketplace --plugins code-formatter deployment-tools commit-hooks
 ```
 
 **Behavior**:

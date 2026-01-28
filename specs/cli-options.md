@@ -73,7 +73,7 @@ opkg install -g shared-rules
 opkg install --global shared-rules
 
 # With platforms specified
-opkg install -g cursor-config --platforms cursor,claude
+opkg install -g cursor-config --platforms cursor claude
 
 # Global overrides --cwd
 opkg install -g my-package --cwd ./some-dir  # Installs to ~/, not ./some-dir

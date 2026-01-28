@@ -43,23 +43,19 @@ export function validateResolutionFlags(options: InstallOptions & { local?: bool
 }
 
 /**
- * Parse --plugins option value into an array of plugin names.
- * Handles comma-separated values, trims whitespace, and deduplicates.
+ * Normalize --plugins option value by deduplicating.
+ * Since --plugins is now variadic (space-separated), we receive an array directly.
  *
- * @param value - Raw option value (comma-separated string or undefined)
+ * @param value - Array of plugin names from variadic option, or undefined
  * @returns Array of unique plugin names, or undefined if empty/not provided
  */
-export function parsePluginsOption(value: string | undefined): string[] | undefined {
-  if (!value || value.trim() === '') {
+export function normalizePluginsOption(value: string[] | undefined): string[] | undefined {
+  if (!value || value.length === 0) {
     return undefined;
   }
 
-  const plugins = [...new Set(
-    value
-      .split(',')
-      .map(p => p.trim())
-      .filter(p => p.length > 0)
-  )];
+  // Deduplicate
+  const plugins = [...new Set(value)];
 
   return plugins.length > 0 ? plugins : undefined;
 }
@@ -301,10 +297,15 @@ export function setupInstallCommand(program: Command): void {
     .option('--local', 'resolve and install using only local registry versions, skipping remote metadata and pulls')
     .option('--profile <profile>', 'profile to use for authentication')
     .option('--api-key <key>', 'API key for authentication (overrides profile)')
-    .option('-p, --plugins <names>', 'install specific plugins from marketplace (comma-separated, bypasses interactive selection)')
+    .option('--plugins <names...>', 'install specific plugins from marketplace (bypasses interactive selection)')
     .action(withErrorHandling(async (packageName: string | undefined, options: InstallOptions) => {
       // Normalize platforms
       options.platforms = normalizePlatforms(options.platforms);
+
+      // Normalize plugins
+      if (options.plugins) {
+        options.plugins = normalizePluginsOption(options.plugins as any);
+      }
 
       // Normalize conflict strategy
       const commandOptions = options as InstallOptions & { conflicts?: string };
@@ -323,8 +324,10 @@ export function setupInstallCommand(program: Command): void {
         options.conflictStrategy = normalizedStrategy as InstallOptions['conflictStrategy'];
       }
 
-      // Parse plugins option
-      options.plugins = parsePluginsOption((options as any).plugins);
+      // Normalize plugins option
+      if (options.plugins) {
+        options.plugins = normalizePluginsOption(options.plugins as any);
+      }
 
       // Execute install
       const result = await installCommand(packageName, options);

@@ -44,7 +44,7 @@ The `-g, --global` flag changes the installation target to the user's home direc
   opkg install --global shared-rules
   
   # Install with specific platforms globally
-  opkg install -g cursor-config --platforms cursor,claude
+  opkg install -g cursor-config --platforms cursor claude
   
   # Global flag overrides --cwd
   opkg install -g my-package --cwd ./some-dir  # Installs to ~/, not ./some-dir
@@ -645,7 +645,7 @@ Console output:
 
 ```bash
 # Install Claude plugin to Cursor platform (cross-platform conversion)
-opkg install github:user/my-claude-plugin --platforms cursor
+opkg install gh@user/my-claude-plugin --platforms cursor
 ```
 Console output:
 ```

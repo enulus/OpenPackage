@@ -260,7 +260,7 @@ opkg install path/to/claude-plugin --platforms cursor
 
 ```bash
 # Install to both Claude and Cursor
-opkg install path/to/claude-plugin --platforms claude,cursor
+opkg install path/to/claude-plugin --platforms claude cursor
 ```
 
 **Behavior:**
@@ -272,7 +272,7 @@ opkg install path/to/claude-plugin --platforms claude,cursor
 
 ```bash
 # Standard universal package installation
-opkg install @user/package --platforms claude,cursor
+opkg install @user/package --platforms claude cursor
 ```
 
 **Behavior:**

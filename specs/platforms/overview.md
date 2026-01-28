@@ -309,7 +309,7 @@ The **Universal Platform Converter** extends the platform system to support **cr
 ### Example: Install Claude Plugin to Cursor
 
 ```bash
-opkg install github:user/claude-plugin --platforms cursor
+opkg install gh@user/claude-plugin --platforms cursor
 ```
 
 **What happens:**

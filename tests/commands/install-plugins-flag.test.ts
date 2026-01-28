@@ -17,45 +17,39 @@ import type { InstallOptions } from '../../src/types/index.js';
 
 console.log('install-plugins-flag type tests passed');
 
-// Test: parsePluginsOption parses comma-separated string
-import { parsePluginsOption } from '../../src/commands/install.js';
+// Test: normalizePluginsOption handles array input
+import { normalizePluginsOption } from '../../src/commands/install.js';
 
 {
-  const result = parsePluginsOption('plugin-1,plugin-2,plugin-3');
+  const result = normalizePluginsOption(['plugin-1', 'plugin-2', 'plugin-3']);
   assert.deepEqual(result, ['plugin-1', 'plugin-2', 'plugin-3']);
 }
 
-// Test: parsePluginsOption trims whitespace
+// Test: normalizePluginsOption handles single plugin
 {
-  const result = parsePluginsOption('plugin-1, plugin-2 , plugin-3');
-  assert.deepEqual(result, ['plugin-1', 'plugin-2', 'plugin-3']);
-}
-
-// Test: parsePluginsOption handles single plugin
-{
-  const result = parsePluginsOption('single-plugin');
+  const result = normalizePluginsOption(['single-plugin']);
   assert.deepEqual(result, ['single-plugin']);
 }
 
-// Test: parsePluginsOption returns undefined for empty string
+// Test: normalizePluginsOption returns undefined for empty array
 {
-  const result = parsePluginsOption('');
+  const result = normalizePluginsOption([]);
   assert.equal(result, undefined);
 }
 
-// Test: parsePluginsOption returns undefined for undefined input
+// Test: normalizePluginsOption returns undefined for undefined input
 {
-  const result = parsePluginsOption(undefined);
+  const result = normalizePluginsOption(undefined);
   assert.equal(result, undefined);
 }
 
-// Test: parsePluginsOption deduplicates plugin names
+// Test: normalizePluginsOption deduplicates plugin names
 {
-  const result = parsePluginsOption('plugin-a,plugin-b,plugin-a,plugin-c,plugin-b');
+  const result = normalizePluginsOption(['plugin-a', 'plugin-b', 'plugin-a', 'plugin-c', 'plugin-b']);
   assert.deepEqual(result, ['plugin-a', 'plugin-b', 'plugin-c']);
 }
 
-console.log('parsePluginsOption tests passed');
+console.log('normalizePluginsOption tests passed');
 
 import { validatePluginNames } from '../../src/core/install/marketplace-handler.js';
 import type { MarketplaceManifest } from '../../src/core/install/marketplace-handler.js';

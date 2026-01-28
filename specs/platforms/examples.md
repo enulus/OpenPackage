@@ -1003,7 +1003,7 @@ opkg install github:user/claude-plugin --platforms claude
 ### Example 2: Install Claude Plugin to Cursor (Cross-Platform)
 
 ```bash
-opkg install github:user/claude-plugin --platforms cursor
+opkg install gh@user/claude-plugin --platforms cursor
 ```
 
 **Source format:** Claude-specific (`.claude/` directories)  
@@ -1052,7 +1052,7 @@ opkg install github:user/claude-plugin --platforms claude,cursor,opencode
 ### Example 4: Universal Package to All Platforms
 
 ```bash
-opkg install @user/universal-rules --platforms cursor,claude,opencode
+opkg install @user/universal-rules --platforms cursor claude opencode
 ```
 
 **Source format:** Universal (standard `commands/`, `agents/` structure)  
