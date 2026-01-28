@@ -26,10 +26,10 @@ For full philosophy, data flows, and layered model, see [Architecture](architect
 Workspace ←──apply/install── Source/Registry (mutable or immutable)
 Workspace ──save/add──────→ Source (mutable only; fails on registry)
 Source ────pack───────────→ Registry (immutable snapshot)
-Registry ──push/pull─────→ Remote Registry (future)
+CWD ───────publish────────→ Remote Registry
 ```
 
-Detailed semantics in [Commands Overview](commands-overview.md) and command subdirs (e.g., [Save](save/), [Pack](pack/)).
+Detailed semantics in [Commands Overview](commands-overview.md) and command subdirs (e.g., [Save](save/), [Pack](pack/), [Publish](publish/)).
 
 #### Breaking Changes from Prior Versions
 
@@ -67,7 +67,8 @@ Consult git history (e.g., commit 9d23bf2) for prior version details. See [Archi
   - `install` (from registry/git/plugins): `install/`
     - Behavior/scenarios: `install-behavior.md` (includes Claude Code plugin support in §8)
     - Git sources: `git-sources.md` (includes subdirectory syntax and plugin detection)
-  - `pack` (to registry): `pack/`
+  - `pack` (to local registry): `pack/`
+  - `publish` (to remote registry): `publish/`
   - `save` (edits to source; WIP versioning): `save/`
     - Versioning details: `save-versioning.md`
   - `set` (update manifest metadata): `set/`
