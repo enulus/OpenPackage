@@ -202,11 +202,6 @@ function migrateGitHubPackageNames(index: WorkspaceIndex): WorkspaceIndex {
       continue;
     }
     
-    // Extract the actual path from git cache location
-    // Format: .openpackage/cache/git/{url-hash}/{commit-hash}/{optional-subpath}
-    const gitCacheMatch = normalizedPath.match(/\.openpackage\/cache\/git\/[^\/]+\/[^\/]+(?:\/(.+))?$/);
-    const actualSubpath = gitCacheMatch?.[1] || undefined;
-    
     // Parse package name to extract username/repo
     let username: string | undefined;
     let repo: string | undefined;
@@ -221,7 +216,7 @@ function migrateGitHubPackageNames(index: WorkspaceIndex): WorkspaceIndex {
         repo = ghMatch[2];
       }
     }
-    // Check for @ prefix (old format)
+    // Check for @ prefix (old format - needs migration)
     else if (pkgName.startsWith('@')) {
       const atMatch = pkgName.match(/^@([^\/]+)\/([^\/]+)(?:\/(.+))?$/);
       if (atMatch) {
@@ -229,7 +224,7 @@ function migrateGitHubPackageNames(index: WorkspaceIndex): WorkspaceIndex {
         repo = atMatch[2];
       }
     }
-    // Check for no prefix (missing @)
+    // Check for no prefix (missing @ - needs migration)
     else {
       const noAtMatch = pkgName.match(/^([^\/]+)\/([^\/]+)(?:\/(.+))?$/);
       if (noAtMatch) {
@@ -238,11 +233,26 @@ function migrateGitHubPackageNames(index: WorkspaceIndex): WorkspaceIndex {
       }
     }
     
+    // If package name already has gh@ prefix and seems correct, keep it as-is
+    // This prevents overwriting correctly-set names from PackageNameService
+    if (nameHasGhPrefix && username && repo) {
+      // Name already in correct format (gh@username/repo or gh@username/repo/path)
+      // Trust it and don't try to "fix" it based on cache path
+      migratedPackages[pkgName] = pkgData;
+      continue;
+    }
+    
     // If we couldn't extract username/repo, keep original
     if (!username || !repo) {
       migratedPackages[pkgName] = pkgData;
       continue;
     }
+    
+    // Only migrate if name doesn't have gh@ prefix (old format)
+    // Extract the actual path from git cache location
+    // Format: .openpackage/cache/git/{url-hash}/{commit-hash}/{optional-subpath}
+    const gitCacheMatch = normalizedPath.match(/\.openpackage\/cache\/git\/[^\/]+\/[^\/]+(?:\/(.+))?$/);
+    const actualSubpath = gitCacheMatch?.[1] || undefined;
     
     // Build the correct package name
     let correctName: string;
@@ -254,7 +264,7 @@ function migrateGitHubPackageNames(index: WorkspaceIndex): WorkspaceIndex {
       correctName = `gh@${username}/${repo}`;
     }
     
-    // Use the correct name (which might be the same as original if already correct)
+    // Use the migrated name
     migratedPackages[correctName] = pkgData;
   }
   

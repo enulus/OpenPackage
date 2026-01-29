@@ -41,6 +41,16 @@ export interface DiscoveryOptions {
    * Include platform-specific file variants (default: true)
    */
   includePlatformVariants?: boolean;
+  
+  /**
+   * Optional filter to limit discovery to specific subdirectory
+   * 
+   * When specified, only files under this path will be discovered.
+   * Used for installing individual skills from plugins or collections.
+   * 
+   * Example: "skills/git" or "plugins/ui-design/skills/mobile-ios-design"
+   */
+  skillFilter?: string;
 }
 
 /**
@@ -61,7 +71,8 @@ export async function discoverFlowSources(
   const flowSources = new Map<Flow, string[]>();
   const {
     preferDotPrefixed = true,
-    includePlatformVariants = true
+    includePlatformVariants = true,
+    skillFilter
   } = options;
   
   for (const flow of flows) {
@@ -81,7 +92,7 @@ export async function discoverFlowSources(
         // Check for dot-prefixed variants for root-level files only
         if (!sourcePattern.includes('/') && !sourcePattern.startsWith('.')) {
           const dotPrefixedPattern = `.${sourcePattern}`;
-          const dotPrefixedPaths = await matchPattern(dotPrefixedPattern, packageRoot);
+          const dotPrefixedPaths = await matchPattern(dotPrefixedPattern, packageRoot, skillFilter);
           
           for (const path of dotPrefixedPaths) {
             dotPrefixedPathsFound.add(path);
@@ -107,7 +118,7 @@ export async function discoverFlowSources(
         }
       }
       
-      const sourcePaths = await matchPattern(sourcePattern, packageRoot);
+      const sourcePaths = await matchPattern(sourcePattern, packageRoot, skillFilter);
       for (const path of sourcePaths) {
         allSourcePaths.add(path);
       }
@@ -207,12 +218,18 @@ export function getFirstFromPattern(from: string | string[] | SwitchExpression):
  * - * wildcards
  * - ** recursive globs
  * - Platform-specific variant discovery
+ * - Optional subdirectory filtering
  * 
  * @param pattern - Pattern to match
  * @param baseDir - Base directory to search in
+ * @param skillFilter - Optional subdirectory filter (e.g., "skills/git")
  * @returns Array of matched file paths (relative to baseDir)
  */
-export async function matchPattern(pattern: string, baseDir: string): Promise<string[]> {
+export async function matchPattern(
+  pattern: string, 
+  baseDir: string,
+  skillFilter?: string
+): Promise<string[]> {
   const matches: string[] = [];
   
   // Fast path: no wildcards/placeholders, check exact file and platform variants
@@ -221,12 +238,19 @@ export async function matchPattern(pattern: string, baseDir: string): Promise<st
     
     // Check for exact match
     if (await exists(exactPath)) {
-      matches.push(relative(baseDir, exactPath));
+      const relativePath = relative(baseDir, exactPath);
+      if (!skillFilter || isUnderSkillPath(relativePath, skillFilter)) {
+        matches.push(relativePath);
+      }
     }
     
     // Also check for platform-specific variants
     const variants = await findPlatformVariants(exactPath, baseDir);
-    matches.push(...variants);
+    for (const variant of variants) {
+      if (!skillFilter || isUnderSkillPath(variant, skillFilter)) {
+        matches.push(variant);
+      }
+    }
     
     return matches;
   }
@@ -258,7 +282,10 @@ export async function matchPattern(pattern: string, baseDir: string): Promise<st
     for (const entry of entries) {
       if (!entry.isFile()) continue;
       if (!regex.test(entry.name)) continue;
-      matches.push(relative(baseDir, join(searchDir, entry.name)));
+      const relativePath = relative(baseDir, join(searchDir, entry.name));
+      if (!skillFilter || isUnderSkillPath(relativePath, skillFilter)) {
+        matches.push(relativePath);
+      }
     }
     
     return matches;
@@ -272,7 +299,7 @@ export async function matchPattern(pattern: string, baseDir: string): Promise<st
     return [];
   }
   
-  await findMatchingFiles(dirPath, filePattern, baseDir, matches);
+  await findMatchingFiles(dirPath, filePattern, baseDir, matches, skillFilter);
   return matches;
 }
 
@@ -316,18 +343,39 @@ async function findPlatformVariants(
 }
 
 /**
+ * Check if a relative path is under the skill filter path
+ * 
+ * @param relativePath - Path relative to package root
+ * @param skillFilter - Skill filter path (e.g., "skills/git")
+ * @returns True if path is under skill path or is the skill path itself
+ */
+function isUnderSkillPath(relativePath: string, skillFilter: string): boolean {
+  // Normalize paths (remove trailing slashes)
+  const normalizedRelative = relativePath.replace(/\/$/, '');
+  const normalizedFilter = skillFilter.replace(/\/$/, '');
+  
+  // Check if path starts with filter path
+  return (
+    normalizedRelative === normalizedFilter ||
+    normalizedRelative.startsWith(normalizedFilter + '/')
+  );
+}
+
+/**
  * Recursively find files matching a pattern
  * 
  * @param dir - Directory to search in
  * @param pattern - Pattern to match (may contain globs)
  * @param baseDir - Base directory for relative path calculation
  * @param matches - Array to accumulate matches
+ * @param skillFilter - Optional subdirectory filter
  */
 async function findMatchingFiles(
   dir: string,
   pattern: string,
   baseDir: string,
-  matches: string[]
+  matches: string[],
+  skillFilter?: string
 ): Promise<void> {
   try {
     const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -336,11 +384,22 @@ async function findMatchingFiles(
       const fullPath = join(dir, entry.name);
       const rel = relative(baseDir, fullPath);
       
+      // Apply skill filter early to skip entire directories
+      if (skillFilter && !isUnderSkillPath(rel, skillFilter)) {
+        // Skip if not under skill path and not a parent directory
+        const normalizedFilter = skillFilter.replace(/\/$/, '');
+        const isParentOfSkillPath = normalizedFilter.startsWith(rel + '/');
+        
+        if (!isParentOfSkillPath) {
+          continue;
+        }
+      }
+      
       if (entry.isDirectory()) {
-        await findMatchingFiles(fullPath, pattern, baseDir, matches);
+        await findMatchingFiles(fullPath, pattern, baseDir, matches, skillFilter);
       } else if (entry.isFile()) {
         const matched = minimatch(rel, pattern, { dot: false });
-        if (matched) {
+        if (matched && (!skillFilter || isUnderSkillPath(rel, skillFilter))) {
           matches.push(rel);
         }
       }

@@ -205,4 +205,113 @@ describe('Format Detector', () => {
       assert.ok(format.analysis.samplePaths.platformSpecific.length > 0);
     });
   });
+
+  describe('Skills Format Detection', () => {
+    it('should detect skills collection format', () => {
+      const files: PackageFile[] = [
+        { path: 'skills/git/SKILL.md', content: '', encoding: 'utf8' },
+        { path: 'skills/git/workflow.md', content: '', encoding: 'utf8' },
+        { path: 'skills/docker/SKILL.md', content: '', encoding: 'utf8' },
+        { path: 'skills/docker/compose.md', content: '', encoding: 'utf8' }
+      ];
+
+      const format = detectPackageFormat(files);
+
+      assert.strictEqual(format.type, 'universal');
+      assert.ok(format.confidence >= 0.8);
+      assert.ok(format.analysis.universalFiles > 0);
+    });
+
+    it('should detect single skill', () => {
+      const files: PackageFile[] = [
+        { path: 'skills/coding/SKILL.md', content: '', encoding: 'utf8' },
+        { path: 'skills/coding/guidelines.md', content: '', encoding: 'utf8' },
+        { path: 'skills/coding/examples.md', content: '', encoding: 'utf8' }
+      ];
+
+      const format = detectPackageFormat(files);
+
+      assert.strictEqual(format.type, 'universal');
+      assert.ok(format.confidence >= 0.8);
+      assert.strictEqual(format.analysis.universalFiles, files.length);
+    });
+
+    it('should detect deeply nested skills', () => {
+      const files: PackageFile[] = [
+        { path: 'skills/git/commit/advanced/SKILL.md', content: '', encoding: 'utf8' },
+        { path: 'skills/git/commit/advanced/guide.md', content: '', encoding: 'utf8' },
+        { path: 'skills/docker/compose/SKILL.md', content: '', encoding: 'utf8' }
+      ];
+
+      const format = detectPackageFormat(files);
+
+      assert.strictEqual(format.type, 'universal');
+      assert.ok(format.confidence >= 0.8);
+    });
+
+    it('should handle skills with other universal content', () => {
+      const files: PackageFile[] = [
+        { path: 'commands/test.md', content: '', encoding: 'utf8' },
+        { path: 'agents/helper.md', content: '', encoding: 'utf8' },
+        { path: 'skills/git/SKILL.md', content: '', encoding: 'utf8' },
+        { path: 'skills/git/workflow.md', content: '', encoding: 'utf8' }
+      ];
+
+      const format = detectPackageFormat(files);
+
+      assert.strictEqual(format.type, 'universal');
+      assert.ok(format.confidence > 0.7);
+    });
+
+    it('should handle skills directory without SKILL.md files', () => {
+      const files: PackageFile[] = [
+        { path: 'skills/git/workflow.md', content: '', encoding: 'utf8' },
+        { path: 'skills/docker/compose.md', content: '', encoding: 'utf8' }
+      ];
+
+      const format = detectPackageFormat(files);
+
+      // Should still be classified as universal due to skills/ directory
+      assert.strictEqual(format.type, 'universal');
+    });
+
+    it('should prioritize Claude plugin format over skills', () => {
+      const files: PackageFile[] = [
+        { path: '.claude-plugin/plugin.json', content: '', encoding: 'utf8' },
+        { path: 'skills/git/SKILL.md', content: '', encoding: 'utf8' },
+        { path: 'skills/git/workflow.md', content: '', encoding: 'utf8' }
+      ];
+
+      const format = detectPackageFormat(files);
+
+      // Claude plugin manifest takes precedence
+      assert.strictEqual(format.type, 'platform-specific');
+      assert.strictEqual(format.platform, 'claude-plugin');
+      assert.strictEqual(format.confidence, 1.0);
+    });
+
+    it('should detect mixed skills and platform-specific content', () => {
+      const files: PackageFile[] = [
+        { path: 'skills/git/SKILL.md', content: '', encoding: 'utf8' },
+        { path: 'skills/git/workflow.md', content: '', encoding: 'utf8' },
+        { path: '.cursor/rules/typescript.mdc', content: '', encoding: 'utf8' }
+      ];
+
+      const format = detectPackageFormat(files);
+
+      // Skills should dominate with 2/3 files
+      assert.strictEqual(format.type, 'universal');
+    });
+
+    it('should handle empty skills directory', () => {
+      const files: PackageFile[] = [
+        { path: 'commands/test.md', content: '', encoding: 'utf8' }
+      ];
+
+      const format = detectPackageFormat(files);
+
+      assert.strictEqual(format.type, 'universal');
+      assert.ok(format.confidence > 0.7);
+    });
+  });
 });

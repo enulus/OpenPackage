@@ -9,6 +9,7 @@ This directory contains specifications for the `install` command, with a focus o
 - **Consistent, minimal, npm-inspired UX**
 - **Git sources with subdirectory support** for monorepos and Claude Code plugins
 - **Cross-platform conversion** via Universal Platform Converter (automatic format detection and conversion)
+- **Skills installation**: Install individual skills from skills collections with `--skills` flag
 
 The documents are intended to be implementation-guiding but not tied to specific modules.
 
@@ -27,6 +28,12 @@ The documents are intended to be implementation-guiding but not tied to specific
 - **`plugin-installation.md`**: Complete specification for Claude Code plugin installation including detection, transformation, and source handling. Covers individual plugins and marketplace plugins with all supported source types.
 - **`marketplace-installation.md`**: Detailed marketplace installation workflow including manifest parsing, plugin selection, and multi-plugin installation. Covers relative path, GitHub, and Git URL sources.
 - **`plugin-source-normalization.md`**: Normalization and validation logic for plugin sources. Specifies conversion rules, validation constraints, and security measures for all source types.
+
+#### Skills Installation
+
+- **`skills-installation.md`**: Complete guide for installing individual skills from skills collections (Claude Plugins, OpenPackage packages, or GitHub repositories). Covers marketplace and standalone installation modes, skill identification, version resolution, and advanced usage.
+- **`skill-manifest-format.md`**: Specification for SKILL.md manifest format including frontmatter fields, validation rules, directory structure requirements, and best practices.
+- **`skills-troubleshooting.md`**: Comprehensive troubleshooting guide for common skills installation issues, error messages, validation problems, and debug techniques.
 
 ### Related
 

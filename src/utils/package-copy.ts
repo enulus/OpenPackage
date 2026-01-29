@@ -10,7 +10,7 @@
 
 import { join, relative, dirname } from 'path';
 
-import type { PackageFile } from '../types/index.js';
+import type { PackageFile, Package } from '../types/index.js';
 import { DIR_PATTERNS, FILE_PATTERNS } from '../constants/index.js';
 import {
   exists,
@@ -142,5 +142,6 @@ async function writeFile(targetDir: string, file: PackageFile): Promise<void> {
   await ensureDir(dirname(targetPath));
   await writeTextFile(targetPath, file.content, (file.encoding as BufferEncoding) ?? 'utf8');
 }
+
 
 

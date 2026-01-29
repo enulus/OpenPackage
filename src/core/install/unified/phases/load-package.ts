@@ -80,6 +80,16 @@ export async function loadPackagePhase(ctx: InstallationContext): Promise<void> 
       rootPackage.marketplaceMetadata = ctx.source.pluginMetadata.marketplaceSource;
     }
     
+    // Add skill filter if present
+    if (ctx.source.skillFilter) {
+      rootPackage.skillFilter = ctx.source.skillFilter;
+    }
+    
+    // Add naming context if present
+    if ((ctx.source as any)._namingContext) {
+      rootPackage.namingContext = (ctx.source as any)._namingContext;
+    }
+    
     ctx.resolvedPackages = [rootPackage];
     
     logger.info(`Loaded ${loaded.packageName}@${loaded.version} from ${loaded.source}`);

@@ -30,6 +30,16 @@ export interface FlowInstallContext {
    * Contains immutable originalFormat and conversion history for auditing.
    */
   conversionContext: PackageConversionContext;
+  
+  /**
+   * Optional filter to limit installation to specific subdirectory
+   * 
+   * When specified, only files under this path will be discovered and installed.
+   * Used for installing individual skills from plugins or collections.
+   * 
+   * Example: "skills/git" or "plugins/ui-design/skills/mobile-ios-design"
+   */
+  skillFilter?: string;
 }
 
 /**

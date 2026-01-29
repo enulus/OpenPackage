@@ -58,6 +58,22 @@ export interface ResolvedPackage {
     commitSha: string;
     pluginName: string;
   };
+  /**
+   * Optional filter to limit installation to specific subdirectory
+   * 
+   * When specified, only files under this path will be installed.
+   * Used for installing individual skills from plugins or collections.
+   * 
+   * Example: "skills/git" or "plugins/ui-design/skills/mobile-ios-design"
+   */
+  skillFilter?: string;
+  /**
+   * Naming context for consistent package name resolution.
+   * 
+   * When present, this context is used to ensure manifest and index
+   * entries use the same canonical package name.
+   */
+  namingContext?: any;  // Type imported dynamically to avoid circular deps
 }
 
 /**

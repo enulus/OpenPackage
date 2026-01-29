@@ -2,6 +2,7 @@ import type { InstallationContext } from '../context.js';
 import { addPackageToYml } from '../../../../utils/package-management.js';
 import { formatPathForYaml } from '../../../../utils/path-resolution.js';
 import { logger } from '../../../../utils/logger.js';
+import { PackageNameService } from '../../package-name-service.js';
 
 /**
  * Update manifest phase (openpackage.yml)
@@ -20,6 +21,40 @@ export async function updateManifestPhase(ctx: InstallationContext): Promise<voi
     // Determine fields based on source type
     const fields = buildManifestFields(ctx, mainPackage);
     
+    // If we have a naming context, use it to validate consistency
+    const namingContext = (ctx.source as any)._namingContext;
+    if (namingContext) {
+      const canonicalName = PackageNameService.resolvePackageName(namingContext);
+      
+      // Validate that the package name matches the canonical name
+      if (ctx.source.packageName !== canonicalName) {
+        logger.warn('Package name mismatch detected - using canonical name from service', {
+          loadedName: ctx.source.packageName,
+          canonicalName,
+          gitPath: namingContext.git.path
+        });
+        
+        // Use canonical name for manifest
+        await addPackageToYml(
+          ctx.cwd,
+          canonicalName,
+          mainPackage.version,
+          ctx.options.dev ?? false,
+          fields.range,
+          fields.force,
+          fields.include,
+          fields.path,
+          fields.gitUrl,
+          fields.gitRef,
+          fields.gitPath
+        );
+        
+        logger.info(`Updated manifest for ${canonicalName}`);
+        return;
+      }
+    }
+    
+    // Standard path - use loaded package name
     await addPackageToYml(
       ctx.cwd,
       ctx.source.packageName,

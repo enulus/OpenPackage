@@ -6,7 +6,7 @@ import { isJunk } from 'junk';
 import type { Package, PackageFile, PackageYml, PackageWithContext } from '../../types/index.js';
 import { detectPackageFormat } from './format-detector.js';
 import { DIR_PATTERNS } from '../../constants/index.js';
-import { generateGitHubPackageName } from '../../utils/plugin-naming.js';
+import { resolvePackageNameFromContext, createPluginResolutionContext } from '../../utils/package-name-resolver.js';
 import { createPlatformContext } from '../conversion-context/index.js';
 import { resolvePluginMetadata, type ClaudePluginManifest } from './plugin-metadata-resolver.js';
 import type { MarketplacePluginEntry } from './marketplace-handler.js';
@@ -85,16 +85,17 @@ export async function transformPluginToPackage(
     pluginName: pluginManifest.name
   });
   
-  // Generate scoped name using consistent naming logic
-  // Always generate the name (no override) to ensure consistency
-  const packageName = generateGitHubPackageName({
-    gitUrl: context?.gitUrl,
-    path: context?.path,
-    packageName: pluginManifest.name,
-    repoPath: context?.repoPath
-  });
+  // Generate scoped name using unified resolver for consistency
+  const packageName = resolvePackageNameFromContext(
+    createPluginResolutionContext({
+      gitUrl: context?.gitUrl,
+      path: context?.path,
+      packageName: pluginManifest.name,
+      repoPath: context?.repoPath
+    })
+  );
   
-  logger.debug('Generated plugin name', { 
+  logger.debug('Generated plugin name (unified resolver)', { 
     original: pluginManifest.name, 
     scoped: packageName,
     hasGitContext: !!context?.gitUrl,

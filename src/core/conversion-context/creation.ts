@@ -23,20 +23,25 @@ import { logger } from '../../utils/logger.js';
 export function createContextFromFormat(format: PackageFormat): PackageConversionContext {
   const now = new Date();
   
+  // All formats are either universal or platform-specific now
+  // (skill formats were removed in favor of filter-based approach)
+  const mappedType: 'universal' | 'platform-specific' = format.type;
+  
   const originalFormat: FormatIdentity = {
-    type: format.type,
+    type: mappedType,
     platform: format.platform,
     detectedAt: now,
     confidence: format.confidence
   };
   
   const currentFormat: FormatState = {
-    type: format.type,
+    type: mappedType,
     platform: format.platform
   };
   
   logger.debug('Created conversion context from format', {
     type: format.type,
+    mappedType,
     platform: format.platform,
     confidence: format.confidence
   });

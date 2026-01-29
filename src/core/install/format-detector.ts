@@ -18,7 +18,7 @@ import { createContextFromFormat } from '../conversion-context/index.js';
  */
 export interface PackageFormat {
   /**
-   * Format type: universal (commands/, agents/) or platform-specific (.claude/, .cursor/)
+   * Format type: universal or platform-specific
    */
   type: 'universal' | 'platform-specific';
   
@@ -86,7 +86,7 @@ const PLATFORM_ROOT_DIRS: Record<string, Platform> = {
 export function detectPackageFormat(files: PackageFile[]): PackageFormat {
   logger.debug('Detecting package format', { fileCount: files.length });
   
-  // Check for claude-plugin first (highest priority)
+  // Priority 1: Check for claude-plugin (highest priority)
   const hasClaudePluginManifest = files.some(f => 
     f.path === '.claude-plugin/plugin.json'
   );
@@ -110,6 +110,10 @@ export function detectPackageFormat(files: PackageFile[]): PackageFormat {
     };
   }
   
+  // Note: Skill format detection removed - skills are now handled via filtering at command level
+  // When skills are loaded with filters, they appear as regular universal packages
+  
+
   const analysis: FormatAnalysis = {
     universalFiles: 0,
     platformSpecificFiles: 0,

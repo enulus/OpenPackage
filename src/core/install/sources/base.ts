@@ -1,6 +1,7 @@
 import type { PackageYml } from '../../../types/index.js';
 import type { PackageSource } from '../unified/context.js';
 import type { InstallOptions } from '../../../types/index.js';
+import type { SkillsDetectionResult } from '../skills-detector.js';
 
 /**
  * Result of loading a package from a source
@@ -27,6 +28,15 @@ export interface LoadedPackage {
     pluginType?: 'individual' | 'marketplace';
     format?: any;
     manifestPath?: string;
+    /** Indicates this is a skills collection */
+    isSkillsCollection?: boolean;
+    /** Indicates this is a single skill */
+    isSkill?: boolean;
+    /** Skill metadata (for skill installations) */
+    skillMetadata?: {
+      skill: any; // DiscoveredSkill type
+      pluginName?: string;
+    };
   };
   
   /** Additional source metadata */
@@ -39,6 +49,9 @@ export interface LoadedPackage {
     
     /** For path sources: was this a tarball? */
     wasTarball?: boolean;
+    
+    /** Skills detection result (if available) */
+    skillsDetection?: SkillsDetectionResult;
   };
 }
 

@@ -78,6 +78,7 @@ Resolve/install from registry/git/path to workspace.
 - Flow: Resolve ver/source → Apply files → Update yml (constraint) / index (path/ver/mappings).
 - Partial via `files:` supported.
 - **Claude Code plugin support**: Automatically detects and transforms plugins from git sources (individual plugins or marketplaces with interactive selection).
+- **Skills support**: Install individual skills from skills collections using `--skills` flag.
 - Subdirectory support: `git:url#ref&subdirectory=path` for monorepos and plugin marketplaces.
 - **Global mode**: `-g, --global` installs to home directory (`~/`) instead of current workspace.
 - Example: 
@@ -85,6 +86,14 @@ Resolve/install from registry/git/path to workspace.
   - `opkg install -g shared-rules` (global install)
   - `opkg install github:anthropics/claude-code#subdirectory=plugins/commit-commands` (plugin)
   - `opkg install github:anthropics/claude-code` (marketplace with interactive selection)
+  - `opkg install github:user/marketplace --plugins essentials --skills git docker` (marketplace skills)
+  - `opkg install github:user/plugin --skills coding review` (standalone skills)
+- **Options:**
+  - `--plugins <names...>`: Install specific plugins from marketplace (bypasses interactive selection)
+  - `--skills <names...>`: Install specific skills from skills collection
+    - For marketplaces: must be paired with `--plugins`
+    - For standalone: filters to install only specified skills
+    - Interactive mode: use `--skills` without arguments to prompt for selection
 - See [Install](install/).
 
 ### `list`

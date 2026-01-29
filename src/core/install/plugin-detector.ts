@@ -1,9 +1,11 @@
 import { join } from 'path';
 import { promises as fs } from 'fs';
-import { exists, readTextFile } from '../../utils/fs.js';
+import { exists, readTextFile, isDirectory } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
 import { DIR_PATTERNS, FILE_PATTERNS } from '../../constants/index.js';
+import { walkFiles } from '../../utils/file-walker.js';
 import type { MarketplacePluginEntry } from './marketplace-handler.js';
+import { isJunk } from 'junk';
 
 export type PluginType = 'individual' | 'marketplace' | 'marketplace-defined';
 
@@ -166,4 +168,58 @@ export async function validatePluginManifest(manifestPath: string): Promise<bool
     logger.error('Failed to parse plugin manifest', { manifestPath, error });
     return false;
   }
+}
+
+/**
+ * Quick check if directory contains skills at root level.
+ * Performs a lightweight check for skills/ directory and at least one SKILL.md file.
+ * 
+ * Note: For comprehensive skills detection with metadata, use detectSkillsInDirectory
+ * from skills-detector.ts instead.
+ * 
+ * @param dirPath - Absolute path to directory to check
+ * @returns True if directory contains skills
+ */
+export async function isSkillsCollection(dirPath: string): Promise<boolean> {
+  const skillsDir = join(dirPath, 'skills');
+  
+  // Check if skills/ directory exists
+  if (!await exists(skillsDir)) {
+    return false;
+  }
+  
+  if (!await isDirectory(skillsDir)) {
+    return false;
+  }
+  
+  // Check for at least one SKILL.md file in skills/
+  try {
+    for await (const filePath of walkFiles(skillsDir, {
+      filter: (path, isDir) => {
+        const name = require('path').basename(path);
+        // Skip junk files and directories
+        if (isJunk(name)) {
+          return false;
+        }
+        // Include all directories for traversal
+        if (isDir) {
+          return true;
+        }
+        // Include only SKILL.md files
+        return name === FILE_PATTERNS.SKILL_MD;
+      }
+    })) {
+      // Found at least one SKILL.md file
+      logger.debug('Skills collection detected', { dirPath, firstSkillFound: filePath });
+      return true;
+    }
+  } catch (error) {
+    logger.warn('Error checking for skills collection', {
+      dirPath,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return false;
+  }
+  
+  return false;
 }

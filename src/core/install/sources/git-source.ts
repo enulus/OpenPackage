@@ -24,10 +24,16 @@ export class GitSourceLoader implements PackageSourceLoader {
     
     try {
       // Load package from git
+      // Pass through skill filter if specified
       const result = await loadPackageFromGit({
         url: source.gitUrl,
         ref: source.gitRef,
-        path: source.gitPath
+        path: source.gitPath,
+        skillFilter: source.skillFilter,
+        skillMetadata: source.pluginMetadata?.skillMetadata ? {
+          name: source.pluginMetadata.skillMetadata.skill.name,
+          skillPath: source.pluginMetadata.skillMetadata.skill.skillPath
+        } : undefined
       });
       
       // Check if marketplace - return metadata, let command handle selection
@@ -47,41 +53,68 @@ export class GitSourceLoader implements PackageSourceLoader {
           },
           sourceMetadata: {
             repoPath: result.repoPath,
-            commitSha: result.commitSha
+            commitSha: result.commitSha,
+            skillsDetection: result.skillsDetection
           }
         };
       }
       
-      // Load individual package/plugin
-      const { loadPackageFromPath } = await import('../path-package-loader.js');
-      let sourcePackage = await loadPackageFromPath(result.sourcePath, {
-        gitUrl: source.gitUrl,
-        path: source.gitPath,
-        repoPath: result.sourcePath,
-        marketplaceEntry: source.pluginMetadata?.marketplaceEntry
-      });
+      // Check if skills collection (non-marketplace)
+      if (result.isSkillsCollection) {
+        return {
+          metadata: null as any, // Skills collection doesn't have single package
+          packageName: '', // Unknown until skill selection
+          version: '0.0.0',
+          contentRoot: result.sourcePath,
+          source: 'git',
+          pluginMetadata: {
+            isPlugin: false,
+            isSkillsCollection: true
+          },
+          sourceMetadata: {
+            repoPath: result.repoPath,
+            commitSha: result.commitSha,
+            skillsDetection: result.skillsDetection
+          }
+        };
+      }
+      
+      // Load individual package/plugin/skill
+      // result.pkg is already loaded by git-package-loader
+      if (!result.pkg) {
+        throw new Error('Failed to load package from git source');
+      }
       
       // Detect plugin type
       const pluginDetection = await detectPluginType(result.sourcePath);
       
-      const packageName = sourcePackage.metadata.name;
-      const version = sourcePackage.metadata.version || '0.0.0';
+      const packageName = result.pkg.metadata.name;
+      const version = result.pkg.metadata.version || '0.0.0';
       
-      // Note: Plugin transformation is handled by the main flow, not here
+      // Check if this is a skill based on source metadata
+      const isSkill = source.skillFilter !== undefined;
+      
+      // Note: Plugin transformation is handled by loadPackageFromPath
+      // Skills are now handled via filtering, not transformation
       return {
-        metadata: sourcePackage.metadata,
+        metadata: result.pkg.metadata,
         packageName,
         version,
         contentRoot: result.sourcePath,
         source: 'git',
         pluginMetadata: pluginDetection.isPlugin ? {
           isPlugin: true,
-          pluginType: pluginDetection.type as any,  // Can be 'individual', 'marketplace', or 'marketplace-defined'
+          pluginType: pluginDetection.type as any,
           manifestPath: pluginDetection.manifestPath
+        } : isSkill ? {
+          isPlugin: false,
+          isSkill: true,
+          skillMetadata: source.pluginMetadata?.skillMetadata
         } : undefined,
         sourceMetadata: {
           repoPath: result.repoPath,
-          commitSha: result.commitSha
+          commitSha: result.commitSha,
+          skillsDetection: result.skillsDetection
         }
       };
     } catch (error) {

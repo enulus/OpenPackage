@@ -179,6 +179,12 @@ export interface InstallOptions {
    * Comma-separated or array of plugin names.
    */
   plugins?: string[];
+  /**
+   * Specific skills to install from a skills collection.
+   * For marketplaces: must be paired with --plugins option.
+   * For standalone sources: filters to install only specified skills.
+   */
+  skills?: string[];
 }
 
 export interface UninstallOptions {

@@ -13,6 +13,8 @@ const testFiles: string[] = [
   'tests/core/install/cli-modes.test.ts',
   'tests/core/install/install-selection.test.ts',
   'tests/core/install/workspace-level-install.test.ts',
+  'tests/core/install/skills-marketplace.test.ts',
+
   
   // Core - Platforms
   'tests/core/platforms/platform-extension-filter.test.ts',

@@ -44,7 +44,11 @@ export async function buildRegistryInstallContext(
 export async function buildPathInstallContext(
   cwd: string,
   sourcePath: string,
-  options: InstallOptions & { sourceType: 'directory' | 'tarball' }
+  options: InstallOptions & { 
+    sourceType: 'directory' | 'tarball';
+    skillFilter?: string;
+    skillMetadata?: { name: string; skillPath: string };
+  }
 ): Promise<InstallationContext> {
   // Will need to load package to get name
   // For now, we'll populate after loading
@@ -52,7 +56,8 @@ export async function buildPathInstallContext(
     type: 'path',
     packageName: '', // Populated after loading
     localPath: sourcePath,
-    sourceType: options.sourceType
+    sourceType: options.sourceType,
+    skillFilter: options.skillFilter
   };
   
   return {

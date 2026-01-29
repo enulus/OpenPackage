@@ -25,6 +25,8 @@ export const FILE_PATTERNS = {
   // Claude Code plugin manifest files
   PLUGIN_JSON: 'plugin.json',
   MARKETPLACE_JSON: 'marketplace.json',
+  // Skills manifest file
+  SKILL_MD: 'SKILL.md',
   // Archive file extensions
   TGZ_FILES: '.tgz',
   TAR_GZ_FILES: '.tar.gz',

@@ -37,6 +37,11 @@ export interface PackageSource {
     gitPath?: string;
   };
   
+  // Skill filter - when specified, only load files under this subdirectory path
+  // Used for installing individual skills from skills collections
+  // Example: "skills/git" or "plugins/ui-design/skills/mobile-ios-design"
+  skillFilter?: string;
+  
   // Resolved content root (populated after loading)
   contentRoot?: string;
   
@@ -63,6 +68,18 @@ export interface PackageSource {
       commitSha: string;
       pluginName: string;
     };
+    
+    /** Skill-specific metadata (for skills from marketplaces or standalone) */
+    skillMetadata?: {
+      skill: any; // DiscoveredSkill type, avoiding circular dependency
+      pluginName?: string;
+    };
+    
+    /** Indicates this is a skills collection (multiple skills, not a plugin) */
+    isSkillsCollection?: boolean;
+    
+    /** Indicates this is a single skill package */
+    isSkill?: boolean;
   };
 }
 

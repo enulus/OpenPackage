@@ -7,10 +7,24 @@ import { logger } from './logger.js';
  * Used for both Claude plugins and OpenPackage repositories.
  */
 export interface GitHubPackageNamingContext {
-  gitUrl?: string;              // Git URL (for extracting GitHub info)
-  path?: string;                // Path within repo (subdirectory)
-  packageName?: string;         // Name from manifest (plugin.json or openpackage.yml)
-  repoPath?: string;            // Path to repository root (for fallback)
+  /** Git URL (for extracting GitHub info) */
+  gitUrl?: string;
+  
+  /**
+   * Path within repository (relative to repo root)
+   * 
+   * IMPORTANT: For skills, this MUST include the full path including
+   * the skill subdirectory. Example: "plugins/ui-design/skills/mobile-ios-design"
+   * 
+   * Do NOT append skillMetadata.skillPath to this value.
+   */
+  path?: string;
+  
+  /** Name from manifest (plugin.json or openpackage.yml) */
+  packageName?: string;
+  
+  /** Path to repository root (for fallback) */
+  repoPath?: string;
 }
 
 /**
@@ -28,6 +42,8 @@ export interface GitHubPackageNamingContext {
  * 
  * Fallback behavior:
  * - If packageName is undefined → use path basename or repo name
+ * 
+ * @throws Error if path contains duplicate skill segments (validation)
  */
 export function generateGitHubPackageName(
   context: GitHubPackageNamingContext
@@ -38,6 +54,23 @@ export function generateGitHubPackageName(
     packageName,
     repoPath
   } = context;
+  
+  // Validate path to catch duplicate skill path bugs
+  if (path) {
+    // Check for any path that has /skills/ appearing twice
+    const skillsSegments = (path.match(/\/skills\//g) || []).length;
+    const startsWithSkills = path.startsWith('skills/');
+    const totalSkillsOccurrences = skillsSegments + (startsWithSkills ? 1 : 0);
+    
+    if (totalSkillsOccurrences > 1) {
+      throw new Error(
+        `Duplicate skill path segment detected: ${path}\n` +
+        `Path contains multiple /skills/ segments (found ${totalSkillsOccurrences}). ` +
+        `For skill packages, context.path should already include the full path.\n` +
+        `Do NOT append skillMetadata.skillPath to context.path.`
+      );
+    }
+  }
   
   // If no Git URL, use package name or fallback
   if (!gitUrl) {

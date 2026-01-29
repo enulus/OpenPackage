@@ -47,6 +47,7 @@ OpenPackage takes care of cross-platform conversions, config composition, and po
 ## Use cases
 
 - Install Claude Code Plugins to any coding platform
+- Install individual skills from Claude Plugins, OpenPackage packages, or GitHub repositories
 - Sync specs, rules, commands, agents, skills, and MCPs across platforms
 - Reuse files and configs across multiple codebases
 - Modular management of configs and specs
@@ -104,6 +105,18 @@ opkg install gh@anthropics/claude-code --plugins plugin1 plugin2
 opkg install gh@user/marketplace --plugins plugin-a plugin-b plugin-c
 ```
 
+For skills collections, use `--skills` to install specific skills:
+```bash title="Terminal"
+# Install specific skills from a marketplace (requires --plugins)
+opkg install gh@user/marketplace --plugins essentials --skills git docker
+
+# Install skills from a standalone plugin or repository
+opkg install gh@user/my-plugin --skills coding review
+
+# Interactive skill selection
+opkg install gh@user/my-plugin --skills
+```
+
 Use the `--global` (or `-g`) option to install files to user scope:
 ```bash title="Terminal"
 # Installs to home dir, ex: ~/.cursor/, ~/.opencode/
@@ -124,7 +137,7 @@ opkg uninstall <package>
 Removes all files for a package from the codebase at cwd.
 
 > [!TIP]  
-> Learn more by heading over to the [official docs](https://openpackage.dev/docs).
+> Learn more by heading over to the [official docs](https://openpackage.dev/docs). For detailed skills documentation, see [Skills Installation Guide](specs/install/skills-installation.md).
 
 ### Compose a package
 

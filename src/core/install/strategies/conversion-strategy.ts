@@ -59,8 +59,8 @@ export class ConversionInstallStrategy extends BaseStrategy {
     logger.info(`Converting ${packageName} from ${context.packageFormat?.platform || 'unknown'} to ${platform} format`);
     
     try {
-      // Phase 1: Load package files
-      const packageFiles = await this.loadPackageFiles(packageRoot);
+      // Phase 1: Load package files with skill filter
+      const packageFiles = await this.loadPackageFiles(packageRoot, context.skillFilter);
       
       // Phase 2: Create package object with original format metadata
       const pkg: Package = {
@@ -124,7 +124,10 @@ export class ConversionInstallStrategy extends BaseStrategy {
   /**
    * Load all package files from directory
    */
-  private async loadPackageFiles(packageRoot: string): Promise<Array<{ path: string; content: string }>> {
+  private async loadPackageFiles(
+    packageRoot: string,
+    skillFilter?: string
+  ): Promise<Array<{ path: string; content: string }>> {
     const packageFiles: Array<{ path: string; content: string }> = [];
     
     for await (const sourcePath of walkFiles(packageRoot)) {
@@ -134,11 +137,29 @@ export class ConversionInstallStrategy extends BaseStrategy {
         continue;
       }
       
+      // Apply skill filter if specified
+      if (skillFilter && !this.isUnderSkillPath(relativePath, skillFilter)) {
+        continue;
+      }
+      
       const content = await readTextFile(sourcePath);
       packageFiles.push({ path: relativePath, content, encoding: 'utf8' } as any);
     }
     
     return packageFiles;
+  }
+  
+  /**
+   * Check if a relative path is under the skill filter path
+   */
+  private isUnderSkillPath(relativePath: string, skillFilter: string): boolean {
+    const normalizedRelative = relativePath.replace(/\/$/, '');
+    const normalizedFilter = skillFilter.replace(/\/$/, '');
+    
+    return (
+      normalizedRelative === normalizedFilter ||
+      normalizedRelative.startsWith(normalizedFilter + '/')
+    );
   }
   
   /**
@@ -197,7 +218,9 @@ export class ConversionInstallStrategy extends BaseStrategy {
         // Updated package format after conversion
         packageFormat: convertedPackage._format,
         // Pass updated conversion context
-        conversionContext
+        conversionContext,
+        // Preserve skill filter
+        skillFilter: context.skillFilter
       };
       
       const installResult = await flowStrategy.install(convertedContext, options);

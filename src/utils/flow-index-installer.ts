@@ -41,6 +41,8 @@ import {
   collectConflictMessages,
   collectErrorMessages
 } from '../core/install/helpers/result-aggregation.js';
+import { PackageNameService } from '../core/install/package-name-service.js';
+import type { PackageNamingContext } from '../core/install/naming-context.js';
 
 // ============================================================================
 // Types
@@ -88,8 +90,23 @@ export async function installPackageByIndexWithFlows(
     url: string;
     commitSha: string;
     pluginName: string;
-  }
+  },
+  skillFilter?: string,  // Optional skill filter
+  namingContext?: PackageNamingContext  // Optional naming context for validation
 ): Promise<IndexInstallResult> {
+  // Validate package name if naming context is provided
+  if (namingContext) {
+    const canonicalName = PackageNameService.resolvePackageName(namingContext);
+    if (packageName !== canonicalName) {
+      logger.warn('Package name mismatch - correcting index name', {
+        providedName: packageName,
+        canonicalName,
+        gitPath: namingContext.git.path
+      });
+      packageName = canonicalName;  // Use canonical name for index
+    }
+  }
+  
   logger.debug(`Installing ${packageName}@${version} with flows for platforms: ${platforms.join(', ')}`);
 
   // Resolve package root
@@ -196,7 +213,8 @@ export async function installPackageByIndexWithFlows(
       priority: 0, // Priority is calculated from dependency graph during multi-package installs
       dryRun: options.dryRun ?? false,
       packageFormat: format,
-      conversionContext
+      conversionContext,
+      skillFilter
     };
 
     try {
@@ -271,7 +289,8 @@ export async function installPackageByIndexWithFlows(
       version,
       resolvedContentRoot,
       fileMapping,
-      marketplaceMetadata
+      marketplaceMetadata,
+      namingContext
     );
   }
 
@@ -299,9 +318,22 @@ async function updateWorkspaceIndexForFlows(
     url: string;
     commitSha: string;
     pluginName: string;
-  }
+  },
+  namingContext?: PackageNamingContext
 ): Promise<void> {
   try {
+    // If naming context provided, validate and use canonical name
+    if (namingContext) {
+      const canonicalName = PackageNameService.resolvePackageName(namingContext);
+      if (packageName !== canonicalName) {
+        logger.warn('Correcting index package name to canonical name', {
+          oldName: packageName,
+          newName: canonicalName
+        });
+        packageName = canonicalName;
+      }
+    }
+    
     const wsRecord = await readWorkspaceIndex(cwd);
     
     // Initialize packages map if needed

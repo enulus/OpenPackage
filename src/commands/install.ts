@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { join } from 'path';
 import type { CommandResult, InstallOptions } from '../types/index.js';
 import { withErrorHandling } from '../utils/errors.js';
 import { normalizePlatforms } from '../utils/platform-mapper.js';
@@ -61,6 +62,315 @@ export function normalizePluginsOption(value: string[] | undefined): string[] | 
 }
 
 /**
+ * Normalize --skills option value by deduplicating.
+ * Since --skills is now variadic (space-separated), we receive an array directly.
+ *
+ * @param value - Array of skill names from variadic option, or undefined
+ * @returns Array of unique skill names, or undefined if empty/not provided
+ */
+export function normalizeSkillsOption(value: string[] | undefined): string[] | undefined {
+  if (!value || value.length === 0) {
+    return undefined;
+  }
+
+  // Deduplicate
+  const skills = [...new Set(value)];
+
+  return skills.length > 0 ? skills : undefined;
+}
+
+/**
+ * Validate skills option usage (placeholder for early validation).
+ * Most validation happens after source detection.
+ *
+ * @param options - Install options
+ */
+export function validateSkillsOptions(options: InstallOptions): void {
+  // Early validation can be added here if needed
+  // Most validation deferred until after source type is determined
+  // (marketplace vs standalone sources have different requirements)
+}
+
+/**
+ * Handle skills installation from marketplace source.
+ * 
+ * @param context - Installation context with loaded marketplace
+ * @param options - Install options including --skills and --plugins
+ * @param cwd - Current working directory
+ * @returns Command result with installation summary
+ */
+async function handleMarketplaceSkillsInstallation(
+  context: InstallationContext,
+  options: InstallOptions,
+  cwd: string
+): Promise<CommandResult> {
+  // 1. Validate prerequisites
+  if (!options.plugins || options.plugins.length === 0) {
+    throw new Error(
+      'Skills installation from marketplace requires --plugins flag to specify which plugins to search for skills.\n\n' +
+      'Example: opkg install <marketplace-url> --plugins essentials --skills git docker'
+    );
+  }
+  
+  // 2. Parse marketplace (already done in parent flow)
+  if (!context.source.pluginMetadata?.manifestPath) {
+    throw new Error('Marketplace manifest not found');
+  }
+  
+  const {
+    parseMarketplace,
+    validatePluginNames
+  } = await import('../core/install/marketplace-handler.js');
+  
+  const marketplace = await parseMarketplace(context.source.pluginMetadata.manifestPath, {
+    repoPath: context.source.contentRoot
+  });
+  
+  // 3. Validate plugins
+  const { valid: validPlugins, invalid: invalidPlugins } = validatePluginNames(marketplace, options.plugins);
+  
+  if (invalidPlugins.length > 0) {
+    console.error(`Error: The following plugins were not found in marketplace '${marketplace.name}':`);
+    for (const name of invalidPlugins) {
+      console.error(`  - ${name}`);
+    }
+    console.error(`\nAvailable plugins: ${marketplace.plugins.map(p => p.name).join(', ')}`);
+    return {
+      success: false,
+      error: `Plugins not found: ${invalidPlugins.join(', ')}`
+    };
+  }
+  
+  if (validPlugins.length === 0) {
+    console.log('No valid plugins specified. Installation cancelled.');
+    return { success: true, data: { installed: 0, skipped: 0 } };
+  }
+  
+  // 4. Discover skills in selected plugins
+  const {
+    parseSkillsFromMarketplace,
+    promptSkillSelection,
+    validateSkillSelections,
+    installMarketplaceSkills
+  } = await import('../core/install/skills-marketplace-handler.js');
+  
+  const { Spinner } = await import('../utils/spinner.js');
+  const spinner = new Spinner('Discovering skills in selected plugins');
+  spinner.start();
+  
+  const skillsCollection = await parseSkillsFromMarketplace(
+    context.source.contentRoot!,
+    marketplace,
+    validPlugins
+  );
+  
+  spinner.stop();
+  
+  // Check if any skills were found
+  if (skillsCollection.pluginSkills.size === 0) {
+    console.error(`Error: Selected plugins do not contain any skills.\n`);
+    console.error(`Selected plugins: ${validPlugins.join(', ')}`);
+    console.error(`Skills directory must be at root of plugin: plugins/<plugin-name>/skills/`);
+    return {
+      success: false,
+      error: 'No skills found in selected plugins'
+    };
+  }
+  
+  // 5. Selection mode (interactive vs non-interactive)
+  let selections;
+  
+  if (options.skills && options.skills.length > 0) {
+    // Non-interactive: validate requested skills
+    const { valid, invalid } = validateSkillSelections(skillsCollection, options.skills);
+    
+    if (invalid.length > 0) {
+      console.error(`Error: Skills not found: ${invalid.join(', ')}\n`);
+      console.error('Available skills in selected plugins:');
+      for (const [pluginName, skills] of skillsCollection.pluginSkills.entries()) {
+        for (const skill of skills) {
+          const desc = skill.frontmatter.description ? ` - ${skill.frontmatter.description}` : '';
+          console.error(`  [${pluginName}] ${skill.name}${desc}`);
+        }
+      }
+      return {
+        success: false,
+        error: `Skills not found: ${invalid.join(', ')}`
+      };
+    }
+    
+    selections = valid;
+    const totalSkills = selections.selections.reduce((sum, s) => sum + s.skills.length, 0);
+    console.log(`✓ Marketplace: ${marketplace.name}`);
+    console.log(`Installing ${totalSkills} skill${totalSkills === 1 ? '' : 's'}...`);
+  } else {
+    // Interactive: prompt user
+    selections = await promptSkillSelection(skillsCollection);
+    
+    if (selections.selections.length === 0) {
+      console.log('No skills selected. Installation cancelled.');
+      return { success: true, data: { installed: 0, skipped: 0 } };
+    }
+  }
+  
+  // 6. Install selected skills
+  if (context.source.type !== 'git' || !context.source.gitUrl) {
+    throw new Error('Marketplace must be from a git source');
+  }
+  
+  const commitSha = (context.source as any)._commitSha || '';
+  if (!commitSha) {
+    throw new Error('Marketplace commit SHA not available. Please report this issue.');
+  }
+  
+  return await installMarketplaceSkills(
+    context.source.contentRoot!,
+    selections,
+    context.source.gitUrl,
+    context.source.gitRef,
+    commitSha,
+    options,
+    cwd
+  );
+}
+
+/**
+ * Handle skills installation from standalone plugin, package, or repository.
+ * 
+ * @param context - Installation context
+ * @param loaded - Loaded package information
+ * @param options - Install options including --skills
+ * @param cwd - Current working directory
+ * @returns Command result with installation summary
+ */
+async function handleSkillsCollectionInstallation(
+  context: InstallationContext,
+  loaded: LoadedPackage,
+  options: InstallOptions,
+  cwd: string
+): Promise<CommandResult> {
+  const { detectSkillsInDirectory, validateSkillExists } = await import('../core/install/skills-detector.js');
+  
+  // 1. Detect skills in collection
+  const detection = await detectSkillsInDirectory(loaded.contentRoot);
+  
+  if (!detection.hasSkills) {
+    throw new Error('No skills found in source');
+  }
+  
+  // 2. Validate requested skills exist
+  const { valid: validSkills, invalid: invalidSkills } = validateSkillExists(
+    detection.discoveredSkills,
+    options.skills!
+  );
+  
+  if (invalidSkills.length > 0) {
+    console.error(`Error: Skills not found: ${invalidSkills.join(', ')}\n`);
+    console.error('Available skills:');
+    for (const skill of detection.discoveredSkills) {
+      const desc = skill.frontmatter.description ? ` - ${skill.frontmatter.description}` : '';
+      console.error(`  ${skill.name}${desc}`);
+    }
+    return {
+      success: false,
+      error: `Skills not found: ${invalidSkills.join(', ')}`
+    };
+  }
+  
+  if (validSkills.length === 0) {
+    console.log('No valid skills specified. Installation cancelled.');
+    return { success: true, data: { installed: 0, skipped: 0 } };
+  }
+  
+  // 3. Install each skill as a separate package
+  console.log(`Installing ${validSkills.length} skill${validSkills.length === 1 ? '' : 's'}...`);
+  
+  const { buildPathInstallContext } = await import('../core/install/unified/context-builders.js');
+  
+  const results: Array<{
+    name: string;
+    success: boolean;
+    error?: string;
+  }> = [];
+  
+  for (const skill of validSkills) {
+    try {
+      // Create install context pointing to PARENT directory with skill filter
+      const skillContext = await buildPathInstallContext(
+        cwd,
+        loaded.contentRoot,
+        {
+          ...options,
+          sourceType: 'directory' as const,
+          skillFilter: skill.skillPath,
+          skillMetadata: {
+            name: skill.name,
+            skillPath: skill.skillPath
+          }
+        }
+      );
+      
+      // Set git source override for manifest tracking
+      if (context.source.type === 'git' && context.source.gitUrl) {
+        skillContext.source.gitSourceOverride = {
+          gitUrl: context.source.gitUrl,
+          gitRef: context.source.gitRef,
+          gitPath: skill.skillPath
+        };
+      }
+      
+      // Store skill metadata in context for loader
+      skillContext.source.pluginMetadata = {
+        isPlugin: false,
+        isSkill: true,
+        skillMetadata: {
+          skill
+        }
+      };
+      
+      // Install with skill filter
+      const result = await runUnifiedInstallPipeline(skillContext);
+      
+      if (result.success) {
+        console.log(`✓ ${skill.name}`);
+        results.push({ name: skill.name, success: true });
+      } else {
+        console.error(`❌ ${skill.name}: ${result.error}`);
+        results.push({ name: skill.name, success: false, error: result.error });
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`❌ ${skill.name}: ${errorMsg}`);
+      results.push({ name: skill.name, success: false, error: errorMsg });
+    }
+  }
+  
+  // Display summary
+  const successful = results.filter(r => r.success);
+  const failed = results.filter(r => !r.success);
+  
+  console.log('');
+  if (successful.length > 0) {
+    console.log(`✓ Successfully installed: ${successful.length} skill${successful.length === 1 ? '' : 's'}`);
+  }
+  
+  if (failed.length > 0) {
+    console.log(`❌ Failed: ${failed.length} skill${failed.length === 1 ? '' : 's'}`);
+    for (const result of failed) {
+      console.log(`  ${result.name}: ${result.error}`);
+    }
+  }
+  
+  // Return result
+  const anySuccess = results.some(r => r.success);
+  return {
+    success: anySuccess,
+    data: { installed: successful.length, failed: failed.length },
+    error: !anySuccess ? 'Failed to install any skills' : undefined
+  };
+}
+
+/**
  * Main install command handler
  */
 async function installCommand(
@@ -105,15 +415,45 @@ async function installCommand(
     
     // Check if marketplace - handle at command level
     if (contexts.source.pluginMetadata?.pluginType === 'marketplace') {
+      // Check if skills installation requested
+      if (options.skills && options.skills.length > 0) {
+        return await handleMarketplaceSkillsInstallation(contexts, options, cwd);
+      }
       return await handleMarketplaceInstallation(contexts, options, cwd);
+    }
+
+    // Check if skills collection (non-marketplace)
+    if (contexts.source.pluginMetadata?.isSkillsCollection) {
+      if (!options.skills || options.skills.length === 0) {
+        // No skills specified - error with available skills
+        const detection = loaded.sourceMetadata?.skillsDetection;
+        if (detection?.hasSkills) {
+          console.error('Error: This is a skills collection. Use --skills flag to specify which skills to install.\n');
+          console.error('Available skills:');
+          for (const skill of detection.discoveredSkills) {
+            const desc = skill.frontmatter.description ? ` - ${skill.frontmatter.description}` : '';
+            console.error(`  ${skill.name}${desc}`);
+          }
+        }
+        return {
+          success: false,
+          error: 'Skills collection requires --skills flag to specify which skills to install'
+        };
+      }
+      return await handleSkillsCollectionInstallation(contexts, loaded, options, cwd);
     }
 
     // Not a marketplace - warn if --plugins was specified
     if (options.plugins && options.plugins.length > 0) {
       console.log('Warning: --plugins flag is only used with marketplace sources. Ignoring.');
     }
+    
+    // Warn if --skills specified but not a collection
+    if (options.skills && options.skills.length > 0 && !loaded.sourceMetadata?.skillsDetection?.hasSkills) {
+      console.log('Warning: --skills flag specified but source is not a skills collection. Installing entire package.');
+    }
 
-    // Not a marketplace, continue with normal pipeline
+    // Regular package install (including single skills - they're now regular packages!)
     // Create resolved package for the loaded package
     contexts.resolvedPackages = [{
       name: loaded.packageName,
@@ -298,6 +638,7 @@ export function setupInstallCommand(program: Command): void {
     .option('--profile <profile>', 'profile to use for authentication')
     .option('--api-key <key>', 'API key for authentication (overrides profile)')
     .option('--plugins <names...>', 'install specific plugins from marketplace (bypasses interactive selection)')
+    .option('--skills <names...>', 'install specific skills from skills collection (for marketplaces: must be paired with --plugins; for standalone: filters to install only specified skills)')
     .action(withErrorHandling(async (packageName: string | undefined, options: InstallOptions) => {
       // Normalize platforms
       options.platforms = normalizePlatforms(options.platforms);
@@ -306,6 +647,14 @@ export function setupInstallCommand(program: Command): void {
       if (options.plugins) {
         options.plugins = normalizePluginsOption(options.plugins as any);
       }
+      
+      // Normalize skills
+      if (options.skills) {
+        options.skills = normalizeSkillsOption(options.skills as any);
+      }
+      
+      // Validate skills options
+      validateSkillsOptions(options);
 
       // Normalize conflict strategy
       const commandOptions = options as InstallOptions & { conflicts?: string };
@@ -322,11 +671,6 @@ export function setupInstallCommand(program: Command): void {
           );
         }
         options.conflictStrategy = normalizedStrategy as InstallOptions['conflictStrategy'];
-      }
-
-      // Normalize plugins option
-      if (options.plugins) {
-        options.plugins = normalizePluginsOption(options.plugins as any);
       }
 
       // Execute install
