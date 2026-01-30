@@ -33,10 +33,34 @@ export interface GitPackageLoadResult {
 }
 
 export async function loadPackageFromGit(options: GitPackageLoadOptions): Promise<GitPackageLoadResult> {
+  // Import skill path parser
+  const { parseSkillPath } = await import('./skill-path-parser.js');
+  
+  // CRITICAL: When gitPath points to a skill directory, we must clone to the PARENT
+  // directory, not the skill itself (skills don't have openpackage.yml/plugin.json)
+  let clonePath = options.path;
+  let skillFilter = options.skillFilter;
+  
+  if (options.path) {
+    const skillInfo = parseSkillPath(options.path);
+    if (skillInfo.isSkill) {
+      // Path points to a skill - ALWAYS adjust clone path and filter
+      clonePath = skillInfo.parentPath; // Clone to parent (plugin directory)
+      skillFilter = skillInfo.skillRelativePath; // Filter to skill subdirectory
+      
+      logger.debug('Detected skill in git path, adjusting clone target', {
+        originalPath: options.path,
+        clonePath: clonePath || '(root)',
+        skillFilter,
+        skillFilterAlreadySet: !!options.skillFilter
+      });
+    }
+  }
+  
   const cloneResult = await cloneRepoToCache({ 
     url: options.url, 
     ref: options.ref,
-    subdir: options.path
+    subdir: clonePath
   });
   
   const { path: sourcePath, repoPath, commitSha } = cloneResult;
@@ -139,12 +163,12 @@ export async function loadPackageFromGit(options: GitPackageLoadOptions): Promis
   }
   
   // Not a marketplace or skills collection, load as regular package
-  // Pass through skill filter if specified
+  // Pass through skill filter (either from options or auto-detected from path)
   const pkg = await loadPackageFromPath(sourcePath, {
     gitUrl: options.url,
     path: options.path,
     repoPath,
-    skillFilter: options.skillFilter,
+    skillFilter: skillFilter,  // Use adjusted skillFilter
     skillMetadata: options.skillMetadata
   });
   

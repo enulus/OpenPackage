@@ -107,7 +107,10 @@ export async function installPackageByIndexWithFlows(
     }
   }
   
-  logger.debug(`Installing ${packageName}@${version} with flows for platforms: ${platforms.join(', ')}`);
+  logger.debug(`Installing ${packageName}@${version} with flows for platforms: ${platforms.join(', ')}`, {
+    skillFilter: skillFilter || 'none',
+    hasSkillFilter: !!skillFilter
+  });
 
   // Resolve package root
   const resolvedContentRoot = contentRoot ?? await resolvePackageContentRoot({ 
