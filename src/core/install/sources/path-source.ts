@@ -34,7 +34,8 @@ export class PathSourceLoader implements PackageSourceLoader {
       const loadContext: any = {
         repoPath: resolvedPath,
         marketplaceEntry: source.pluginMetadata?.marketplaceEntry,
-        skillFilter: source.skillFilter
+        contentFilter: source.contentFilter,
+        contentType: source.contentType
       };
       
       if (source.gitSourceOverride) {
@@ -42,11 +43,16 @@ export class PathSourceLoader implements PackageSourceLoader {
         loadContext.path = source.gitSourceOverride.gitPath;
       }
       
-      // If skill filter is specified, extract skill metadata from pluginMetadata
-      if (source.skillFilter && source.pluginMetadata?.skillMetadata) {
+      // If content filter is specified, extract metadata from pluginMetadata
+      if (source.contentFilter && source.pluginMetadata?.skillMetadata) {
         loadContext.skillMetadata = {
           name: source.pluginMetadata.skillMetadata.skill.name,
           skillPath: source.pluginMetadata.skillMetadata.skill.skillPath
+        };
+      } else if (source.contentFilter && source.pluginMetadata?.contentMetadata) {
+        loadContext.skillMetadata = {
+          name: source.pluginMetadata.contentMetadata.item.name,
+          skillPath: source.pluginMetadata.contentMetadata.item.itemPath
         };
       }
       
@@ -61,11 +67,11 @@ export class PathSourceLoader implements PackageSourceLoader {
       const packageName = sourcePackage.metadata.name;
       const version = sourcePackage.metadata.version || '0.0.0';
       
-      // Check if this is a skill based on source metadata
-      const isSkill = source.skillFilter !== undefined;
+      // Check if this is a content item based on source metadata
+      const isSingleContent = source.contentFilter !== undefined || source.contentType !== undefined;
       
       // Note: Plugin transformation is handled by loadPackageFromPath
-      // Skills are now handled via filtering, not transformation
+      // Content items are now handled via filtering, not transformation
       return {
         metadata: sourcePackage.metadata,
         packageName,
@@ -75,9 +81,13 @@ export class PathSourceLoader implements PackageSourceLoader {
         pluginMetadata: pluginDetection.isPlugin ? {
           isPlugin: true,
           pluginType: pluginDetection.type as any  // Can be 'individual', 'marketplace', or 'marketplace-defined'
-        } : isSkill ? {
+        } : isSingleContent ? {
           isPlugin: false,
-          isSkill: true,
+          isSingleContent: true,
+          contentType: source.contentType,
+          contentMetadata: source.pluginMetadata?.contentMetadata,
+          // Legacy
+          isSkill: source.contentType === 'skills',
           skillMetadata: source.pluginMetadata?.skillMetadata
         } : undefined,
         sourceMetadata: {

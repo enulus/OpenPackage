@@ -2,6 +2,8 @@ import type { PackageYml } from '../../../types/index.js';
 import type { PackageSource } from '../unified/context.js';
 import type { InstallOptions } from '../../../types/index.js';
 import type { SkillsDetectionResult } from '../skills-detector.js';
+import type { ContentDiscoveryResult } from '../content-detector.js';
+import type { ContentType } from '../content-type-registry.js';
 
 /**
  * Result of loading a package from a source
@@ -22,19 +24,34 @@ export interface LoadedPackage {
   /** Source type for tracking */
   source: 'registry' | 'path' | 'git' | 'workspace';
   
+  /** Content type if this is a content collection */
+  contentType?: ContentType;
+  
   /** Plugin-specific metadata (will be stored in context.source.pluginMetadata) */
   pluginMetadata?: {
     isPlugin: boolean;
     pluginType?: 'individual' | 'marketplace';
     format?: any;
     manifestPath?: string;
-    /** Indicates this is a skills collection */
+    /** Indicates this is a content collection (skills/, agents/, etc.) */
+    isContentCollection?: boolean;
+    /** Indicates this is a single content item (skill, agent, etc.) */
+    isSingleContent?: boolean;
+    /** Content type if this is content */
+    contentType?: ContentType;
+    /** Content metadata (for content installations) */
+    contentMetadata?: {
+      item: any; // ContentItem type
+      pluginName?: string;
+    };
+    // Legacy fields for backward compatibility
+    /** @deprecated Use isContentCollection instead */
     isSkillsCollection?: boolean;
-    /** Indicates this is a single skill */
+    /** @deprecated Use isSingleContent instead */
     isSkill?: boolean;
-    /** Skill metadata (for skill installations) */
+    /** @deprecated Use contentMetadata instead */
     skillMetadata?: {
-      skill: any; // DiscoveredSkill type
+      skill: any;
       pluginName?: string;
     };
   };
@@ -50,8 +67,11 @@ export interface LoadedPackage {
     /** For path sources: was this a tarball? */
     wasTarball?: boolean;
     
-    /** Skills detection result (if available) */
+    /** Skills detection result (if available) - legacy */
     skillsDetection?: SkillsDetectionResult;
+    
+    /** Content detection result (if available) */
+    contentDetection?: ContentDiscoveryResult;
   };
 }
 

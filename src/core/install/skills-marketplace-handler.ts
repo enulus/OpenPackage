@@ -499,7 +499,8 @@ async function installSingleSkill(
       {
         ...options,
         sourceType: 'directory' as const,
-        skillFilter: skill.skillPath,
+        contentFilter: skill.skillPath,
+        contentType: 'skills' as const,
         skillMetadata: {
           name: skill.name,
           skillPath: skill.skillPath

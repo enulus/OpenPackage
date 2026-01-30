@@ -1,7 +1,9 @@
 import { cloneRepoToCache } from '../../utils/git-clone.js';
 import { loadPackageFromPath } from './path-package-loader.js';
 import { detectPluginType } from './plugin-detector.js';
-import { detectSkillsInDirectory, type SkillsDetectionResult } from './skills-detector.js';
+import { detectContentInDirectory, type ContentDiscoveryResult } from './content-detector.js';
+import { isSingleContentDirectory } from './content-detector.js';
+import type { ContentType } from './content-type-registry.js';
 import { logger } from '../../utils/logger.js';
 import type { Package } from '../../types/index.js';
 
@@ -9,7 +11,8 @@ export interface GitPackageLoadOptions {
   url: string;
   ref?: string;
   path?: string;
-  skillFilter?: string;
+  contentFilter?: string;
+  contentType?: ContentType;
   skillMetadata?: {
     name: string;
     skillPath: string;
@@ -23,36 +26,43 @@ export interface GitPackageLoadResult {
   commitSha: string;
   isMarketplace: boolean;
   /**
-   * Is this a skills collection (skills/ directory without openpackage.yml)?
+   * Is this a content collection (skills/, agents/ directory without openpackage.yml)?
    */
-  isSkillsCollection?: boolean;
+  isContentCollection?: boolean;
   /**
-   * Skills detection result (available for both marketplace and non-marketplace sources)
+   * Content type if this is a content collection
    */
-  skillsDetection?: SkillsDetectionResult;
+  contentType?: ContentType;
+  /**
+   * Content detection result (available for both marketplace and non-marketplace sources)
+   */
+  contentDetection?: ContentDiscoveryResult;
 }
 
 export async function loadPackageFromGit(options: GitPackageLoadOptions): Promise<GitPackageLoadResult> {
-  // Import skill path parser
-  const { parseSkillPath } = await import('./skill-path-parser.js');
+  // Import content path parser
+  const { parseContentPath } = await import('./content-path-parser.js');
   
-  // CRITICAL: When gitPath points to a skill directory, we must clone to the PARENT
-  // directory, not the skill itself (skills don't have openpackage.yml/plugin.json)
+  // CRITICAL: When gitPath points to a content directory, we must clone to the PARENT
+  // directory, not the content itself (content items don't have openpackage.yml/plugin.json)
   let clonePath = options.path;
-  let skillFilter = options.skillFilter;
+  let contentFilter = options.contentFilter;
+  let contentType = options.contentType;
   
   if (options.path) {
-    const skillInfo = parseSkillPath(options.path);
-    if (skillInfo.isSkill) {
-      // Path points to a skill - ALWAYS adjust clone path and filter
-      clonePath = skillInfo.parentPath; // Clone to parent (plugin directory)
-      skillFilter = skillInfo.skillRelativePath; // Filter to skill subdirectory
+    const contentInfo = parseContentPath(options.path);
+    if (contentInfo.isContent) {
+      // Path points to content - ALWAYS adjust clone path and filter
+      clonePath = contentInfo.parentPath; // Clone to parent (plugin directory)
+      contentFilter = contentInfo.contentRelativePath; // Filter to content subdirectory
+      contentType = contentInfo.contentType;
       
-      logger.debug('Detected skill in git path, adjusting clone target', {
+      logger.debug('Detected content in git path, adjusting clone target', {
         originalPath: options.path,
         clonePath: clonePath || '(root)',
-        skillFilter,
-        skillFilterAlreadySet: !!options.skillFilter
+        contentFilter,
+        contentType,
+        contentFilterAlreadySet: !!options.contentFilter
       });
     }
   }
@@ -69,13 +79,13 @@ export async function loadPackageFromGit(options: GitPackageLoadOptions): Promis
   // and need to be handled differently
   const pluginDetection = await detectPluginType(sourcePath);
   if (pluginDetection.isPlugin && pluginDetection.type === 'marketplace') {
-    // Detect skills in marketplace source
-    let skillsDetection: SkillsDetectionResult | undefined;
+    // Detect skills in marketplace source (for backward compatibility)
+    let contentDetection: ContentDiscoveryResult | undefined;
     try {
-      skillsDetection = await detectSkillsInDirectory(sourcePath);
-      if (skillsDetection.hasSkills) {
+      contentDetection = await detectContentInDirectory(sourcePath, 'skills');
+      if (contentDetection.hasContent) {
         logger.info('Skills detected in marketplace', {
-          skillCount: skillsDetection.discoveredSkills.length,
+          itemCount: contentDetection.discoveredItems.length,
           sourcePath
         });
       }
@@ -92,15 +102,15 @@ export async function loadPackageFromGit(options: GitPackageLoadOptions): Promis
       repoPath,
       commitSha,
       isMarketplace: true,
-      skillsDetection
+      contentDetection
     };
   }
   
-  // Check if this is a single skill (only if no skill filter specified)
-  // If skill filter is specified, we're loading from a parent directory
-  if (!options.skillFilter) {
-    const { isSingleSkillDirectory } = await import('./skills-detector.js');
-    const isSkill = await isSingleSkillDirectory(sourcePath);
+  // Check if this is a single content item (only if no content filter specified)
+  // If content filter is specified, we're loading from a parent directory
+  if (!options.contentFilter) {
+    // Try skills first (most common)
+    const isSkill = await isSingleContentDirectory(sourcePath, 'skills');
     
     if (isSkill) {
       logger.info('Detected single skill from git source');
@@ -117,38 +127,66 @@ export async function loadPackageFromGit(options: GitPackageLoadOptions): Promis
         repoPath,
         commitSha,
         isMarketplace: false,
-        isSkillsCollection: false,
-        skillsDetection: undefined
+        isContentCollection: false,
+        contentDetection: undefined
+      };
+    }
+    
+    // Try agents
+    const isAgent = await isSingleContentDirectory(sourcePath, 'agents');
+    if (isAgent) {
+      logger.info('Detected single agent from git source');
+      const pkg = await loadPackageFromPath(sourcePath, {
+        gitUrl: options.url,
+        path: options.path,
+        repoPath
+      });
+      
+      return { 
+        pkg, 
+        sourcePath, 
+        repoPath,
+        commitSha,
+        isMarketplace: false,
+        isContentCollection: false,
+        contentDetection: undefined
       };
     }
   }
   
-  // Detect skills in non-marketplace source
-  let skillsDetection: SkillsDetectionResult | undefined;
-  try {
-    skillsDetection = await detectSkillsInDirectory(sourcePath);
-    if (skillsDetection.hasSkills) {
-      logger.info('Skills detected in source', {
-        skillCount: skillsDetection.discoveredSkills.length,
-        collectionTypes: skillsDetection.collectionTypes,
-        sourcePath
+  // Detect content in non-marketplace source
+  // Try both skills and agents
+  let contentDetection: ContentDiscoveryResult | undefined;
+  const contentTypesToCheck: ContentType[] = ['skills', 'agents'];
+  
+  for (const type of contentTypesToCheck) {
+    try {
+      const detection = await detectContentInDirectory(sourcePath, type);
+      if (detection.hasContent) {
+        contentDetection = detection;
+        logger.info(`${type} detected in source`, {
+          itemCount: detection.discoveredItems.length,
+          collectionTypes: detection.collectionTypes,
+          sourcePath
+        });
+        break; // Use the first content type found
+      }
+    } catch (error) {
+      logger.warn(`Failed to detect ${type} in source`, {
+        sourcePath,
+        error: error instanceof Error ? error.message : String(error)
       });
     }
-  } catch (error) {
-    logger.warn('Failed to detect skills in source', {
-      sourcePath,
-      error: error instanceof Error ? error.message : String(error)
-    });
   }
   
-  // Check if this is a skills collection (skills/ without openpackage.yml and not a plugin)
+  // Check if this is a content collection (content/ without openpackage.yml and not a plugin)
   const hasOpenPackageYml = await import('../../utils/fs.js').then(m => 
     m.exists(sourcePath + '/openpackage.yml')
   );
   
-  if (skillsDetection?.hasSkills && !hasOpenPackageYml && !pluginDetection.isPlugin) {
-    logger.info('Detected skills collection from git source', {
-      skillCount: skillsDetection.discoveredSkills.length
+  if (contentDetection?.hasContent && !hasOpenPackageYml && !pluginDetection.isPlugin) {
+    logger.info(`Detected ${contentDetection.contentType} collection from git source`, {
+      itemCount: contentDetection.discoveredItems.length
     });
     
     return {
@@ -157,18 +195,20 @@ export async function loadPackageFromGit(options: GitPackageLoadOptions): Promis
       repoPath,
       commitSha,
       isMarketplace: false,
-      isSkillsCollection: true,
-      skillsDetection
+      isContentCollection: true,
+      contentType: contentDetection.contentType,
+      contentDetection
     };
   }
   
-  // Not a marketplace or skills collection, load as regular package
-  // Pass through skill filter (either from options or auto-detected from path)
+  // Not a marketplace or content collection, load as regular package
+  // Pass through content filter (either from options or auto-detected from path)
   const pkg = await loadPackageFromPath(sourcePath, {
     gitUrl: options.url,
     path: options.path,
     repoPath,
-    skillFilter: skillFilter,  // Use adjusted skillFilter
+    contentFilter: contentFilter,  // Use adjusted contentFilter
+    contentType,
     skillMetadata: options.skillMetadata
   });
   
@@ -178,7 +218,7 @@ export async function loadPackageFromGit(options: GitPackageLoadOptions): Promis
     repoPath,
     commitSha,
     isMarketplace: false,
-    isSkillsCollection: false,
-    skillsDetection
+    isContentCollection: false,
+    contentDetection
   };
 }

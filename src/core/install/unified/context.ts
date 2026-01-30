@@ -37,10 +37,14 @@ export interface PackageSource {
     gitPath?: string;
   };
   
-  // Skill filter - when specified, only load files under this subdirectory path
-  // Used for installing individual skills from skills collections
-  // Example: "skills/git" or "plugins/ui-design/skills/mobile-ios-design"
-  skillFilter?: string;
+  // Content filter - when specified, only load files under this subdirectory path
+  // Used for installing individual content items (skills, agents, etc.) from collections
+  // Example: "skills/git" or "agents/code-review-assistant"
+  contentFilter?: string;
+  
+  // Content type - identifies what type of content is being installed
+  // Used to determine discovery strategy and naming conventions
+  contentType?: 'skills' | 'agents';
   
   // Resolved content root (populated after loading)
   contentRoot?: string;
@@ -75,11 +79,26 @@ export interface PackageSource {
       pluginName?: string;
     };
     
+    /** Content-specific metadata (for content from collections - new unified approach) */
+    contentMetadata?: {
+      item: any; // ContentItem type, avoiding circular dependency
+      pluginName?: string;
+    };
+    
     /** Indicates this is a skills collection (multiple skills, not a plugin) */
     isSkillsCollection?: boolean;
     
+    /** Indicates this is a content collection (skills, agents, etc.) */
+    isContentCollection?: boolean;
+    
     /** Indicates this is a single skill package */
     isSkill?: boolean;
+    
+    /** Indicates this is a single content item (skill, agent, etc.) */
+    isSingleContent?: boolean;
+    
+    /** Content type for content items */
+    contentType?: 'skills' | 'agents';
   };
 }
 

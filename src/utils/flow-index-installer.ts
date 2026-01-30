@@ -91,7 +91,7 @@ export async function installPackageByIndexWithFlows(
     commitSha: string;
     pluginName: string;
   },
-  skillFilter?: string,  // Optional skill filter
+  contentFilter?: string,  // Optional content filter
   namingContext?: PackageNamingContext  // Optional naming context for validation
 ): Promise<IndexInstallResult> {
   // Validate package name if naming context is provided
@@ -108,8 +108,8 @@ export async function installPackageByIndexWithFlows(
   }
   
   logger.debug(`Installing ${packageName}@${version} with flows for platforms: ${platforms.join(', ')}`, {
-    skillFilter: skillFilter || 'none',
-    hasSkillFilter: !!skillFilter
+    contentFilter: contentFilter || 'none',
+    hasContentFilter: !!contentFilter
   });
 
   // Resolve package root
@@ -217,7 +217,7 @@ export async function installPackageByIndexWithFlows(
       dryRun: options.dryRun ?? false,
       packageFormat: format,
       conversionContext,
-      skillFilter
+      contentFilter
     };
 
     try {

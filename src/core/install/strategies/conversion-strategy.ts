@@ -60,7 +60,7 @@ export class ConversionInstallStrategy extends BaseStrategy {
     
     try {
       // Phase 1: Load package files with skill filter
-      const packageFiles = await this.loadPackageFiles(packageRoot, context.skillFilter);
+      const packageFiles = await this.loadPackageFiles(packageRoot, context.contentFilter);
       
       // Phase 2: Create package object with original format metadata
       const pkg: Package = {
@@ -126,7 +126,7 @@ export class ConversionInstallStrategy extends BaseStrategy {
    */
   private async loadPackageFiles(
     packageRoot: string,
-    skillFilter?: string
+    contentFilter?: string
   ): Promise<Array<{ path: string; content: string }>> {
     const packageFiles: Array<{ path: string; content: string }> = [];
     
@@ -137,8 +137,8 @@ export class ConversionInstallStrategy extends BaseStrategy {
         continue;
       }
       
-      // Apply skill filter if specified
-      if (skillFilter && !this.isUnderSkillPath(relativePath, skillFilter)) {
+      // Apply content filter if specified
+      if (contentFilter && !this.isUnderContentPath(relativePath, contentFilter)) {
         continue;
       }
       
@@ -150,11 +150,11 @@ export class ConversionInstallStrategy extends BaseStrategy {
   }
   
   /**
-   * Check if a relative path is under the skill filter path
+   * Check if a relative path is under the content filter path
    */
-  private isUnderSkillPath(relativePath: string, skillFilter: string): boolean {
+  private isUnderContentPath(relativePath: string, contentFilter: string): boolean {
     const normalizedRelative = relativePath.replace(/\/$/, '');
-    const normalizedFilter = skillFilter.replace(/\/$/, '');
+    const normalizedFilter = contentFilter.replace(/\/$/, '');
     
     return (
       normalizedRelative === normalizedFilter ||
@@ -220,7 +220,7 @@ export class ConversionInstallStrategy extends BaseStrategy {
         // Pass updated conversion context
         conversionContext,
         // Preserve skill filter
-        skillFilter: context.skillFilter
+        contentFilter: context.contentFilter
       };
       
       const installResult = await flowStrategy.install(convertedContext, options);

@@ -185,6 +185,11 @@ export interface InstallOptions {
    * For standalone sources: filters to install only specified skills.
    */
   skills?: string[];
+  /**
+   * Specific agents to install from an agents collection.
+   * For standalone sources: filters to install only specified agents.
+   */
+  agents?: string[];
 }
 
 export interface UninstallOptions {

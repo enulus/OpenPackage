@@ -24,15 +24,19 @@ export class GitSourceLoader implements PackageSourceLoader {
     
     try {
       // Load package from git
-      // Pass through skill filter if specified
+      // Pass through content filter if specified
       const result = await loadPackageFromGit({
         url: source.gitUrl,
         ref: source.gitRef,
         path: source.gitPath,
-        skillFilter: source.skillFilter,
+        contentFilter: source.contentFilter,
+        contentType: source.contentType,
         skillMetadata: source.pluginMetadata?.skillMetadata ? {
           name: source.pluginMetadata.skillMetadata.skill.name,
           skillPath: source.pluginMetadata.skillMetadata.skill.skillPath
+        } : source.pluginMetadata?.contentMetadata ? {
+          name: source.pluginMetadata.contentMetadata.item.name,
+          skillPath: source.pluginMetadata.contentMetadata.item.itemPath
         } : undefined
       });
       
@@ -54,27 +58,35 @@ export class GitSourceLoader implements PackageSourceLoader {
           sourceMetadata: {
             repoPath: result.repoPath,
             commitSha: result.commitSha,
-            skillsDetection: result.skillsDetection
+            contentDetection: result.contentDetection,
+            // Legacy
+            skillsDetection: result.contentDetection?.contentType === 'skills' ? result.contentDetection as any : undefined
           }
         };
       }
       
-      // Check if skills collection (non-marketplace)
-      if (result.isSkillsCollection) {
+      // Check if content collection (skills, agents, etc.)
+      if (result.isContentCollection) {
         return {
-          metadata: null as any, // Skills collection doesn't have single package
-          packageName: '', // Unknown until skill selection
+          metadata: null as any, // Content collection doesn't have single package
+          packageName: '', // Unknown until item selection
           version: '0.0.0',
           contentRoot: result.sourcePath,
+          contentType: result.contentType,
           source: 'git',
           pluginMetadata: {
             isPlugin: false,
-            isSkillsCollection: true
+            isContentCollection: true,
+            contentType: result.contentType,
+            // Legacy for backward compatibility
+            isSkillsCollection: result.contentType === 'skills'
           },
           sourceMetadata: {
             repoPath: result.repoPath,
             commitSha: result.commitSha,
-            skillsDetection: result.skillsDetection
+            contentDetection: result.contentDetection,
+            // Legacy
+            skillsDetection: result.contentType === 'skills' ? result.contentDetection as any : undefined
           }
         };
       }
@@ -91,11 +103,11 @@ export class GitSourceLoader implements PackageSourceLoader {
       const packageName = result.pkg.metadata.name;
       const version = result.pkg.metadata.version || '0.0.0';
       
-      // Check if this is a skill based on source metadata
-      const isSkill = source.skillFilter !== undefined;
+      // Check if this is a single content item based on source metadata
+      const isSingleContent = source.contentFilter !== undefined || source.contentType !== undefined;
       
       // Note: Plugin transformation is handled by loadPackageFromPath
-      // Skills are now handled via filtering, not transformation
+      // Content items are now handled via filtering, not transformation
       return {
         metadata: result.pkg.metadata,
         packageName,
@@ -106,15 +118,19 @@ export class GitSourceLoader implements PackageSourceLoader {
           isPlugin: true,
           pluginType: pluginDetection.type as any,
           manifestPath: pluginDetection.manifestPath
-        } : isSkill ? {
+        } : isSingleContent ? {
           isPlugin: false,
-          isSkill: true,
+          isSingleContent: true,
+          contentType: source.contentType,
+          contentMetadata: source.pluginMetadata?.contentMetadata,
+          // Legacy
+          isSkill: source.contentType === 'skills',
           skillMetadata: source.pluginMetadata?.skillMetadata
         } : undefined,
         sourceMetadata: {
           repoPath: result.repoPath,
           commitSha: result.commitSha,
-          skillsDetection: result.skillsDetection
+          contentDetection: result.contentDetection
         }
       };
     } catch (error) {

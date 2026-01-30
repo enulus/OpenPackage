@@ -35,11 +35,11 @@ export interface FlowInstallContext {
    * Optional filter to limit installation to specific subdirectory
    * 
    * When specified, only files under this path will be discovered and installed.
-   * Used for installing individual skills from plugins or collections.
+   * Used for installing individual content items (skills, agents, etc.) from collections.
    * 
-   * Example: "skills/git" or "plugins/ui-design/skills/mobile-ios-design"
+   * Example: "skills/git" or "agents/code-review-assistant"
    */
-  skillFilter?: string;
+  contentFilter?: string;
 }
 
 /**

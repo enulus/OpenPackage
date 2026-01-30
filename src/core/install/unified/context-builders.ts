@@ -9,7 +9,8 @@ import { exists } from '../../../utils/fs.js';
 import { createWorkspacePackageYml, ensureLocalOpenPackageStructure } from '../../../utils/package-management.js';
 import { logger } from '../../../utils/logger.js';
 import { resolveDeclaredPath } from '../../../utils/path-resolution.js';
-import { parseSkillPath, getSkillFilterPath } from '../skill-path-parser.js';
+import { parseContentPath, getContentFilterPath } from '../content-path-parser.js';
+import type { ContentType } from '../content-type-registry.js';
 
 /**
  * Build context for registry-based installation
@@ -47,24 +48,27 @@ export async function buildPathInstallContext(
   sourcePath: string,
   options: InstallOptions & { 
     sourceType: 'directory' | 'tarball';
-    skillFilter?: string;
+    contentFilter?: string;
+    contentType?: ContentType;
     skillMetadata?: { name: string; skillPath: string };
   }
 ): Promise<InstallationContext> {
-  // Auto-detect skill filter if not provided
-  // This handles cases where a package name resolves to a skill directory path
-  let skillFilter = options.skillFilter;
+  // Auto-detect content filter if not provided
+  // This handles cases where a package name resolves to a content directory path
+  let contentFilter = options.contentFilter;
+  let contentType = options.contentType;
   
-  if (!skillFilter && options.sourceType === 'directory') {
-    // Check if the path itself indicates this is a skill
-    // Extract the relative path portion that might contain "/skills/"
-    const skillInfo = parseSkillPath(sourcePath);
-    if (skillInfo.isSkill) {
-      skillFilter = getSkillFilterPath(skillInfo);
-      logger.debug('Auto-detected skill filter from resolved path', {
+  if (!contentFilter && options.sourceType === 'directory') {
+    // Check if the path itself indicates this is content (skill, agent, etc.)
+    const contentInfo = parseContentPath(sourcePath);
+    if (contentInfo.isContent) {
+      contentFilter = getContentFilterPath(contentInfo);
+      contentType = contentInfo.contentType;
+      logger.debug('Auto-detected content filter from resolved path', {
         sourcePath,
-        skillFilter,
-        skillName: skillInfo.skillName
+        contentFilter,
+        contentType,
+        contentName: contentInfo.contentName
       });
     }
   }
@@ -76,7 +80,8 @@ export async function buildPathInstallContext(
     packageName: '', // Populated after loading
     localPath: sourcePath,
     sourceType: options.sourceType,
-    skillFilter
+    contentFilter,
+    contentType
   };
   
   return {
@@ -98,7 +103,12 @@ export async function buildPathInstallContext(
 export async function buildGitInstallContext(
   cwd: string,
   gitUrl: string,
-  options: InstallOptions & { gitRef?: string; gitPath?: string; skillFilter?: string }
+  options: InstallOptions & { 
+    gitRef?: string; 
+    gitPath?: string; 
+    contentFilter?: string;
+    contentType?: ContentType;
+  }
 ): Promise<InstallationContext> {
   const source: PackageSource = {
     type: 'git',
@@ -106,7 +116,8 @@ export async function buildGitInstallContext(
     gitUrl,
     gitRef: options.gitRef,
     gitPath: options.gitPath,
-    skillFilter: options.skillFilter
+    contentFilter: options.contentFilter,
+    contentType: options.contentType
   };
   
   return {
@@ -202,17 +213,19 @@ export async function buildInstallContext(
     
     case 'directory':
     case 'tarball': {
-      // Check if the original package input (name) contains skill information
+      // Check if the original package input (name) contains content information (skills, agents, etc.)
       // This handles: opkg install ghwshobson/agents/plugins/ui-design/skills/mobile-ios-design
       // which resolves to path: ~/.cache/.../plugins/ui-design (parent)
-      // We need to extract skill filter from the NAME, not the path
-      const skillInfo = parseSkillPath(packageInput);
-      const skillFilter = skillInfo.isSkill ? getSkillFilterPath(skillInfo) : undefined;
+      // We need to extract content filter from the NAME, not the path
+      const contentInfo = parseContentPath(packageInput);
+      const contentFilter = contentInfo.isContent ? getContentFilterPath(contentInfo) : undefined;
+      const contentType = contentInfo.contentType;
       
-      if (skillFilter) {
-        logger.debug('Detected skill filter from package name', {
+      if (contentFilter) {
+        logger.debug('Detected content filter from package name', {
           packageInput,
-          skillFilter,
+          contentFilter,
+          contentType,
           resolvedPath: classification.resolvedPath
         });
       }
@@ -220,26 +233,29 @@ export async function buildInstallContext(
       return buildPathInstallContext(cwd, classification.resolvedPath!, {
         ...options,
         sourceType: classification.type,
-        skillFilter
+        contentFilter,
+        contentType
       });
     }
     
     case 'git': {
-      // Check if the package input (name) or gitPath contains skill information
+      // Check if the package input (name) or gitPath contains content information
       // This handles: opkg install ghwshobson/agents/plugins/ui-design/skills/mobile-ios-design
-      // which is classified as git but may contain skill path
-      const skillInfoFromInput = parseSkillPath(packageInput);
-      const skillInfoFromGitPath = parseSkillPath(classification.gitPath);
+      // which is classified as git but may contain content path
+      const contentInfoFromInput = parseContentPath(packageInput);
+      const contentInfoFromGitPath = parseContentPath(classification.gitPath);
       
-      // Prefer skill info from gitPath if available, otherwise from packageInput
-      const skillInfo = skillInfoFromGitPath.isSkill ? skillInfoFromGitPath : skillInfoFromInput;
-      const skillFilter = skillInfo.isSkill ? getSkillFilterPath(skillInfo) : undefined;
+      // Prefer content info from gitPath if available, otherwise from packageInput
+      const contentInfo = contentInfoFromGitPath.isContent ? contentInfoFromGitPath : contentInfoFromInput;
+      const contentFilter = contentInfo.isContent ? getContentFilterPath(contentInfo) : undefined;
+      const contentType = contentInfo.contentType;
       
-      if (skillFilter) {
-        logger.debug('Detected skill filter from git source', {
+      if (contentFilter) {
+        logger.debug('Detected content filter from git source', {
           packageInput,
           gitPath: classification.gitPath,
-          skillFilter
+          contentFilter,
+          contentType
         });
       }
       
@@ -247,7 +263,8 @@ export async function buildInstallContext(
         ...options,
         gitRef: classification.gitRef,
         gitPath: classification.gitPath,
-        skillFilter
+        contentFilter,
+        contentType
       });
     }
     
@@ -306,9 +323,10 @@ async function buildBulkInstallContexts(
         // Use embedded ref if present, otherwise fall back to separate ref field
         const gitRef = embeddedRef || dep.ref;
         
-        // Detect if path points to a skill
-        const skillInfo = parseSkillPath(dep.path);
-        const skillFilter = getSkillFilterPath(skillInfo);
+        // Detect if path points to content (skills, agents, etc.)
+        const contentInfo = parseContentPath(dep.path);
+        const contentFilter = getContentFilterPath(contentInfo);
+        const contentType = contentInfo.contentType;
         
         source = {
           type: 'git',
@@ -316,17 +334,19 @@ async function buildBulkInstallContexts(
           gitUrl,
           gitRef,
           gitPath: dep.path,
-          skillFilter
+          contentFilter,
+          contentType
         };
         
-        // Log skill detection for debugging
-        if (skillInfo.isSkill) {
-          logger.debug('Detected skill in bulk install manifest', {
+        // Log content detection for debugging
+        if (contentInfo.isContent) {
+          logger.debug('Detected content in bulk install manifest', {
             packageName: dep.name,
             gitPath: dep.path,
-            skillFilter,
-            skillName: skillInfo.skillName,
-            parentPath: skillInfo.parentPath
+            contentFilter,
+            contentType,
+            contentName: contentInfo.contentName,
+            parentPath: contentInfo.parentPath
           });
         }
       } else if (dep.path) {
@@ -334,27 +354,30 @@ async function buildBulkInstallContexts(
         const resolved = resolveDeclaredPath(dep.path, cwd);
         const isTarball = dep.path.endsWith('.tgz') || dep.path.endsWith('.tar.gz');
         
-        // Detect if path points to a skill subdirectory
+        // Detect if path points to a content subdirectory
         // Note: For local paths, we detect based on path structure
-        const skillInfo = parseSkillPath(dep.path);
-        const skillFilter = getSkillFilterPath(skillInfo);
+        const contentInfo = parseContentPath(dep.path);
+        const contentFilter = getContentFilterPath(contentInfo);
+        const contentType = contentInfo.contentType;
         
         source = {
           type: 'path',
           packageName: dep.name,
           localPath: resolved.absolute,
           sourceType: isTarball ? 'tarball' : 'directory',
-          skillFilter
+          contentFilter,
+          contentType
         };
         
-        // Log skill detection for debugging
-        if (skillInfo.isSkill) {
-          logger.debug('Detected skill in bulk install manifest (path source)', {
+        // Log content detection for debugging
+        if (contentInfo.isContent) {
+          logger.debug('Detected content in bulk install manifest (path source)', {
             packageName: dep.name,
             localPath: dep.path,
-            skillFilter,
-            skillName: skillInfo.skillName,
-            parentPath: skillInfo.parentPath
+            contentFilter,
+            contentType,
+            contentName: contentInfo.contentName,
+            parentPath: contentInfo.parentPath
           });
         }
       } else {

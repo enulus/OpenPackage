@@ -35,12 +35,12 @@ export class FlowBasedInstallStrategy extends BaseStrategy {
     context: FlowInstallContext,
     options?: InstallOptions
   ): Promise<FlowInstallResult> {
-    const { packageName, packageRoot, workspaceRoot, platform, dryRun, skillFilter } = context;
+    const { packageName, packageRoot, workspaceRoot, platform, dryRun, contentFilter } = context;
     
     this.logStrategySelection(context);
     
     logger.debug(`Standard flow-based installation for ${packageName}`, {
-      skillFilter: skillFilter || 'none'
+      contentFilter: contentFilter || 'none'
     });
     
     // Check if platform uses flows
@@ -59,9 +59,9 @@ export class FlowBasedInstallStrategy extends BaseStrategy {
     // Build context
     const flowContext = this.buildFlowContext(context, 'install');
     
-    // Discover sources with skill filter
+    // Discover sources with content filter
     const flowSources = await discoverFlowSources(flows, packageRoot, flowContext, {
-      skillFilter
+      contentFilter
     });
     
     // Filter by platform

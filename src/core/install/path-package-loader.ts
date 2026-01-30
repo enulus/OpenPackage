@@ -29,8 +29,11 @@ export interface PackageLoadContext {
   packageName?: string;  // Optional override (avoid using - let transformer generate)
   marketplaceEntry?: MarketplacePluginEntry;
   
-  /** Skill filter - when specified, only load files under this subdirectory path */
-  skillFilter?: string;
+  /** Content filter - when specified, only load files under this subdirectory path */
+  contentFilter?: string;
+  
+  /** Content type - identifies what type of content is being installed */
+  contentType?: 'skills' | 'agents';
   
   /** Skill metadata for package name generation (when loading a filtered skill) */
   skillMetadata?: {
@@ -48,16 +51,22 @@ export function inferSourceType(path: string): PathSourceType {
 
 /**
  * Filter package files to only those under a specific subdirectory path.
- * Used for installing individual skills from skills collections.
+ * Used for installing individual content items (skills, agents, etc.) from collections.
  * 
  * @param files - All package files
- * @param filterPath - Subdirectory path (e.g., "skills/git" or "plugins/ui-design/skills/mobile-ios-design")
+ * @param filterPath - Subdirectory path (e.g., "skills/git" or "agents/assistant")
  * @returns Filtered files that start with filterPath
  */
 function filterFilesToSubdirectory(files: PackageFile[], filterPath: string): PackageFile[] {
-  // Normalize filter path to ensure it ends with /
+  // For file-based content (e.g. agents/*.md), filterPath may point to a single file.
+  // In that case, prefer an exact match.
+  const exactMatches = files.filter(f => f.path === filterPath);
+  if (exactMatches.length > 0) {
+    return exactMatches;
+  }
+
+  // Otherwise treat filterPath as a directory prefix.
   const normalizedFilter = filterPath.endsWith('/') ? filterPath : filterPath + '/';
-  
   return files.filter(f => f.path.startsWith(normalizedFilter));
 }
 
@@ -83,21 +92,21 @@ export async function loadPackageFromDirectory(
     logger.info(`Detected Claude Code plugin (${pluginDetection.type}), transforming to OpenPackage format`, { dirPath });
     const { package: pkg } = await transformPluginToPackage(dirPath, context);
     
-    // Apply skill filter AFTER plugin transformation if specified
-    if (context?.skillFilter && context.skillFilter !== '.') {
+    // Apply content filter AFTER plugin transformation if specified
+    if (context?.contentFilter && context.contentFilter !== '.') {
       const beforeCount = pkg.files.length;
       
-      pkg.files = filterFilesToSubdirectory(pkg.files, context.skillFilter);
+      pkg.files = filterFilesToSubdirectory(pkg.files, context.contentFilter);
       
-      logger.info('Applied skill filter after plugin transformation', {
-        filter: context.skillFilter,
+      logger.info('Applied content filter after plugin transformation', {
+        filter: context.contentFilter,
         beforeCount,
         afterCount: pkg.files.length
       });
       
       if (pkg.files.length === 0) {
         throw new ValidationError(
-          `No files found under skill path '${context.skillFilter}' in plugin '${dirPath}'`
+          `No files found under content path '${context.contentFilter}' in plugin '${dirPath}'`
         );
       }
       
@@ -143,11 +152,12 @@ export async function loadPackageFromDirectory(
     );
   }
   
-  // Check if skill filter is specified - this indicates we're loading a specific skill
-  if (context?.skillFilter) {
-    logger.debug('Loading with skill filter', { 
+  // Check if content filter is specified - this indicates we're loading a specific content item
+  if (context?.contentFilter) {
+    logger.debug('Loading with content filter', { 
       dirPath, 
-      skillFilter: context.skillFilter,
+      contentFilter: context.contentFilter,
+      contentType: context.contentType,
       skillMetadata: context.skillMetadata
     });
     
@@ -155,24 +165,25 @@ export async function loadPackageFromDirectory(
     // Continue with normal loading flow, filtering happens at the end
   }
   
-  // Check if this is a single skill directory (SKILL.md at root) WITHOUT a filter
+  // Check if this is a single content directory WITHOUT a filter
   // If there's a filter, we're intentionally loading from a parent directory
-  if (!context?.skillFilter) {
-    const { isSingleSkillDirectory } = await import('./skills-detector.js');
-    const isSkill = await isSingleSkillDirectory(dirPath);
+  if (!context?.contentFilter) {
+    // Try skills first
+    const { isSingleContentDirectory, loadSingleContent } = await import('./content-detector.js');
+    const isSkill = await isSingleContentDirectory(dirPath, 'skills');
     
     if (isSkill) {
       logger.info('Detected single skill at root, loading as skill package', { dirPath });
       
       // Load skill metadata for package name generation
-      const { loadSingleSkill } = await import('./skills-detector.js');
-      const skill = await loadSingleSkill(dirPath);
+      const skill = await loadSingleContent(dirPath, 'skills');
       
-      // Set skill filter to current directory (.) so we load all files
-      // Set skill metadata for package name generation
+      // Set content filter to current directory (.) so we load all files
+      // Set content metadata for package name generation
       const skillContext: PackageLoadContext = {
         ...context,
-        skillFilter: '.',  // Load all files from this directory
+        contentFilter: '.',  // Load all files from this directory
+        contentType: 'skills',
         skillMetadata: {
           name: skill.name,
           skillPath: '.'
@@ -197,14 +208,14 @@ export async function loadPackageFromDirectory(
     }
   }
   
-  // Load openpackage.yml for regular packages (not required for skill-filtered loads)
+  // Load openpackage.yml for regular packages (not required for content-filtered loads)
   const config = await loadPackageConfig(dirPath);
   
-  // If no config and no skill filter, this is an error
-  if (!config && !context?.skillFilter) {
+  // If no config and no content filter, this is an error
+  if (!config && !context?.contentFilter) {
     throw new ValidationError(
-      `Directory '${dirPath}' is not a valid OpenPackage directory, Claude Code plugin, or skill. ` +
-      `Missing ${FILE_PATTERNS.OPENPACKAGE_YML}, ${CLAUDE_PLUGIN_PATHS.PLUGIN_MANIFEST}, or ${FILE_PATTERNS.SKILL_MD}`
+      `Directory '${dirPath}' is not a valid OpenPackage directory, Claude Code plugin, skill, or agent. ` +
+      `Missing ${FILE_PATTERNS.OPENPACKAGE_YML}, ${CLAUDE_PLUGIN_PATHS.PLUGIN_MANIFEST}, or content manifest`
     );
   }
 
@@ -231,20 +242,20 @@ export async function loadPackageFromDirectory(
     
     logger.debug(`Loaded ${files.length} files from directory: ${dirPath}`);
     
-    // Apply skill filter if specified
+    // Apply content filter if specified
     let finalFiles = files;
-    if (context?.skillFilter && context.skillFilter !== '.') {
+    if (context?.contentFilter && context.contentFilter !== '.') {
       const beforeCount = files.length;
-      finalFiles = filterFilesToSubdirectory(files, context.skillFilter);
-      logger.info('Applied skill filter', {
-        filter: context.skillFilter,
+      finalFiles = filterFilesToSubdirectory(files, context.contentFilter);
+      logger.info('Applied content filter', {
+        filter: context.contentFilter,
         beforeCount,
         afterCount: finalFiles.length
       });
       
       if (finalFiles.length === 0) {
         throw new ValidationError(
-          `No files found under skill path '${context.skillFilter}' in directory '${dirPath}'`
+          `No files found under content path '${context.contentFilter}' in directory '${dirPath}'`
         );
       }
     }

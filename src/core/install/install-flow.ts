@@ -210,7 +210,7 @@ export async function performIndexBasedInstallationPhases(params: InstallationPh
       logger.debug('Calling index installer', {
         resolvedName: resolved.name,
         resolvedVersion: resolved.version,
-        hasSkillFilter: !!resolved.skillFilter
+        hasContentFilter: !!resolved.contentFilter
       });
 
       const filtersForPackage = fileFilters?.[resolved.name];
@@ -224,7 +224,7 @@ export async function performIndexBasedInstallationPhases(params: InstallationPh
         resolved.contentRoot,  // Pass contentRoot for path-based packages
         resolved.pkg._format,   // Pass format metadata from Package object
         resolved.marketplaceMetadata,  // Pass marketplace metadata if present
-        resolved.skillFilter,  // Pass skill filter if present
+        resolved.contentFilter,  // Pass content filter if present
         resolved.namingContext  // Pass naming context for validation
       );
 

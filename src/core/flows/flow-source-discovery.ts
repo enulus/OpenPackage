@@ -46,11 +46,11 @@ export interface DiscoveryOptions {
    * Optional filter to limit discovery to specific subdirectory
    * 
    * When specified, only files under this path will be discovered.
-   * Used for installing individual skills from plugins or collections.
+   * Used for installing individual content items (skills, agents, etc.) from collections.
    * 
-   * Example: "skills/git" or "plugins/ui-design/skills/mobile-ios-design"
+   * Example: "skills/git" or "agents/code-review-assistant"
    */
-  skillFilter?: string;
+  contentFilter?: string;
 }
 
 /**
@@ -72,7 +72,7 @@ export async function discoverFlowSources(
   const {
     preferDotPrefixed = true,
     includePlatformVariants = true,
-    skillFilter
+    contentFilter
   } = options;
   
   for (const flow of flows) {
@@ -92,7 +92,7 @@ export async function discoverFlowSources(
         // Check for dot-prefixed variants for root-level files only
         if (!sourcePattern.includes('/') && !sourcePattern.startsWith('.')) {
           const dotPrefixedPattern = `.${sourcePattern}`;
-          const dotPrefixedPaths = await matchPattern(dotPrefixedPattern, packageRoot, skillFilter);
+          const dotPrefixedPaths = await matchPattern(dotPrefixedPattern, packageRoot, contentFilter);
           
           for (const path of dotPrefixedPaths) {
             dotPrefixedPathsFound.add(path);
@@ -118,7 +118,7 @@ export async function discoverFlowSources(
         }
       }
       
-      const sourcePaths = await matchPattern(sourcePattern, packageRoot, skillFilter);
+      const sourcePaths = await matchPattern(sourcePattern, packageRoot, contentFilter);
       for (const path of sourcePaths) {
         allSourcePaths.add(path);
       }
@@ -222,13 +222,13 @@ export function getFirstFromPattern(from: string | string[] | SwitchExpression):
  * 
  * @param pattern - Pattern to match
  * @param baseDir - Base directory to search in
- * @param skillFilter - Optional subdirectory filter (e.g., "skills/git")
+ * @param contentFilter - Optional subdirectory filter (e.g., "skills/git" or "agents/assistant")
  * @returns Array of matched file paths (relative to baseDir)
  */
 export async function matchPattern(
   pattern: string, 
   baseDir: string,
-  skillFilter?: string
+  contentFilter?: string
 ): Promise<string[]> {
   const matches: string[] = [];
   
@@ -239,7 +239,7 @@ export async function matchPattern(
     // Check for exact match
     if (await exists(exactPath)) {
       const relativePath = relative(baseDir, exactPath);
-      if (!skillFilter || isUnderSkillPath(relativePath, skillFilter)) {
+      if (!contentFilter || isUnderContentPath(relativePath, contentFilter)) {
         matches.push(relativePath);
       }
     }
@@ -247,7 +247,7 @@ export async function matchPattern(
     // Also check for platform-specific variants
     const variants = await findPlatformVariants(exactPath, baseDir);
     for (const variant of variants) {
-      if (!skillFilter || isUnderSkillPath(variant, skillFilter)) {
+      if (!contentFilter || isUnderContentPath(variant, contentFilter)) {
         matches.push(variant);
       }
     }
@@ -283,7 +283,7 @@ export async function matchPattern(
       if (!entry.isFile()) continue;
       if (!regex.test(entry.name)) continue;
       const relativePath = relative(baseDir, join(searchDir, entry.name));
-      if (!skillFilter || isUnderSkillPath(relativePath, skillFilter)) {
+      if (!contentFilter || isUnderContentPath(relativePath, contentFilter)) {
         matches.push(relativePath);
       }
     }
@@ -299,7 +299,7 @@ export async function matchPattern(
     return [];
   }
   
-  await findMatchingFiles(dirPath, filePattern, baseDir, matches, skillFilter);
+  await findMatchingFiles(dirPath, filePattern, baseDir, matches, contentFilter);
   return matches;
 }
 
@@ -343,16 +343,16 @@ async function findPlatformVariants(
 }
 
 /**
- * Check if a relative path is under the skill filter path
+ * Check if a relative path is under the content filter path
  * 
  * @param relativePath - Path relative to package root
- * @param skillFilter - Skill filter path (e.g., "skills/git")
- * @returns True if path is under skill path or is the skill path itself
+ * @param contentFilter - Content filter path (e.g., "skills/git" or "agents/assistant")
+ * @returns True if path is under content path or is the content path itself
  */
-function isUnderSkillPath(relativePath: string, skillFilter: string): boolean {
+function isUnderContentPath(relativePath: string, contentFilter: string): boolean {
   // Normalize paths (remove trailing slashes)
   const normalizedRelative = relativePath.replace(/\/$/, '');
-  const normalizedFilter = skillFilter.replace(/\/$/, '');
+  const normalizedFilter = contentFilter.replace(/\/$/, '');
   
   // Check if path starts with filter path
   return (
@@ -368,14 +368,14 @@ function isUnderSkillPath(relativePath: string, skillFilter: string): boolean {
  * @param pattern - Pattern to match (may contain globs)
  * @param baseDir - Base directory for relative path calculation
  * @param matches - Array to accumulate matches
- * @param skillFilter - Optional subdirectory filter
+ * @param contentFilter - Optional subdirectory filter
  */
 async function findMatchingFiles(
   dir: string,
   pattern: string,
   baseDir: string,
   matches: string[],
-  skillFilter?: string
+  contentFilter?: string
 ): Promise<void> {
   try {
     const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -384,22 +384,22 @@ async function findMatchingFiles(
       const fullPath = join(dir, entry.name);
       const rel = relative(baseDir, fullPath);
       
-      // Apply skill filter early to skip entire directories
-      if (skillFilter && !isUnderSkillPath(rel, skillFilter)) {
-        // Skip if not under skill path and not a parent directory
-        const normalizedFilter = skillFilter.replace(/\/$/, '');
-        const isParentOfSkillPath = normalizedFilter.startsWith(rel + '/');
+      // Apply content filter early to skip entire directories
+      if (contentFilter && !isUnderContentPath(rel, contentFilter)) {
+        // Skip if not under content path and not a parent directory
+        const normalizedFilter = contentFilter.replace(/\/$/, '');
+        const isParentOfContentPath = normalizedFilter.startsWith(rel + '/');
         
-        if (!isParentOfSkillPath) {
+        if (!isParentOfContentPath) {
           continue;
         }
       }
       
       if (entry.isDirectory()) {
-        await findMatchingFiles(fullPath, pattern, baseDir, matches, skillFilter);
+        await findMatchingFiles(fullPath, pattern, baseDir, matches, contentFilter);
       } else if (entry.isFile()) {
         const matched = minimatch(rel, pattern, { dot: false });
-        if (matched && (!skillFilter || isUnderSkillPath(rel, skillFilter))) {
+        if (matched && (!contentFilter || isUnderContentPath(rel, contentFilter))) {
           matches.push(rel);
         }
       }

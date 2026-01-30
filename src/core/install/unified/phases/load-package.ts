@@ -80,9 +80,14 @@ export async function loadPackagePhase(ctx: InstallationContext): Promise<void> 
       rootPackage.marketplaceMetadata = ctx.source.pluginMetadata.marketplaceSource;
     }
     
-    // Add skill filter if present
-    if (ctx.source.skillFilter) {
-      rootPackage.skillFilter = ctx.source.skillFilter;
+    // Add content filter if present
+    if (ctx.source.contentFilter) {
+      rootPackage.contentFilter = ctx.source.contentFilter;
+    }
+    
+    // Add content type if present
+    if (ctx.source.contentType) {
+      rootPackage.contentType = ctx.source.contentType;
     }
     
     // Add naming context if present

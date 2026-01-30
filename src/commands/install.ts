@@ -80,6 +80,24 @@ export function normalizeSkillsOption(value: string[] | undefined): string[] | u
 }
 
 /**
+ * Normalize --agents option value by deduplicating.
+ * Since --agents is now variadic (space-separated), we receive an array directly.
+ *
+ * @param value - Array of agent names from variadic option, or undefined
+ * @returns Array of unique agent names, or undefined if empty/not provided
+ */
+export function normalizeAgentsOption(value: string[] | undefined): string[] | undefined {
+  if (!value || value.length === 0) {
+    return undefined;
+  }
+
+  // Deduplicate
+  const agents = [...new Set(value)];
+
+  return agents.length > 0 ? agents : undefined;
+}
+
+/**
  * Validate skills option usage (placeholder for early validation).
  * Most validation happens after source detection.
  *
@@ -295,14 +313,15 @@ async function handleSkillsCollectionInstallation(
   
   for (const skill of validSkills) {
     try {
-      // Create install context pointing to PARENT directory with skill filter
+      // Create install context pointing to PARENT directory with content filter
       const skillContext = await buildPathInstallContext(
         cwd,
         loaded.contentRoot,
         {
           ...options,
           sourceType: 'directory' as const,
-          skillFilter: skill.skillPath,
+          contentFilter: skill.skillPath,
+          contentType: 'skills' as const,
           skillMetadata: {
             name: skill.name,
             skillPath: skill.skillPath
@@ -371,6 +390,416 @@ async function handleSkillsCollectionInstallation(
 }
 
 /**
+ * Handle agents installation from marketplace source.
+ * 
+ * @param context - Installation context with loaded marketplace
+ * @param loaded - Loaded package information  
+ * @param options - Install options including --agents and --plugins
+ * @param cwd - Current working directory
+ * @returns Command result with installation summary
+ */
+async function handleMarketplaceAgentsInstallation(
+  context: InstallationContext,
+  loaded: LoadedPackage,
+  options: InstallOptions,
+  cwd: string
+): Promise<CommandResult> {
+  // 1. Validate prerequisites
+  if (!options.plugins || options.plugins.length === 0) {
+    throw new Error(
+      'Agents installation from marketplace requires --plugins flag to specify which plugins to search for agents.\n\n' +
+      'Example: opkg install <marketplace-url> --plugins ui-design --agents accessibility-expert ui-designer'
+    );
+  }
+  
+  // 2. Parse marketplace (already done in parent flow)
+  if (!context.source.pluginMetadata?.manifestPath) {
+    throw new Error('Marketplace manifest not found');
+  }
+  
+  const {
+    parseMarketplace,
+    validatePluginNames
+  } = await import('../core/install/marketplace-handler.js');
+  
+  const marketplace = await parseMarketplace(context.source.pluginMetadata.manifestPath, {
+    repoPath: context.source.contentRoot
+  });
+  
+  // 3. Validate plugins
+  const { valid: validPlugins, invalid: invalidPlugins } = validatePluginNames(marketplace, options.plugins);
+  
+  if (invalidPlugins.length > 0) {
+    console.error(`Error: The following plugins were not found in marketplace '${marketplace.name}':`);
+    for (const name of invalidPlugins) {
+      console.error(`  - ${name}`);
+    }
+    console.error(`\nAvailable plugins: ${marketplace.plugins.map(p => p.name).join(', ')}`);
+    return {
+      success: false,
+      error: `Plugins not found: ${invalidPlugins.join(', ')}`
+    };
+  }
+  
+  if (validPlugins.length === 0) {
+    console.log('No valid plugins specified. Installation cancelled.');
+    return { success: true, data: { installed: 0, skipped: 0 } };
+  }
+  
+  // 4. Discover agents in selected plugins
+  const { detectContentInDirectory, validateContentExists } = await import('../core/install/content-detector.js');
+  const { getContentTypeDefinition } = await import('../core/install/content-type-registry.js');
+  const { Spinner } = await import('../utils/spinner.js');
+  const { join } = await import('path');
+  
+  const definition = getContentTypeDefinition('agents');
+  const spinner = new Spinner(`Discovering ${definition.pluralName} in selected plugins`);
+  spinner.start();
+  
+  // Collect all agents from selected plugins
+  const pluginAgents = new Map<string, any[]>();
+  
+  for (const pluginName of validPlugins) {
+    const plugin = marketplace.plugins.find(p => p.name === pluginName);
+    if (!plugin) continue;
+    
+    const pluginDir = join(context.source.contentRoot!, 'plugins', pluginName);
+    
+    try {
+      const detection = await detectContentInDirectory(pluginDir, 'agents');
+      if (detection.hasContent) {
+        pluginAgents.set(pluginName, detection.discoveredItems);
+      }
+    } catch (error) {
+      console.warn(`Warning: Failed to detect agents in plugin '${pluginName}'`);
+    }
+  }
+  
+  spinner.stop();
+  
+  // Check if any agents were found
+  if (pluginAgents.size === 0) {
+    console.error(`Error: Selected plugins do not contain any ${definition.pluralName}.\n`);
+    console.error(`Selected plugins: ${validPlugins.join(', ')}`);
+    console.error(`${definition.pluralName} directory must be at root of plugin: plugins/<plugin-name>/${definition.directoryPattern}`);
+    return {
+      success: false,
+      error: `No ${definition.pluralName} found in selected plugins`
+    };
+  }
+  
+  // 5. Validate requested agents exist
+  const allAgents = Array.from(pluginAgents.values()).flat();
+  const { valid: validAgents, invalid: invalidAgents } = validateContentExists(
+    allAgents,
+    options.agents!
+  );
+  
+  if (invalidAgents.length > 0) {
+    console.error(`Error: ${definition.pluralName} not found: ${invalidAgents.join(', ')}\n`);
+    console.error(`Available ${definition.pluralName} in selected plugins:`);
+    for (const [pluginName, agents] of pluginAgents.entries()) {
+      for (const agent of agents) {
+        const desc = agent.frontmatter.description ? ` - ${agent.frontmatter.description}` : '';
+        console.error(`  [${pluginName}] ${agent.name}${desc}`);
+      }
+    }
+    return {
+      success: false,
+      error: `${definition.pluralName} not found: ${invalidAgents.join(', ')}`
+    };
+  }
+  
+  if (validAgents.length === 0) {
+    console.log(`No valid ${definition.pluralName} specified. Installation cancelled.`);
+    return { success: true, data: { installed: 0, skipped: 0 } };
+  }
+  
+  // 6. Install selected agents
+  console.log(`✓ Marketplace: ${marketplace.name}`);
+  console.log(`Installing ${validAgents.length} ${validAgents.length === 1 ? definition.singularName : definition.pluralName}...`);
+  
+  const { buildPathInstallContext } = await import('../core/install/unified/context-builders.js');
+  const results: Array<{ name: string; success: boolean; error?: string }> = [];
+  
+  if (context.source.type !== 'git' || !context.source.gitUrl) {
+    throw new Error('Marketplace must be from a git source');
+  }
+  
+  const commitSha = (context.source as any)._commitSha || '';
+  if (!commitSha) {
+    throw new Error('Marketplace commit SHA not available. Please report this issue.');
+  }
+  
+  for (const agent of validAgents) {
+    // Find which plugin this agent belongs to
+    let pluginName = '';
+    let pluginEntry: any;
+    for (const [pName, agents] of pluginAgents.entries()) {
+      if (agents.some(a => a.name === agent.name)) {
+        pluginName = pName;
+        pluginEntry = marketplace.plugins.find(p => p.name === pName);
+        break;
+      }
+    }
+    
+    if (!pluginEntry) {
+      console.error(`❌ ${agent.name}: Plugin entry not found`);
+      results.push({ name: agent.name, success: false, error: 'Plugin entry not found' });
+      continue;
+    }
+    
+    try {
+      // Use the normalized plugin source to get the plugin subdirectory
+      const { normalizePluginSource, isRelativePathSource } = await import('../core/install/plugin-sources.js');
+      const normalizedSource = normalizePluginSource(pluginEntry.source, pluginEntry.name);
+      
+      if (!isRelativePathSource(normalizedSource)) {
+        throw new Error('Git source plugins not yet supported for agents installation');
+      }
+      
+      const pluginSubdir = normalizedSource.relativePath!;
+      const pluginDir = join(context.source.contentRoot!, pluginSubdir);
+      
+      // Build complete agent path (plugin path + agent path)
+      const completeAgentPath = join(pluginSubdir, agent.itemPath).replace(/\\/g, '/');
+      
+      // Build naming context for the agent (similar to skills)
+      const { SkillContextBuilder } = await import('../core/install/naming-context-builder.js');
+      const namingContext = new SkillContextBuilder()
+        .withGit(context.source.gitUrl, context.source.gitRef, completeAgentPath)
+        .withPhysical(pluginDir)
+        .withSkillInfo(agent.name, pluginSubdir, agent.itemPath)
+        .withMarketplace('', commitSha, pluginEntry.name)
+        .build();
+      
+      // Create install context pointing to plugin directory with agent filter
+      const agentContext = await buildPathInstallContext(
+        cwd,
+        pluginDir,
+        {
+          ...options,
+          sourceType: 'directory' as const,
+          contentFilter: agent.itemPath,
+          contentType: 'agents' as const,
+          skillMetadata: {
+            name: agent.name,
+            skillPath: agent.itemPath
+          }
+        }
+      );
+      
+      // Set git source override for manifest tracking (using complete path)
+      agentContext.source.gitSourceOverride = {
+        gitUrl: context.source.gitUrl,
+        gitRef: context.source.gitRef,
+        gitPath: completeAgentPath
+      };
+      
+      // Store agent metadata AND naming context
+      agentContext.source.pluginMetadata = {
+        isPlugin: false,
+        isSingleContent: true,
+        contentType: 'agents',
+        contentMetadata: {
+          item: agent,
+          pluginName: pluginEntry.name
+        }
+      };
+      
+      // Store naming context for downstream use
+      (agentContext.source as any)._namingContext = namingContext;
+      
+      // Install with content filter
+      const result = await runUnifiedInstallPipeline(agentContext);
+      
+      if (result.success) {
+        console.log(`✓ ${agent.name} (from ${pluginName})`);
+        results.push({ name: agent.name, success: true });
+      } else {
+        console.error(`❌ ${agent.name}: ${result.error}`);
+        results.push({ name: agent.name, success: false, error: result.error });
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`❌ ${agent.name}: ${errorMsg}`);
+      results.push({ name: agent.name, success: false, error: errorMsg });
+    }
+  }
+  
+  // Display summary
+  const successful = results.filter(r => r.success);
+  const failed = results.filter(r => !r.success);
+  
+  console.log('');
+  if (successful.length > 0) {
+    console.log(`✓ Successfully installed: ${successful.length} ${successful.length === 1 ? definition.singularName : definition.pluralName}`);
+  }
+  
+  if (failed.length > 0) {
+    console.log(`❌ Failed: ${failed.length} ${failed.length === 1 ? definition.singularName : definition.pluralName}`);
+    for (const result of failed) {
+      console.log(`  ${result.name}: ${result.error}`);
+    }
+  }
+  
+  const anySuccess = results.some(r => r.success);
+  return {
+    success: anySuccess,
+    data: { installed: successful.length, failed: failed.length },
+    error: !anySuccess ? `Failed to install any ${definition.pluralName}` : undefined
+  };
+}
+
+/**
+ * Handle content collection installation (skills, agents, etc.).
+ * 
+ * @param context - Installation context
+ * @param loaded - Loaded package information
+ * @param options - Install options including --skills or --agents
+ * @param cwd - Current working directory
+ * @param contentType - Type of content to install
+ * @returns Command result with installation summary
+ */
+async function handleContentCollectionInstallation(
+  context: InstallationContext,
+  loaded: LoadedPackage,
+  options: InstallOptions,
+  cwd: string,
+  contentType: 'skills' | 'agents'
+): Promise<CommandResult> {
+  const { detectContentInDirectory, validateContentExists } = await import('../core/install/content-detector.js');
+  const { getContentTypeDefinition } = await import('../core/install/content-type-registry.js');
+  
+  const definition = getContentTypeDefinition(contentType);
+  const requestedNames = contentType === 'skills' ? options.skills : options.agents;
+  
+  if (!requestedNames || requestedNames.length === 0) {
+    throw new Error(`No ${definition.pluralName} specified`);
+  }
+  
+  // 1. Detect content in collection
+  const detection = await detectContentInDirectory(loaded.contentRoot, contentType);
+  
+  if (!detection.hasContent) {
+    throw new Error(`No ${definition.pluralName} found in source`);
+  }
+  
+  // 2. Validate requested content items exist
+  const { valid: validItems, invalid: invalidItems } = validateContentExists(
+    detection.discoveredItems,
+    requestedNames
+  );
+  
+  if (invalidItems.length > 0) {
+    console.error(`Error: ${definition.pluralName} not found: ${invalidItems.join(', ')}\n`);
+    console.error(`Available ${definition.pluralName}:`);
+    for (const item of detection.discoveredItems) {
+      const desc = item.frontmatter.description ? ` - ${item.frontmatter.description}` : '';
+      console.error(`  ${item.name}${desc}`);
+    }
+    return {
+      success: false,
+      error: `${definition.pluralName} not found: ${invalidItems.join(', ')}`
+    };
+  }
+  
+  if (validItems.length === 0) {
+    console.log(`No valid ${definition.pluralName} specified. Installation cancelled.`);
+    return { success: true, data: { installed: 0, skipped: 0 } };
+  }
+  
+  // 3. Install each content item as a separate package
+  console.log(`Installing ${validItems.length} ${validItems.length === 1 ? definition.singularName : definition.pluralName}...`);
+  
+  const { buildPathInstallContext } = await import('../core/install/unified/context-builders.js');
+  
+  const results: Array<{
+    name: string;
+    success: boolean;
+    error?: string;
+  }> = [];
+  
+  for (const item of validItems) {
+    try {
+      // Create install context pointing to PARENT directory with content filter
+      const itemContext = await buildPathInstallContext(
+        cwd,
+        loaded.contentRoot,
+        {
+          ...options,
+          sourceType: 'directory' as const,
+          contentFilter: item.itemPath,
+          contentType: contentType,
+          skillMetadata: {
+            name: item.name,
+            skillPath: item.itemPath
+          }
+        }
+      );
+      
+      // Set git source override for manifest tracking
+      if (context.source.type === 'git' && context.source.gitUrl) {
+        itemContext.source.gitSourceOverride = {
+          gitUrl: context.source.gitUrl,
+          gitRef: context.source.gitRef,
+          gitPath: item.itemPath
+        };
+      }
+      
+      // Store content metadata in context for loader
+      itemContext.source.pluginMetadata = {
+        isPlugin: false,
+        isSingleContent: true,
+        contentType: contentType,
+        contentMetadata: {
+          item
+        }
+      };
+      
+      // Install with content filter
+      const result = await runUnifiedInstallPipeline(itemContext);
+      
+      if (result.success) {
+        console.log(`✓ ${item.name}`);
+        results.push({ name: item.name, success: true });
+      } else {
+        console.error(`❌ ${item.name}: ${result.error}`);
+        results.push({ name: item.name, success: false, error: result.error });
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`❌ ${item.name}: ${errorMsg}`);
+      results.push({ name: item.name, success: false, error: errorMsg });
+    }
+  }
+  
+  // Display summary
+  const successful = results.filter(r => r.success);
+  const failed = results.filter(r => !r.success);
+  
+  console.log('');
+  if (successful.length > 0) {
+    console.log(`✓ Successfully installed: ${successful.length} ${successful.length === 1 ? definition.singularName : definition.pluralName}`);
+  }
+  
+  if (failed.length > 0) {
+    console.log(`❌ Failed: ${failed.length} ${failed.length === 1 ? definition.singularName : definition.pluralName}`);
+    for (const result of failed) {
+      console.log(`  ${result.name}: ${result.error}`);
+    }
+  }
+  
+  // Return result
+  const anySuccess = results.some(r => r.success);
+  return {
+    success: anySuccess,
+    data: { installed: successful.length, failed: failed.length },
+    error: !anySuccess ? `Failed to install any ${definition.pluralName}` : undefined
+  };
+}
+
+/**
  * Main install command handler
  */
 async function installCommand(
@@ -415,6 +844,10 @@ async function installCommand(
     
     // Check if marketplace - handle at command level
     if (contexts.source.pluginMetadata?.pluginType === 'marketplace') {
+      // Check if agents installation requested
+      if (options.agents && options.agents.length > 0) {
+        return await handleMarketplaceAgentsInstallation(contexts, loaded, options, cwd);
+      }
       // Check if skills installation requested
       if (options.skills && options.skills.length > 0) {
         return await handleMarketplaceSkillsInstallation(contexts, options, cwd);
@@ -422,25 +855,36 @@ async function installCommand(
       return await handleMarketplaceInstallation(contexts, options, cwd);
     }
 
-    // Check if skills collection (non-marketplace)
-    if (contexts.source.pluginMetadata?.isSkillsCollection) {
-      if (!options.skills || options.skills.length === 0) {
-        // No skills specified - error with available skills
-        const detection = loaded.sourceMetadata?.skillsDetection;
-        if (detection?.hasSkills) {
-          console.error('Error: This is a skills collection. Use --skills flag to specify which skills to install.\n');
-          console.error('Available skills:');
-          for (const skill of detection.discoveredSkills) {
-            const desc = skill.frontmatter.description ? ` - ${skill.frontmatter.description}` : '';
-            console.error(`  ${skill.name}${desc}`);
+    // Check if content collection (non-marketplace): skills or agents
+    const isContentCollection = contexts.source.pluginMetadata?.isContentCollection || 
+                                contexts.source.pluginMetadata?.isSkillsCollection; // legacy
+    const contentType = loaded.contentType || contexts.source.pluginMetadata?.contentType;
+    
+    if (isContentCollection && contentType) {
+      const contentOption = contentType === 'skills' ? options.skills : options.agents;
+      const { getContentTypeDefinition } = await import('../core/install/content-type-registry.js');
+      const definition = getContentTypeDefinition(contentType);
+      
+      if (!contentOption || contentOption.length === 0) {
+        // No content specified - error with available items
+        const detection = loaded.sourceMetadata?.contentDetection || 
+                         loaded.sourceMetadata?.skillsDetection; // legacy
+        const hasContent = detection && ('hasContent' in detection ? detection.hasContent : (detection as any).hasSkills);
+        if (hasContent) {
+          const items = 'discoveredItems' in detection ? detection.discoveredItems : (detection as any).discoveredSkills;
+          console.error(`Error: This is a ${definition.pluralName} collection. Use --${definition.pluralName} flag to specify which ${definition.pluralName} to install.\n`);
+          console.error(`Available ${definition.pluralName}:`);
+          for (const item of items) {
+            const desc = item.frontmatter?.description ? ` - ${item.frontmatter.description}` : '';
+            console.error(`  ${item.name}${desc}`);
           }
         }
         return {
           success: false,
-          error: 'Skills collection requires --skills flag to specify which skills to install'
+          error: `${definition.pluralName} collection requires --${definition.pluralName} flag to specify which ${definition.pluralName} to install`
         };
       }
-      return await handleSkillsCollectionInstallation(contexts, loaded, options, cwd);
+      return await handleContentCollectionInstallation(contexts, loaded, options, cwd, contentType);
     }
 
     // Not a marketplace - warn if --plugins was specified
@@ -449,8 +893,13 @@ async function installCommand(
     }
     
     // Warn if --skills specified but not a collection
-    if (options.skills && options.skills.length > 0 && !loaded.sourceMetadata?.skillsDetection?.hasSkills) {
+    if (options.skills && options.skills.length > 0 && !loaded.sourceMetadata?.skillsDetection?.hasSkills && !loaded.sourceMetadata?.contentDetection?.hasContent) {
       console.log('Warning: --skills flag specified but source is not a skills collection. Installing entire package.');
+    }
+    
+    // Warn if --agents specified but not a collection
+    if (options.agents && options.agents.length > 0 && !loaded.sourceMetadata?.contentDetection?.hasContent) {
+      console.log('Warning: --agents flag specified but source is not an agents collection. Installing entire package.');
     }
 
     // Regular package install (including single skills - they're now regular packages!)
@@ -639,6 +1088,7 @@ export function setupInstallCommand(program: Command): void {
     .option('--api-key <key>', 'API key for authentication (overrides profile)')
     .option('--plugins <names...>', 'install specific plugins from marketplace (bypasses interactive selection)')
     .option('--skills <names...>', 'install specific skills from skills collection (for marketplaces: must be paired with --plugins; for standalone: filters to install only specified skills)')
+    .option('--agents <names...>', 'install specific agents from agents collection (filters to install only specified agents)')
     .action(withErrorHandling(async (packageName: string | undefined, options: InstallOptions) => {
       // Normalize platforms
       options.platforms = normalizePlatforms(options.platforms);
@@ -651,6 +1101,11 @@ export function setupInstallCommand(program: Command): void {
       // Normalize skills
       if (options.skills) {
         options.skills = normalizeSkillsOption(options.skills as any);
+      }
+      
+      // Normalize agents
+      if (options.agents) {
+        options.agents = normalizeAgentsOption(options.agents as any);
       }
       
       // Validate skills options
