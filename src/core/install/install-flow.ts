@@ -266,7 +266,9 @@ export async function performIndexBasedInstallationPhases(params: InstallationPh
         resolved.version,
         platforms,
         filtersForPackage,
-        resolved.contentRoot  // Pass contentRoot for path-based packages
+        resolved.contentRoot,  // Pass contentRoot for path-based packages
+        resolved.contentFilter,
+        resolved.contentType
       );
       const installResult = await installOrSyncRootFiles(
         cwd,

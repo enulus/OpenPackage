@@ -48,6 +48,13 @@ export interface PackageSource {
   
   // Resolved content root (populated after loading)
   contentRoot?: string;
+
+  /**
+   * Whether this source entry originated from the workspace `openpackage.yml`.
+   * When true, the manifest is the source of truth and should not be mutated
+   * as a side-effect of installation.
+   */
+  fromWorkspaceManifest?: boolean;
   
   // Plugin-specific metadata (populated during source loading)
   pluginMetadata?: {

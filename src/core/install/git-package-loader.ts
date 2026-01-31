@@ -180,11 +180,13 @@ export async function loadPackageFromGit(options: GitPackageLoadOptions): Promis
   }
   
   // Check if this is a content collection (content/ without openpackage.yml and not a plugin)
+  // IMPORTANT: Only treat as collection if NO contentFilter is set
+  // If contentFilter exists, user specified a specific content item and we should proceed with single-item load
   const hasOpenPackageYml = await import('../../utils/fs.js').then(m => 
     m.exists(sourcePath + '/openpackage.yml')
   );
   
-  if (contentDetection?.hasContent && !hasOpenPackageYml && !pluginDetection.isPlugin) {
+  if (contentDetection?.hasContent && !hasOpenPackageYml && !pluginDetection.isPlugin && !contentFilter) {
     logger.info(`Detected ${contentDetection.contentType} collection from git source`, {
       itemCount: contentDetection.discoveredItems.length
     });
@@ -199,6 +201,15 @@ export async function loadPackageFromGit(options: GitPackageLoadOptions): Promis
       contentType: contentDetection.contentType,
       contentDetection
     };
+  }
+  
+  // If contentFilter is set, log that we're loading a specific content item
+  if (contentFilter) {
+    logger.info('Loading specific content item from source', {
+      contentFilter,
+      contentType,
+      sourcePath
+    });
   }
   
   // Not a marketplace or content collection, load as regular package

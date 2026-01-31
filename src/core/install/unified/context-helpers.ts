@@ -40,6 +40,11 @@ export function shouldResolveDependencies(ctx: InstallationContext): boolean {
  * Check if context should update manifest
  */
 export function shouldUpdateManifest(ctx: InstallationContext): boolean {
+  // For bulk installs driven by openpackage.yml, the manifest is the source of truth
+  // and must not be mutated as a side-effect of installation.
+  if (ctx.source.fromWorkspaceManifest) {
+    return false;
+  }
   return ctx.mode !== 'apply';
 }
 

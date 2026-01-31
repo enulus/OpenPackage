@@ -4,6 +4,7 @@ import type { PackageFile } from '../../../types/index.js';
 import { getPlatformDefinition, type Platform } from '../../platforms.js';
 import { buildNormalizedIncludeSet, isManifestPath, normalizePackagePath } from '../../../utils/manifest-paths.js';
 import { getPlatformRootFileNames, stripRootCopyPrefix, isRootCopyPath } from '../../../utils/platform-root-files.js';
+import { loadPackageFromPath } from '../path-package-loader.js';
 
 export interface CategorizedInstallFiles {
   pathBasedFiles: PackageFile[];
@@ -16,12 +17,16 @@ export async function discoverAndCategorizeFiles(
   version: string,
   platforms: Platform[],
   includePaths?: string[],
-  contentRoot?: string
+  contentRoot?: string,
+  contentFilter?: string,
+  contentType?: 'skills' | 'agents'
 ): Promise<CategorizedInstallFiles> {
-  // Load once
-  const pkg = await packageManager.loadPackage(packageName, version, {
-    packageRootDir: contentRoot
-  });
+  // For content-filter installs, ensure we re-load using the same filter/type.
+  // Otherwise we may accidentally treat the directory as a skills collection.
+  const pkg =
+    contentRoot && (contentFilter || contentType)
+      ? await loadPackageFromPath(contentRoot, { packageName, contentFilter, contentType })
+      : await packageManager.loadPackage(packageName, version, { packageRootDir: contentRoot });
 
   const normalizedIncludes = buildNormalizedIncludeSet(includePaths);
 

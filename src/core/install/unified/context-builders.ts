@@ -281,10 +281,12 @@ async function buildBulkInstallContexts(
   options: InstallOptions
 ): Promise<InstallationContext[]> {
   const contexts: InstallationContext[] = [];
+  const seenKeys = new Set<string>();
   
   // First, try to build workspace root context
   const workspaceContext = await buildWorkspaceRootInstallContext(cwd, options, 'install');
   if (workspaceContext) {
+    workspaceContext.source.fromWorkspaceManifest = true;
     contexts.push(workspaceContext);
   }
   
@@ -310,6 +312,7 @@ async function buildBulkInstallContexts(
       }
       
       let source: PackageSource;
+      let dedupeKey: string;
       
       if (dep.git || dep.url) {
         // Git source - handle both old (git) and new (url) formats
@@ -335,8 +338,10 @@ async function buildBulkInstallContexts(
           gitRef,
           gitPath: dep.path,
           contentFilter,
-          contentType
+          contentType,
+          fromWorkspaceManifest: true
         };
+        dedupeKey = `git|${gitUrl}|${gitRef ?? ''}|${dep.path ?? ''}`;
         
         // Log content detection for debugging
         if (contentInfo.isContent) {
@@ -366,8 +371,10 @@ async function buildBulkInstallContexts(
           localPath: resolved.absolute,
           sourceType: isTarball ? 'tarball' : 'directory',
           contentFilter,
-          contentType
+          contentType,
+          fromWorkspaceManifest: true
         };
+        dedupeKey = `path|${resolved.absolute}`;
         
         // Log content detection for debugging
         if (contentInfo.isContent) {
@@ -385,10 +392,21 @@ async function buildBulkInstallContexts(
         source = {
           type: 'registry',
           packageName: dep.name,
-          version: dep.version
+          version: dep.version,
+          fromWorkspaceManifest: true
         };
+        dedupeKey = `registry|${dep.name}|${dep.version ?? ''}`;
       }
       
+      if (seenKeys.has(dedupeKey)) {
+        logger.warn('Skipping duplicate dependency entry in openpackage.yml', {
+          name: dep.name,
+          dedupeKey
+        });
+        continue;
+      }
+      seenKeys.add(dedupeKey);
+
       contexts.push({
         source,
         mode: 'install',

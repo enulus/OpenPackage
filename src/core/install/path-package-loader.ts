@@ -15,6 +15,7 @@ import { resolvePackageNameFromContext, createSkillResolutionContext } from '../
 import { generateGitHubPackageName } from '../../utils/plugin-naming.js';
 import { PackageNameService } from './package-name-service.js';
 import type { PackageNamingContext } from './naming-context.js';
+import { splitFrontmatter } from '../../utils/markdown-frontmatter.js';
 import * as yaml from 'js-yaml';
 
 export type PathSourceType = 'directory' | 'tarball';
@@ -333,8 +334,73 @@ export async function loadPackageFromDirectory(
         }
       }
     } else {
-      // Should not reach here
-      throw new ValidationError(`No package configuration available for '${dirPath}'`);
+      // Content-filtered loads (e.g. installing a single agent file from a repository)
+      // may not have openpackage.yml. In that case, generate minimal metadata so the
+      // install pipeline can proceed.
+      if (context?.contentFilter && context.contentType === 'skills') {
+        const normalizedFilter = context.contentFilter.replace(/\/+$/g, '');
+        const expectedSkillManifestPath = `${normalizedFilter}/SKILL.md`;
+        const skillManifestFile =
+          finalFiles.find(f => f.path === expectedSkillManifestPath) ||
+          finalFiles.find(f => f.path.endsWith('/SKILL.md')) ||
+          finalFiles[0];
+
+        const fallbackSkillName = basename(normalizedFilter);
+        const { frontmatter } = splitFrontmatter<Record<string, any>>(skillManifestFile?.content ?? '');
+        const fm = (frontmatter && typeof frontmatter === 'object') ? frontmatter : null;
+
+        const skillName =
+          (typeof fm?.name === 'string' && fm.name.trim().length > 0)
+            ? fm.name.trim()
+            : fallbackSkillName;
+
+        const skillVersion =
+          fm?.version ? String(fm.version) :
+          fm?.metadata?.version ? String(fm.metadata.version) :
+          '0.0.0';
+
+        const skillPackageName = resolvePackageNameFromContext(
+          createSkillResolutionContext({
+            gitUrl: context.gitUrl,
+            path: context.path,
+            skillName,
+            skillPath: normalizedFilter,
+            repoPath: context.repoPath
+          })
+        );
+
+        finalConfig = {
+          name: skillPackageName,
+          version: skillVersion
+        };
+      } else if (context?.contentFilter && context.contentType === 'agents') {
+        const agentFile = finalFiles.find(f => f.path === context.contentFilter) || finalFiles[0];
+        const fallbackAgentName = agentFile?.path ? basename(agentFile.path).replace(/\.md$/i, '') : 'agent';
+        const { frontmatter } = splitFrontmatter<Record<string, any>>(agentFile?.content ?? '');
+        const fm = (frontmatter && typeof frontmatter === 'object') ? frontmatter : null;
+        const agentName = (typeof fm?.name === 'string' && fm.name.trim().length > 0) ? fm.name.trim() : fallbackAgentName;
+        const agentVersion =
+          fm?.version ? String(fm.version) :
+          fm?.metadata?.version ? String(fm.metadata.version) :
+          '0.0.0';
+
+        // Prefer the original git path for naming (strip .md for nicer names)
+        const namingPath = context.path ? context.path.replace(/\.md$/i, '') : undefined;
+        const agentPackageName = generateGitHubPackageName({
+          gitUrl: context.gitUrl,
+          path: namingPath,
+          packageName: agentName,
+          repoPath: context.repoPath
+        });
+
+        finalConfig = {
+          name: agentPackageName,
+          version: agentVersion
+        };
+      } else {
+        // Should not reach here
+        throw new ValidationError(`No package configuration available for '${dirPath}'`);
+      }
     }
     
     return {
