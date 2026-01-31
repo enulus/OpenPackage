@@ -72,31 +72,47 @@ opkg install <resource>
 ```  
 Installs all files from a specified resource into the codebase at cwd, formatted and converted to per platform conventions and into their respective dirs.
 
-#### Install packages (OpenPackage packages, Claude plugins)
+#### Install resources (packages, plugins, rules, commands, agents, and skills)
 
 ```bash title="Terminal"
-opkg install essentials               # Local/remote registry
-opkg install ../packages/essentials/  # Local path
+# Packages or Marketplaces
+opkg install gh@<user>/<repo> --plugins <plugin-name>
 
-# GitHub package repo
-opkg install git:https://github.com/enulus/awesome-openpackage.git    
+# Packages or Claude Code plugins hosted on GitHub
+opkg install gh@<user>/<repo> --plugins <plugin-name>
 
-# GitHub Claude Code Plugins marketplace          
-opkg install github:anthropics/claude-code
+# Agents and Skills hosted on GitHub
+opkg install gh@<user>/<repo> --plugins <plugin-name> --agents <agent-name>
+opkg install gh@<user>/<repo> --plugins <plugin-name> --skills <agent-name>
+opkg install gh@<user>/<repo> --skills <agent-name>
+
+# GitHub URLs
+opkg install https://github.com/<user>/<repo>/<path-to-resource>
+
+# Local path to package or Claude Code plugin
+opkg install <path-to-dir>
+
+# Examples
+opkg install gh@anthropics/claude-code --plugins code-review
+opkg install gh@vercel-labs/agent-skills --skills react-best-practices
+opkg install https://github.com/anthropics/claude-code/tree/main/plugins/code-review
+opkg install https://github.com/vercel-labs/agent-skills/tree/main/skills/react-best-practices
 ```  
+
+#### Options
 
 Use the `--global` (or `-g`) option to install files to user scope:
 ```bash title="Terminal"
 # Installs to home dir, ex: ~/.cursor/, ~/.opencode/
-opkg install gh@anthropics/claude-code -g
-```
+opkg install github:anthropics/claude-code -g
+```  
 
 ### List installed resources
 ```bash title="Terminal"
-opkg status             # Lists packages installed to workspace at cwd
-opkg status <package>   # Lists installed files for specified package
+opkg list             # Lists resources installed to workspace at cwd
+opkg list <package>   # Lists installed files for specified resource
 ```  
-Use the list command to show an overview of packages and files installed.
+Use the status command to show an overview of packages and files installed.
 
 ### Uninstall packages
 ```bash title="Terminal"
@@ -105,7 +121,7 @@ opkg uninstall <package>
 Removes all files for a package from the codebase at cwd.
 
 > [!TIP]  
-> Learn more by heading over to the [official docs](https://openpackage.dev/docs). For detailed skills documentation, see [Skills Installation Guide](specs/install/skills-installation.md).
+> Learn more by heading over to the [official docs](https://openpackage.dev/docs).
 
 ### Compose packages
 
