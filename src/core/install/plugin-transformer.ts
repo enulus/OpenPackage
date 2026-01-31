@@ -206,7 +206,12 @@ export async function extractPluginFiles(pluginDir: string): Promise<PackageFile
         continue;
       }
       
-      const content = await readTextFile(fullPath);
+      let content: string;
+      try {
+        content = await readTextFile(fullPath);
+      } catch (error) {
+        throw error;
+      }
       
       files.push({
         path: relativePath,

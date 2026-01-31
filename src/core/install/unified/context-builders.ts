@@ -239,14 +239,14 @@ export async function buildInstallContext(
     }
     
     case 'git': {
-      // Check if the package input (name) or gitPath contains content information
-      // This handles: opkg install ghwshobson/agents/plugins/ui-design/skills/mobile-ios-design
-      // which is classified as git but may contain content path
-      const contentInfoFromInput = parseContentPath(packageInput);
+      // Check if the gitPath contains content information (skills, agents, etc.)
+      //
+      // IMPORTANT: Do NOT parse the full user input here (e.g. "gh@owner/repo/...") because
+      // repo names like "agents" can be misinterpreted as a content directory ("agents/"),
+      // producing bogus filters like "agents/plugins/...".
       const contentInfoFromGitPath = parseContentPath(classification.gitPath);
       
-      // Prefer content info from gitPath if available, otherwise from packageInput
-      const contentInfo = contentInfoFromGitPath.isContent ? contentInfoFromGitPath : contentInfoFromInput;
+      const contentInfo = contentInfoFromGitPath;
       const contentFilter = contentInfo.isContent ? getContentFilterPath(contentInfo) : undefined;
       const contentType = contentInfo.contentType;
       

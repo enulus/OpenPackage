@@ -872,6 +872,22 @@ async function installCommand(
         const hasContent = detection && ('hasContent' in detection ? detection.hasContent : (detection as any).hasSkills);
         if (hasContent) {
           const items = 'discoveredItems' in detection ? detection.discoveredItems : (detection as any).discoveredSkills;
+
+          // If user explicitly provided a git subdirectory path that resolves to a collection,
+          // default to installing ALL items in that collection.
+          // This avoids forcing flags for "install this directory" workflows.
+          const shouldInstallAllByDefault = contexts.source.type === 'git' && !!contexts.source.gitPath;
+          if (shouldInstallAllByDefault) {
+            const allNames = items.map((i: any) => i.name).filter((n: any) => typeof n === 'string' && n.length > 0);
+
+            const nextOptions: InstallOptions = {
+              ...options,
+              skills: contentType === 'skills' ? allNames : options.skills,
+              agents: contentType === 'agents' ? allNames : options.agents
+            };
+            return await handleContentCollectionInstallation(contexts, loaded, nextOptions, cwd, contentType);
+          }
+
           console.error(`Error: This is a ${definition.pluralName} collection. Use --${definition.pluralName} flag to specify which ${definition.pluralName} to install.\n`);
           console.error(`Available ${definition.pluralName}:`);
           for (const item of items) {
