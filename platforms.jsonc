@@ -116,7 +116,8 @@
           // Only transform keys under `mcpServers` (no-op if missing).
           { "$rename": { "mcpServers.*": "*" } },
           { "$unset": "mcpServers" }
-        ]
+        ],
+        "merge": "deep"
       }
     ],
     "import": [
