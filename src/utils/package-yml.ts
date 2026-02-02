@@ -158,6 +158,21 @@ export async function parsePackageYml(packageYmlPath: string): Promise<PackageYm
             `openpackage.yml ${section}: dependency '${dep.name}' has both subdirectory and path fields; use path only`
           );
         }
+        // Phase 5: Validate base field
+        if (dep.base !== undefined) {
+          // Base should be a string (relative path)
+          if (typeof dep.base !== 'string') {
+            throw new Error(
+              `openpackage.yml ${section}: dependency '${dep.name}' has invalid base field; must be a string`
+            );
+          }
+          // Base should not start with / or be absolute
+          if (dep.base.startsWith('/')) {
+            throw new Error(
+              `openpackage.yml ${section}: dependency '${dep.name}' has absolute base path; base must be relative to repository root`
+            );
+          }
+        }
       }
     };
     

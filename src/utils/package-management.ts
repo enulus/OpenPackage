@@ -171,7 +171,8 @@ export async function addPackageToYml(
   path?: string,  // Path to local directory or tarball (for path-based dependencies)
   git?: string,   // Git source url (DEPRECATED: use url) (mutually exclusive with path/version)
   ref?: string,   // Git ref (DEPRECATED: embed in url as #ref)
-  gitPath?: string  // Git subdirectory path (for plugins in marketplaces)
+  gitPath?: string,  // Git subdirectory path (for plugins in marketplaces)
+  base?: string  // Phase 4: Base path for resource-based installation
 ): Promise<void> {
   const packageYmlPath = getLocalPackageYmlPath(cwd);
   
@@ -280,7 +281,8 @@ export async function addPackageToYml(
     ...(includeToWrite ? { include: includeToWrite } : {}),
     ...(path && !git ? { path } : {}),  // Only use path for local sources
     ...(urlField ? { url: urlField } : {}),  // Use url with embedded ref
-    ...(gitPath ? { path: gitPath } : {})  // Use path field for git subdirectory
+    ...(gitPath ? { path: gitPath } : {}),  // Use path field for git subdirectory
+    ...(base ? { base } : {})  // Phase 4: Base field for resource model
   };
   
   // Determine target location (dependencies vs dev-dependencies)

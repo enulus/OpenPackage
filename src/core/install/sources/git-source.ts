@@ -4,6 +4,10 @@ import type { InstallOptions } from '../../../types/index.js';
 import { SourceLoadError } from './base.js';
 import { loadPackageFromGit } from '../git-package-loader.js';
 import { detectPluginType } from '../plugin-detector.js';
+import { detectBase } from '../base-detector.js';
+import { getPlatformsState } from '../../../core/platforms.js';
+import { logger } from '../../../utils/logger.js';
+import { resolve, relative } from 'path';
 
 /**
  * Loads packages from git repositories
@@ -30,8 +34,55 @@ export class GitSourceLoader implements PackageSourceLoader {
         path: source.gitPath
       });
       
+      // Phase 5: If manifest base is present, skip detection (reproducibility)
+      let detectedBaseInfo: any = null;
+      if (source.manifestBase) {
+        // Use base from manifest instead of detecting
+        const absoluteBase = resolve(result.repoPath, source.manifestBase);
+        detectedBaseInfo = {
+          matchType: 'manifest',
+          base: absoluteBase,
+          baseRelative: source.manifestBase,
+          matchedPattern: null
+        };
+        
+        source.detectedBase = absoluteBase;
+        
+        logger.info('Using base from manifest for git source', {
+          base: source.manifestBase,
+          absoluteBase
+        });
+      } else if (source.resourcePath || source.gitPath) {
+        // NEW: If a resource path was specified, detect base
+        const platformsState = getPlatformsState(cwd);
+        const platformsConfig = platformsState.config;
+        const pathToDetect = source.resourcePath || source.gitPath || '';
+        
+        logger.debug('Detecting base for git resource', {
+          resourcePath: pathToDetect,
+          repoPath: result.repoPath
+        });
+        
+        detectedBaseInfo = await detectBase(
+          pathToDetect,
+          result.repoPath,
+          platformsConfig
+        );
+        
+        logger.info('Base detection result for git source', {
+          matchType: detectedBaseInfo.matchType,
+          base: detectedBaseInfo.base,
+          matchedPattern: detectedBaseInfo.matchedPattern
+        });
+        
+        // Store detected base in source
+        if (detectedBaseInfo.base) {
+          source.detectedBase = detectedBaseInfo.base;
+        }
+      }
+      
       // Check if marketplace - return metadata, let command handle selection
-      if (result.isMarketplace) {
+      if (result.isMarketplace || detectedBaseInfo?.matchType === 'marketplace') {
         const pluginDetection = await detectPluginType(result.sourcePath);
         
         return {
@@ -43,26 +94,30 @@ export class GitSourceLoader implements PackageSourceLoader {
           pluginMetadata: {
             isPlugin: true,
             pluginType: 'marketplace',
-            manifestPath: pluginDetection.manifestPath
+            manifestPath: pluginDetection.manifestPath || detectedBaseInfo?.manifestPath
           },
           sourceMetadata: {
             repoPath: result.repoPath,
-            commitSha: result.commitSha
+            commitSha: result.commitSha,
+            baseDetection: detectedBaseInfo
           }
         };
       }
       
+      // Use detected base as content root if available
+      const contentRoot = detectedBaseInfo?.base || result.sourcePath;
+      
       // Load individual package/plugin
       const { loadPackageFromPath } = await import('../path-package-loader.js');
-      let sourcePackage = await loadPackageFromPath(result.sourcePath, {
+      let sourcePackage = await loadPackageFromPath(contentRoot, {
         gitUrl: source.gitUrl,
         path: source.gitPath,
-        repoPath: result.sourcePath,
+        repoPath: result.repoPath,
         marketplaceEntry: source.pluginMetadata?.marketplaceEntry
       });
       
-      // Detect plugin type
-      const pluginDetection = await detectPluginType(result.sourcePath);
+      // Detect plugin type at content root
+      const pluginDetection = await detectPluginType(contentRoot);
       
       const packageName = sourcePackage.metadata.name;
       const version = sourcePackage.metadata.version || '0.0.0';
@@ -72,7 +127,7 @@ export class GitSourceLoader implements PackageSourceLoader {
         metadata: sourcePackage.metadata,
         packageName,
         version,
-        contentRoot: result.sourcePath,
+        contentRoot,
         source: 'git',
         pluginMetadata: pluginDetection.isPlugin ? {
           isPlugin: true,
@@ -81,7 +136,8 @@ export class GitSourceLoader implements PackageSourceLoader {
         } : undefined,
         sourceMetadata: {
           repoPath: result.repoPath,
-          commitSha: result.commitSha
+          commitSha: result.commitSha,
+          baseDetection: detectedBaseInfo
         }
       };
     } catch (error) {

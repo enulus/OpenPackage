@@ -133,4 +133,83 @@ export abstract class BaseStrategy implements InstallationStrategy {
       fileMapping: {}
     };
   }
+  
+  /**
+   * Apply resource filtering to flow sources (Phase 4: Resource model)
+   * 
+   * Filters sources based on:
+   * 1. Matched pattern (from base detection)
+   * 2. Explicit resource filter (from convenience options)
+   * 
+   * @param flowSources - Map of flows to source paths
+   * @param matchedPattern - Pattern that matched for base detection
+   * @param resourceFilter - Specific paths to include (from convenience options)
+   * @param packageRoot - Package root directory
+   * @returns Filtered flow sources
+   */
+  protected applyResourceFiltering(
+    flowSources: Map<any, string[]>,
+    matchedPattern: string | undefined,
+    resourceFilter: string[] | undefined,
+    packageRoot: string
+  ): Map<any, string[]> {
+    // If no filtering specified, return original sources
+    if (!matchedPattern && !resourceFilter) {
+      return flowSources;
+    }
+    
+    const { minimatch } = require('minimatch');
+    const { relative } = require('path');
+    
+    const filteredSources = new Map<any, string[]>();
+    
+    for (const [flow, sources] of flowSources.entries()) {
+      const filtered = sources.filter(sourcePath => {
+        // Make path relative to package root for matching
+        const relativePath = relative(packageRoot, sourcePath);
+        
+        // Check matched pattern if specified
+        if (matchedPattern && !minimatch(relativePath, matchedPattern)) {
+          logger.debug('Source filtered by pattern', {
+            source: relativePath,
+            pattern: matchedPattern
+          });
+          return false;
+        }
+        
+        // Check resource filter if specified
+        if (resourceFilter && resourceFilter.length > 0) {
+          const matches = resourceFilter.some(filter => {
+            // Check if source matches or is within filtered path
+            return relativePath === filter || 
+                   relativePath.startsWith(filter + '/') ||
+                   filter.startsWith(relativePath + '/');
+          });
+          
+          if (!matches) {
+            logger.debug('Source filtered by resource filter', {
+              source: relativePath,
+              filters: resourceFilter
+            });
+            return false;
+          }
+        }
+        
+        return true;
+      });
+      
+      if (filtered.length > 0) {
+        filteredSources.set(flow, filtered);
+      }
+    }
+    
+    logger.debug('Applied resource filtering', {
+      originalFlowCount: flowSources.size,
+      filteredFlowCount: filteredSources.size,
+      matchedPattern,
+      resourceFilterCount: resourceFilter?.length || 0
+    });
+    
+    return filteredSources;
+  }
 }

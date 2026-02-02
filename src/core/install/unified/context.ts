@@ -28,6 +28,16 @@ export interface PackageSource {
   gitRef?: string;
   gitPath?: string;
   
+  // Resource model fields (Phase 2)
+  /** Resource path within the source (for git/registry sources) */
+  resourcePath?: string;
+  
+  /** Detected base for this resource */
+  detectedBase?: string;
+  
+  /** Base path from manifest (Phase 5: for reproducibility during bulk install) */
+  manifestBase?: string;
+  
   // Git source override for manifest recording
   // Used when physical source is path-based but logical source is git
   // (e.g., marketplace plugins loaded from already-cloned repos)
@@ -104,4 +114,35 @@ export interface InstallationContext {
   
   /** Workspace index (read in prepare, updated in execute phase) */
   workspaceIndex?: WorkspaceIndex;
+  
+  // === Resource model fields (Phase 2) ===
+  /** Detected base path (absolute) */
+  detectedBase?: string;
+  
+  /** Detected base relative to repo root (for manifest) */
+  baseRelative?: string;
+  
+  /** How base was determined */
+  baseSource?: 'openpackage' | 'plugin' | 'marketplace' | 'pattern' | 'user-selection' | 'manifest';
+  
+  /** Pattern that matched (for pattern-based detection) */
+  matchedPattern?: string;
+  
+  /** Ambiguous matches awaiting user resolution */
+  ambiguousMatches?: Array<{
+    pattern: string;
+    base: string;
+    startIndex: number;
+  }>;
+  
+  /** Filtered resources from convenience options */
+  filteredResources?: Array<{
+    name: string;
+    path: string;
+    matchedBy: string;
+    installDir?: string;  // For skills, the directory to install
+  }>;
+  
+  /** Errors from convenience option filtering */
+  filterErrors?: string[];
 }

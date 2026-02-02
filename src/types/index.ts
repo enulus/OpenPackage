@@ -133,6 +133,16 @@ export interface PackageDependency {
    * When omitted, installs include the full package payload.
    */
   include?: string[];
+  
+  /**
+   * Base path within the repository (Phase 5: Resource model)
+   * Relative path from repository root to the installation base.
+   * Used for reproducibility when ambiguous base was resolved by user.
+   * Examples:
+   *   - "" (empty string) = repo root
+   *   - "plugins/my-plugin" = subdirectory within repo
+   */
+  base?: string;
 }
 
 export interface PackageYml {

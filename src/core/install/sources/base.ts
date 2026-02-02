@@ -37,6 +37,8 @@ export interface LoadedPackage {
     /** For git sources: commit SHA of cached version */
     commitSha?: string;
     
+    /** Base detection result (for resource model) */
+    baseDetection?: any;
   };
 }
 

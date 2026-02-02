@@ -4,6 +4,7 @@ import type { PackageFile } from '../../../types/index.js';
 import { getPlatformDefinition, type Platform } from '../../platforms.js';
 import { buildNormalizedIncludeSet, isManifestPath, normalizePackagePath } from '../../../utils/manifest-paths.js';
 import { getPlatformRootFileNames, stripRootCopyPrefix, isRootCopyPath } from '../../../utils/platform-root-files.js';
+import { minimatch } from 'minimatch';
 
 export interface CategorizedInstallFiles {
   pathBasedFiles: PackageFile[];
@@ -16,7 +17,8 @@ export async function discoverAndCategorizeFiles(
   version: string,
   platforms: Platform[],
   includePaths?: string[],
-  contentRoot?: string
+  contentRoot?: string,
+  matchedPattern?: string  // Phase 4: Pattern for filtering
 ): Promise<CategorizedInstallFiles> {
   // Load once
   const pkg = await packageManager.loadPackage(packageName, version, {
@@ -25,8 +27,22 @@ export async function discoverAndCategorizeFiles(
 
   const normalizedIncludes = buildNormalizedIncludeSet(includePaths);
 
-  const shouldInclude = (path: string): boolean =>
-    !normalizedIncludes || normalizedIncludes.has(normalizePackagePath(path));
+  // Phase 4: Build include filter that considers both includePaths and matchedPattern
+  const shouldInclude = (path: string): boolean => {
+    const normalized = normalizePackagePath(path);
+    
+    // First check explicit include paths (from convenience filters)
+    if (normalizedIncludes && !normalizedIncludes.has(normalized)) {
+      return false;
+    }
+    
+    // Then check matched pattern (from base detection)
+    if (matchedPattern && !minimatch(path, matchedPattern)) {
+      return false;
+    }
+    
+    return true;
+  };
 
   // Precompute platform root filenames
   const platformRootNames = getPlatformRootFileNames(platforms);

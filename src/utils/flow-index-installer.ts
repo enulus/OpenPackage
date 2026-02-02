@@ -88,7 +88,8 @@ export async function installPackageByIndexWithFlows(
     url: string;
     commitSha: string;
     pluginName: string;
-  }
+  },
+  matchedPattern?: string  // Phase 4: Pattern from base detection
 ): Promise<IndexInstallResult> {
   logger.debug(`Installing ${packageName}@${version} with flows for platforms: ${platforms.join(', ')}`);
 
@@ -196,7 +197,10 @@ export async function installPackageByIndexWithFlows(
       priority: 0, // Priority is calculated from dependency graph during multi-package installs
       dryRun: options.dryRun ?? false,
       packageFormat: format,
-      conversionContext
+      conversionContext,
+      // Phase 4: Pass resource filtering info
+      matchedPattern,
+      resourceFilter: includePaths
     };
 
     try {

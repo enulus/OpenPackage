@@ -246,7 +246,8 @@ async function buildBulkInstallContexts(
           packageName: dep.name,
           gitUrl,
           gitRef,
-          gitPath: dep.path
+          gitPath: dep.path,
+          manifestBase: dep.base  // Phase 5: Pass manifest base to source
         };
       } else if (dep.path) {
         // Path source - resolve tilde paths before creating source
@@ -257,18 +258,21 @@ async function buildBulkInstallContexts(
           type: 'path',
           packageName: dep.name,
           localPath: resolved.absolute,
-          sourceType: isTarball ? 'tarball' : 'directory'
+          sourceType: isTarball ? 'tarball' : 'directory',
+          manifestBase: dep.base  // Phase 5: Pass manifest base to source
         };
       } else {
         // Registry source
         source = {
           type: 'registry',
           packageName: dep.name,
-          version: dep.version
+          version: dep.version,
+          manifestBase: dep.base  // Phase 5: Pass manifest base to source
         };
       }
       
-      contexts.push({
+      // Phase 5: Create context with base field from manifest if present
+      const context: InstallationContext = {
         source,
         mode: 'install',
         options,
@@ -278,11 +282,83 @@ async function buildBulkInstallContexts(
         resolvedPackages: [],
         warnings: [],
         errors: []
-      });
+      };
+      
+      // Phase 5: Store base from manifest for reproducibility
+      // When base is present, skip base detection and use manifest value
+      if (dep.base) {
+        context.baseRelative = dep.base;
+        context.baseSource = 'manifest';
+        logger.debug(`Using base from manifest for ${dep.name}`, { base: dep.base });
+      }
+      
+      contexts.push(context);
     }
   }
   
   return contexts;
+}
+
+/**
+ * Build context from a ResourceSpec (Phase 3: Resource Model)
+ */
+export async function buildResourceInstallContext(
+  cwd: string,
+  resourceSpec: any, // ResourceSpec from resource-arg-parser
+  options: InstallOptions
+): Promise<InstallationContext> {
+  let source: PackageSource;
+  
+  switch (resourceSpec.type) {
+    case 'github-url':
+    case 'github-shorthand':
+      // Git source with resource path
+      source = {
+        type: 'git',
+        packageName: '', // Populated after loading
+        gitUrl: resourceSpec.gitUrl!,
+        gitRef: resourceSpec.ref,
+        gitPath: resourceSpec.path,
+        resourcePath: resourceSpec.path // Store resource path for base detection
+      };
+      break;
+    
+    case 'registry':
+      // Registry source with optional path
+      source = {
+        type: 'registry',
+        packageName: resourceSpec.name!,
+        version: resourceSpec.version,
+        resourcePath: resourceSpec.path
+      };
+      break;
+    
+    case 'filepath':
+      // Local path source
+      source = {
+        type: 'path',
+        packageName: '', // Populated after loading
+        localPath: resourceSpec.absolutePath!,
+        sourceType: resourceSpec.isDirectory ? 'directory' : 'tarball',
+        resourcePath: resourceSpec.absolutePath // Store absolute path for base detection
+      };
+      break;
+    
+    default:
+      throw new Error(`Unknown resource type: ${resourceSpec.type}`);
+  }
+  
+  return {
+    source,
+    mode: 'install',
+    options,
+    platforms: normalizePlatforms(options.platforms) || [],
+    cwd,
+    targetDir: '.',
+    resolvedPackages: [],
+    warnings: [],
+    errors: []
+  };
 }
 
 

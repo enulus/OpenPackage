@@ -30,6 +30,18 @@ export interface FlowInstallContext {
    * Contains immutable originalFormat and conversion history for auditing.
    */
   conversionContext: PackageConversionContext;
+  
+  // Phase 4: Resource filtering fields
+  
+  /**
+   * Pattern that matched for base detection (for pattern-based filtering)
+   */
+  matchedPattern?: string;
+  
+  /**
+   * Specific resource paths to install (from convenience options)
+   */
+  resourceFilter?: string[];
 }
 
 /**

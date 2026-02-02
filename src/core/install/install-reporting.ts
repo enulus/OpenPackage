@@ -47,6 +47,19 @@ export function displayInstallationResults(
     return;
   }
   
+  // Phase 6: Handle empty directory/filtered installs (0 files but still success)
+  if (!installedAnyFiles && !hadErrors) {
+    let summaryText = `✓ Succeeded ${packageName}`;
+    if (mainPackage) {
+      summaryText += `@${mainPackage.version}`;
+    }
+    summaryText += ' with 0 installs';
+    console.log(`${summaryText}`);
+    console.log(`💡 No files matched the specified filters or directory is empty`);
+    console.log(`   The dependency has been recorded in your manifest.`);
+    return;
+  }
+  
   let summaryText = `✓ Installed ${packageName}`;
   if (mainPackage) {
     summaryText += `@${mainPackage.version}`;

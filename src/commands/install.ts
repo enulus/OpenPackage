@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import type { CommandResult, InstallOptions } from '../types/index.js';
 import { withErrorHandling } from '../utils/errors.js';
 import { normalizePlatforms } from '../utils/platform-mapper.js';
-import { buildInstallContext } from '../core/install/unified/context-builders.js';
+import { buildInstallContext, buildResourceInstallContext } from '../core/install/unified/context-builders.js';
 import { runUnifiedInstallPipeline } from '../core/install/unified/pipeline.js';
 import { determineResolutionMode } from '../utils/resolution-mode.js';
 import { DIR_PATTERNS, PACKAGE_PATHS } from '../constants/index.js';
@@ -11,6 +11,10 @@ import type { InstallationContext } from '../core/install/unified/context.js';
 import type { LoadedPackage } from '../core/install/sources/base.js';
 import { getLoaderForSource } from '../core/install/sources/loader-factory.js';
 import { logger } from '../utils/logger.js';
+import { parseResourceArg } from '../utils/resource-arg-parser.js';
+import { applyConvenienceFilters, displayFilterErrors } from '../core/install/convenience-matchers.js';
+import { promptBaseSelection, canPrompt, handleAmbiguityNonInteractive, type BaseMatch } from '../core/install/ambiguity-prompts.js';
+import { relative } from 'path';
 
 /**
  * Validate that target directory is not inside .openpackage metadata
@@ -77,18 +81,176 @@ async function installCommand(
   // Set resolution mode
   options.resolutionMode = determineResolutionMode(options);
   
-  // Build context(s)
+  // No input = bulk install (unchanged)
+  if (!packageInput) {
+    const contexts = await buildInstallContext(cwd, packageInput, options);
+    if (Array.isArray(contexts)) {
+      return await runBulkInstall(contexts);
+    }
+    // Shouldn't happen, but handle gracefully
+    return await runUnifiedInstallPipeline(contexts as InstallationContext);
+  }
+  
+  // Check if we have convenience options (--agents, --skills)
+  const hasConvenienceOptions = !!(options as any).agents || !!(options as any).skills;
+  
+  // Try parsing as resource first if:
+  // 1. We have convenience options, OR
+  // 2. Input looks like it might have a sub-path (contains more than 2 segments after gh@)
+  const shouldTryResourceParsing = hasConvenienceOptions || 
+    packageInput.startsWith('gh@') || 
+    packageInput.startsWith('http');
+  
+  if (shouldTryResourceParsing) {
+    try {
+      return await installResourceCommand(packageInput, options, cwd);
+    } catch (error) {
+      // If resource parsing fails and no convenience options, fall back to legacy
+      if (!hasConvenienceOptions) {
+        logger.debug('Resource parsing failed, falling back to legacy install', { error });
+      } else {
+        // With convenience options, resource parsing is required
+        throw error;
+      }
+    }
+  }
+  
+  // Fall back to legacy install for backwards compatibility
+  return await installLegacyCommand(packageInput, options, cwd);
+}
+
+/**
+ * Install command using resource model (Phase 3)
+ */
+async function installResourceCommand(
+  packageInput: string,
+  options: InstallOptions,
+  cwd: string
+): Promise<CommandResult> {
+  // Parse resource argument
+  const resourceSpec = await parseResourceArg(packageInput, cwd);
+  
+  logger.debug('Parsed resource spec', { resourceSpec });
+  
+  // Build context from resource spec
+  let context = await buildResourceInstallContext(cwd, resourceSpec, options);
+  
+  // Load the source to get content and detect base
+  const loader = getLoaderForSource(context.source);
+  const loaded = await loader.load(context.source, options, cwd);
+  
+  // Update context with loaded info
+  context.source.packageName = loaded.packageName;
+  context.source.version = loaded.version;
+  context.source.contentRoot = loaded.contentRoot;
+  context.source.pluginMetadata = loaded.pluginMetadata;
+  
+  // Store commitSha for marketplace handling
+  if (loaded.sourceMetadata?.commitSha) {
+    (context.source as any)._commitSha = loaded.sourceMetadata.commitSha;
+  }
+  
+  // Base detection is already done in the source loader (Phase 2)
+  // Check if we have base detection results in sourceMetadata
+  if (loaded.sourceMetadata?.baseDetection) {
+    const baseDetection = loaded.sourceMetadata.baseDetection;
+    context.detectedBase = baseDetection.base;
+    context.matchedPattern = baseDetection.matchedPattern;
+    context.baseSource = baseDetection.matchType as any;
+    
+    // Handle marketplace detection
+    if (baseDetection.matchType === 'marketplace') {
+      return await handleMarketplaceInstallation(context, options, cwd);
+    }
+    
+    // Handle ambiguous base detection (before pipeline)
+    if (baseDetection.matchType === 'ambiguous' && baseDetection.ambiguousMatches) {
+      context = await handleAmbiguousBase(context, baseDetection.ambiguousMatches, cwd, options);
+    }
+    
+    // Calculate base relative to repo root for manifest storage
+    if (context.detectedBase && loaded.contentRoot) {
+      context.baseRelative = relative(loaded.contentRoot, context.detectedBase);
+      if (!context.baseRelative) {
+        context.baseRelative = '.'; // Base is repo root
+      }
+    }
+  }
+  
+  // Apply convenience filters if specified (--agents, --skills)
+  if ((options as any).agents || (options as any).skills) {
+    const basePath = context.detectedBase || loaded.contentRoot || cwd;
+    
+    const filterResult = await applyConvenienceFilters(basePath, {
+      agents: (options as any).agents,
+      skills: (options as any).skills
+    });
+    
+    // Store filter results
+    context.filteredResources = filterResult.resources;
+    context.filterErrors = filterResult.errors;
+    
+    // Display errors if any
+    if (filterResult.errors.length > 0) {
+      displayFilterErrors(filterResult.errors, filterResult.available);
+      
+      // If all resources failed, abort
+      if (filterResult.resources.length === 0) {
+        return {
+          success: false,
+          error: 'None of the requested resources were found'
+        };
+      }
+      
+      // Otherwise, continue with partial install
+      console.log(`\n⚠️  Continuing with ${filterResult.resources.length} resource(s)\n`);
+    }
+  }
+  
+  // Not a marketplace or ambiguous - warn if --plugins was specified without agents/skills
+  if (options.plugins && options.plugins.length > 0 && 
+      !(options as any).agents && !(options as any).skills) {
+    console.log('Warning: --plugins flag is only used with marketplace sources. Ignoring.');
+  }
+  
+  // Create resolved package for the loaded package
+  // Map source type to ResolvedPackage source type
+  const resolvedSource: 'local' | 'remote' | 'path' | 'git' = 
+    context.source.type === 'registry' ? 'local' :
+    context.source.type === 'workspace' ? 'local' :
+    context.source.type; // 'path' or 'git' map directly
+  
+  context.resolvedPackages = [{
+    name: loaded.packageName,
+    version: loaded.version,
+    pkg: { metadata: loaded.metadata, files: [], _format: undefined },
+    isRoot: true,
+    source: resolvedSource,
+    contentRoot: context.detectedBase || loaded.contentRoot
+  }];
+  
+  // Run pipeline
+  return await runUnifiedInstallPipeline(context);
+}
+
+/**
+ * Legacy install command (backwards compatible)
+ */
+async function installLegacyCommand(
+  packageInput: string,
+  options: InstallOptions,
+  cwd: string
+): Promise<CommandResult> {
+  // Build context(s) using legacy method
   const contexts = await buildInstallContext(cwd, packageInput, options);
   
-  // Handle bulk install (multiple contexts)
+  // Handle bulk install (shouldn't happen here, but keep for safety)
   if (Array.isArray(contexts)) {
     return await runBulkInstall(contexts);
   }
   
   // For git sources, we need to load the package first to detect if it's a marketplace
-  // Marketplaces are detected during loadPackagePhase, so we need to check after loading
   if (contexts.source.type === 'git') {
-    // Load package to detect marketplace
     const loader = getLoaderForSource(contexts.source);
     const loaded = await loader.load(contexts.source, options, cwd);
     
@@ -113,7 +275,6 @@ async function installCommand(
       console.log('Warning: --plugins flag is only used with marketplace sources. Ignoring.');
     }
 
-    // Not a marketplace, continue with normal pipeline
     // Create resolved package for the loaded package
     contexts.resolvedPackages = [{
       name: loaded.packageName,
@@ -127,6 +288,57 @@ async function installCommand(
   
   // Single package install
   return await runUnifiedInstallPipeline(contexts);
+}
+
+/**
+ * Handle ambiguous base detection with user prompt or auto-selection
+ */
+async function handleAmbiguousBase(
+  context: InstallationContext,
+  ambiguousMatches: Array<{ pattern: string; base: string; startIndex: number }>,
+  cwd: string,
+  options: InstallOptions
+): Promise<InstallationContext> {
+  const repoRoot = context.source.contentRoot || cwd;
+  
+  // Convert to BaseMatch format for prompt
+  const matches: BaseMatch[] = ambiguousMatches.map(m => ({
+    base: m.base,
+    pattern: m.pattern,
+    startIndex: m.startIndex,
+    exampleTarget: `${m.pattern} → <platforms>/${m.pattern.replace('**/', '').replace('*', 'file')}`
+  }));
+  
+  let selectedMatch: BaseMatch;
+  
+  // Check if we can prompt
+  if (options.force || !canPrompt()) {
+    // Non-interactive mode or --force: use deepest match
+    selectedMatch = handleAmbiguityNonInteractive(matches);
+  } else {
+    // Interactive mode: prompt user
+    const resourcePath = context.source.resourcePath || context.source.gitPath || '';
+    selectedMatch = await promptBaseSelection(resourcePath, matches, repoRoot);
+  }
+  
+  // Update context with selected base
+  context.detectedBase = selectedMatch.base;
+  context.matchedPattern = selectedMatch.pattern;
+  context.baseSource = 'user-selection'; // Mark as user-selected for manifest
+  
+  // Calculate relative base for manifest
+  context.baseRelative = relative(repoRoot, selectedMatch.base);
+  if (!context.baseRelative) {
+    context.baseRelative = '.';
+  }
+  
+  logger.info('Ambiguous base resolved', {
+    base: context.detectedBase,
+    pattern: context.matchedPattern,
+    source: context.baseSource
+  });
+  
+  return context;
 }
 
 /**
@@ -298,7 +510,9 @@ export function setupInstallCommand(program: Command): void {
     .option('--profile <profile>', 'profile to use for authentication')
     .option('--api-key <key>', 'API key for authentication (overrides profile)')
     .option('--plugins <names...>', 'install specific plugins from marketplace (bypasses interactive selection)')
-    .action(withErrorHandling(async (packageName: string | undefined, options: InstallOptions) => {
+    .option('--agents <names...>', 'install specific agents by name (matches frontmatter name or filename)')
+    .option('--skills <names...>', 'install specific skills by name (matches SKILL.md frontmatter name or directory name)')
+    .action(withErrorHandling(async (packageName: string | undefined, options: InstallOptions & { agents?: string[]; skills?: string[] }) => {
       // Normalize platforms
       options.platforms = normalizePlatforms(options.platforms);
 

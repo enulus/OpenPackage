@@ -31,7 +31,8 @@ export async function updateManifestPhase(ctx: InstallationContext): Promise<voi
       fields.path,
       fields.gitUrl,
       fields.gitRef,
-      fields.gitPath
+      fields.gitPath,
+      fields.base  // Phase 4: Pass base field for resource model
     );
     
     logger.info(`Updated manifest for ${ctx.source.packageName}`);
@@ -50,7 +51,8 @@ function buildManifestFields(ctx: InstallationContext, mainPackage: any) {
     path: undefined,
     gitUrl: undefined,
     gitRef: undefined,
-    gitPath: undefined
+    gitPath: undefined,
+    base: undefined  // Phase 4: Base field for resource model
   };
   
   // Check for git source override first (for marketplace plugins)
@@ -60,6 +62,13 @@ function buildManifestFields(ctx: InstallationContext, mainPackage: any) {
     fields.gitRef = ctx.source.gitSourceOverride.gitRef;
     fields.gitPath = ctx.source.gitSourceOverride.gitPath;
     return fields;
+  }
+  
+  // Phase 4: Record base field if user-selected or non-default
+  // This ensures reproducible installs when ambiguity was resolved
+  if (ctx.baseRelative && ctx.baseSource === 'user-selection') {
+    fields.base = ctx.baseRelative;
+    logger.debug('Recording user-selected base in manifest', { base: ctx.baseRelative });
   }
   
   switch (ctx.source.type) {

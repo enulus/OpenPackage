@@ -34,7 +34,12 @@ export async function loadPackagePhase(ctx: InstallationContext): Promise<void> 
     // Update context
     ctx.source.packageName = loaded.packageName;
     ctx.source.version = loaded.version;
-    ctx.source.contentRoot = loaded.contentRoot;
+    
+    // Use detected base as content root if available (Phase 4: Resource model)
+    // The base was detected in the source loader (Phase 2) and passed via sourceMetadata
+    const effectiveContentRoot = ctx.detectedBase || loaded.contentRoot;
+    ctx.source.contentRoot = effectiveContentRoot;
+    
     ctx.source.pluginMetadata = loaded.pluginMetadata;
     
     // Store commit SHA for git sources (needed for workspace index marketplace metadata)
@@ -69,10 +74,14 @@ export async function loadPackagePhase(ctx: InstallationContext): Promise<void> 
     const rootPackage: any = {
       name: loaded.packageName,
       version: loaded.version,
-      pkg: { metadata: loaded.metadata, files: [], _format: (loaded.metadata as any)._format || ctx.source.pluginMetadata?.format },
+      pkg: { 
+        metadata: loaded.metadata, 
+        files: [], 
+        _format: (loaded.metadata as any)?._format || ctx.source.pluginMetadata?.format 
+      },
       isRoot: true,
       source: resolvedSource,
-      contentRoot: loaded.contentRoot
+      contentRoot: effectiveContentRoot  // Use detected base as content root
     };
     
     // Add marketplace metadata if present

@@ -45,6 +45,7 @@ export interface InstallationPhasesParams {
   options: InstallOptions;
   targetDir: string;
   fileFilters?: Record<string, string[] | undefined>;
+  matchedPattern?: string;  // Phase 4: Pattern from base detection
 }
 
 export interface InstallationPhasesResult {
@@ -177,7 +178,7 @@ export async function processConflictResolution(
  * Perform the index-based installation process
  */
 export async function performIndexBasedInstallationPhases(params: InstallationPhasesParams): Promise<InstallationPhasesResult> {
-  const { cwd, packages, platforms, conflictResult, options, targetDir, fileFilters } = params;
+  const { cwd, packages, platforms, conflictResult, options, targetDir, fileFilters, matchedPattern } = params;
 
   // Install each package using index-based installer
   let totalInstalled = 0;
@@ -204,7 +205,8 @@ export async function performIndexBasedInstallationPhases(params: InstallationPh
         filtersForPackage,
         resolved.contentRoot,  // Pass contentRoot for path-based packages
         resolved.pkg._format,   // Pass format metadata from Package object
-        resolved.marketplaceMetadata  // Pass marketplace metadata if present
+        resolved.marketplaceMetadata,  // Pass marketplace metadata if present
+        matchedPattern  // Phase 4: Pass matched pattern for filtering
       );
 
       totalInstalled += installResult.installed;
@@ -245,7 +247,8 @@ export async function performIndexBasedInstallationPhases(params: InstallationPh
         resolved.version,
         platforms,
         filtersForPackage,
-        resolved.contentRoot  // Pass contentRoot for path-based packages
+        resolved.contentRoot,  // Pass contentRoot for path-based packages
+        matchedPattern  // Phase 4: Pass matched pattern for filtering
       );
       const installResult = await installOrSyncRootFiles(
         cwd,
