@@ -5,6 +5,8 @@ import type { Platform } from '../../platforms.js';
 import { isManifestPath, normalizePackagePath } from '../../../utils/manifest-paths.js';
 import { getPlatformRootFileNames, stripRootCopyPrefix } from '../../../utils/platform-root-files.js';
 import { minimatch } from 'minimatch';
+import { join } from 'path';
+import { exists } from '../../../utils/fs.js';
 
 export interface CategorizedInstallFiles {
   pathBasedFiles: PackageFile[];
@@ -19,6 +21,20 @@ export async function discoverAndCategorizeFiles(
   contentRoot?: string,
   matchedPattern?: string  // Phase 4: Pattern for filtering
 ): Promise<CategorizedInstallFiles> {
+  // Root file discovery only works for OpenPackage dirs or Claude plugins.
+  // Resource-scoped installs often point at arbitrary directories (e.g. skills/**),
+  // and trying to "load package" would emit noisy validation errors.
+  if (contentRoot) {
+    const hasOpenPackageYml = await exists(join(contentRoot, 'openpackage.yml'));
+    const hasClaudePluginJson = await exists(join(contentRoot, '.claude-plugin', 'plugin.json'));
+    const hasClaudeMarketplaceJson = await exists(join(contentRoot, '.claude-plugin', 'marketplace.json'));
+    const isLoadableRoot = hasOpenPackageYml || hasClaudePluginJson || hasClaudeMarketplaceJson;
+
+    if (!isLoadableRoot) {
+      return { pathBasedFiles: [], rootFiles: new Map(), rootCopyFiles: [] };
+    }
+  }
+
   // Load once
   const pkg = await packageManager.loadPackage(packageName, version, {
     packageRootDir: contentRoot

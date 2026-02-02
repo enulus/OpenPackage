@@ -15,7 +15,7 @@ import { logger } from '../utils/logger.js';
 import { parseResourceArg } from '../utils/resource-arg-parser.js';
 import { applyConvenienceFilters, displayFilterErrors } from '../core/install/convenience-matchers.js';
 import { promptBaseSelection, canPrompt, handleAmbiguityNonInteractive, type BaseMatch } from '../core/install/ambiguity-prompts.js';
-import { relative } from 'path';
+import { join, relative } from 'path';
 
 /**
  * Validate that target directory is not inside .openpackage metadata
@@ -181,6 +181,32 @@ async function installResourceCommand(
       if (!context.baseRelative) {
         context.baseRelative = '.'; // Base is repo root
       }
+    }
+  }
+
+  // If user specified a concrete sub-path (dir or file), we must scope installs to it.
+  // Base detection chooses the base, but does NOT imply "install everything matching that flow".
+  if (resourceSpec.path) {
+    const repoRoot = loaded.sourceMetadata?.repoPath || loaded.contentRoot || context.detectedBase || cwd;
+    const baseAbs = context.detectedBase || loaded.contentRoot || cwd;
+    const absResourcePath = join(repoRoot, resourceSpec.path);
+    const relativeToBase = relative(baseAbs, absResourcePath).replace(/\\/g, '/').replace(/^\.\/?/, '');
+
+    // Only scope if the resource path sits within the detected base.
+    if (relativeToBase && !relativeToBase.startsWith('..')) {
+      let isDirectory = false;
+      try {
+        const stat = await import('fs/promises').then(m => m.stat(absResourcePath));
+        isDirectory = stat.isDirectory();
+      } catch {
+        // If stat fails, keep existing matchedPattern (base-level filtering only).
+      }
+
+      const scopedPattern = isDirectory
+        ? `${relativeToBase.replace(/\/$/, '')}/**`
+        : relativeToBase;
+
+      context.matchedPattern = scopedPattern;
     }
   }
   

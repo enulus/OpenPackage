@@ -267,12 +267,20 @@ export async function installPackageByIndexWithFlows(
 
   // Update workspace index if not dry-run
   if (!options.dryRun) {
-    // For resource-scoped installs, store the most specific source path possible (file when matchedPattern is a file).
-    // This keeps workspace index keys stable and aligned with manifest naming.
+    // For resource-scoped installs, store the most specific source path possible:
+    // - file match: <root>/<file>
+    // - directory match: <root>/<dir> (matchedPattern like "dir/**")
+    // This keeps index paths and names aligned for resource installs.
     const isGlob = Boolean(matchedPattern && (matchedPattern.includes('*') || matchedPattern.includes('?') || matchedPattern.includes('[')));
+    const isDirGlob = Boolean(matchedPattern && matchedPattern.replace(/\\/g, '/').endsWith('/**'));
+    const dirGlobPrefix = isDirGlob
+      ? matchedPattern!.replace(/\\/g, '/').replace(/\/\*\*$/, '')
+      : undefined;
     const indexSourcePath = (matchedPattern && !isGlob)
       ? join(resolvedContentRoot, matchedPattern)
-      : resolvedContentRoot;
+      : (dirGlobPrefix && dirGlobPrefix.length > 0)
+        ? join(resolvedContentRoot, dirGlobPrefix)
+        : resolvedContentRoot;
 
     await updateWorkspaceIndexForFlows(
       cwd,

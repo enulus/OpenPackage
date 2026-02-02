@@ -319,8 +319,10 @@ export async function buildResourceInstallContext(
         packageName: '', // Populated after loading
         gitUrl: resourceSpec.gitUrl!,
         gitRef: resourceSpec.ref,
-        gitPath: resourceSpec.path,
-        resourcePath: resourceSpec.path // Store resource path for base detection
+        // IMPORTANT: In resource-mode, `resourceSpec.path` represents a resource filter
+        // (file or directory) within the repo, NOT a git subdirectory to clone into.
+        // `gitPath` is reserved for "package lives in subdirectory" semantics (legacy/manifest).
+        resourcePath: resourceSpec.path // Store resource path for base detection + scoping
       };
       break;
     

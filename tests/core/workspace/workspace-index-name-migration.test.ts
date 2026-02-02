@@ -136,6 +136,39 @@ packages:
       await rm(tmpDir, { recursive: true, force: true });
     }
   });
+
+  it('should not collapse resource-scoped names to cache subpath', async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), 'opkg-test-'));
+    
+    try {
+      await mkdir(join(tmpDir, '.openpackage'), { recursive: true });
+      const indexPath = join(tmpDir, '.openpackage', 'openpackage.index.yml');
+      
+      // Resource-scoped name is MORE specific than cache subpath; it must be preserved.
+      const indexContent = `packages:
+  gh@wshobson/agents/plugins/javascript-typescript/skills/typescript-advanced-types:
+    path: .openpackage/cache/git/abc123/def456/plugins/javascript-typescript
+    files: {}
+`;
+      
+      await writeTextFile(indexPath, indexContent);
+      
+      const record = await readWorkspaceIndex(tmpDir);
+      
+      const packages = Object.keys(record.index.packages);
+      assert.strictEqual(packages.length, 1);
+      assert.strictEqual(packages[0], 'gh@wshobson/agents/plugins/javascript-typescript/skills/typescript-advanced-types');
+      
+      // Round-trip write should also preserve it
+      await writeWorkspaceIndex(record);
+      const reread = await readWorkspaceIndex(tmpDir);
+      const packages2 = Object.keys(reread.index.packages);
+      assert.strictEqual(packages2[0], 'gh@wshobson/agents/plugins/javascript-typescript/skills/typescript-advanced-types');
+      
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
   
   it('should handle multiple packages with different formats', async () => {
     const tmpDir = await mkdtemp(join(tmpdir(), 'opkg-test-'));

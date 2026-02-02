@@ -11,8 +11,8 @@
  * 4. Pattern matching against platforms.jsonc (deepest match)
  */
 
-import { join, resolve, dirname, relative, isAbsolute } from 'path';
-import { exists } from '../../utils/fs.js';
+import { join, resolve, dirname, relative, isAbsolute, sep } from 'path';
+import { exists, readTextFile } from '../../utils/fs.js';
 import { extractAllFromPatterns, findDeepestMatch, type PatternMatch } from '../../utils/pattern-matcher.js';
 import { logger } from '../../utils/logger.js';
 import { FILE_PATTERNS, CLAUDE_PLUGIN_PATHS } from '../../constants/index.js';
@@ -64,6 +64,7 @@ export async function detectBase(
   const absoluteResourcePath = isAbsolute(resourcePath) 
     ? resourcePath 
     : resolve(repoRoot, resourcePath);
+  const repoRootResolved = resolve(repoRoot);
 
   logger.debug('Detecting base for resource', {
     resourcePath,
@@ -71,39 +72,123 @@ export async function detectBase(
     absoluteResourcePath
   });
 
-  // Priority 1: openpackage.yml at resource root
-  const openpackageYmlPath = join(absoluteResourcePath, FILE_PATTERNS.OPENPACKAGE_YML);
-  if (await exists(openpackageYmlPath)) {
-    logger.info('Base detected via openpackage.yml', { base: absoluteResourcePath });
-    return {
-      base: absoluteResourcePath,
-      matchType: 'openpackage'
-    };
+  // Determine whether resourcePath points to a file or directory.
+  // If it's a file, manifests must be discovered by walking up from the file's directory.
+  let probeStart = absoluteResourcePath;
+  let statIsDir: boolean | null = null;
+  let statIsFile: boolean | null = null;
+  try {
+    const stat = await import('fs/promises').then(m => m.stat(absoluteResourcePath));
+    statIsDir = stat.isDirectory();
+    statIsFile = stat.isFile();
+    if (!stat.isDirectory()) {
+      probeStart = dirname(absoluteResourcePath);
+    }
+  } catch {
+    // If stat fails, keep probeStart as-is and fall back to patterns.
   }
 
-  // Priority 2: Marketplace manifest
-  const marketplacePath = join(absoluteResourcePath, CLAUDE_PLUGIN_PATHS.MARKETPLACE_MANIFEST);
-  if (await exists(marketplacePath)) {
-    logger.info('Base detected via marketplace.json', { base: absoluteResourcePath });
-    return {
-      base: absoluteResourcePath,
-      matchType: 'marketplace',
-      manifestPath: marketplacePath
-    };
+  const isWithinRepo = (absPath: string): boolean => {
+    if (absPath === repoRootResolved) return true;
+    return absPath.startsWith(`${repoRootResolved}${sep}`);
+  };
+
+  // Track marketplace root (do not immediately return it for file-scoped resource installs)
+  // so we can attempt resolving an individual plugin base first.
+  let marketplaceRoot: { base: string; manifestPath: string } | null = null;
+
+  // Priority 1-3: Walk up directories from probeStart to repoRoot, preferring the deepest match.
+  // This allows file resources inside a marketplace repo to resolve to the specific plugin base
+  // (plugin.json) before hitting the marketplace root.
+  let currentDir = probeStart;
+  let previousDir = '';
+  while (currentDir !== previousDir && isWithinRepo(currentDir)) {
+    // Priority 1: openpackage.yml
+    const openpackageYmlPath = join(currentDir, FILE_PATTERNS.OPENPACKAGE_YML);
+    if (await exists(openpackageYmlPath)) {
+      logger.info('Base detected via openpackage.yml', { base: currentDir });
+      return {
+        base: currentDir,
+        matchType: 'openpackage'
+      };
+    }
+
+    // Priority 2: marketplace.json
+    const marketplacePath = join(currentDir, CLAUDE_PLUGIN_PATHS.MARKETPLACE_MANIFEST);
+    if (await exists(marketplacePath)) {
+      logger.info('Base detected via marketplace.json', { base: currentDir });
+      marketplaceRoot = { base: currentDir, manifestPath: marketplacePath };
+    }
+
+    // Priority 3: plugin.json
+    const pluginPath = join(currentDir, CLAUDE_PLUGIN_PATHS.PLUGIN_MANIFEST);
+    if (await exists(pluginPath)) {
+      logger.info('Base detected via plugin.json', { base: currentDir });
+      return {
+        base: currentDir,
+        matchType: 'plugin'
+      };
+    }
+
+    previousDir = currentDir;
+    currentDir = dirname(currentDir);
   }
 
-  // Priority 3: Individual plugin manifest
-  const pluginPath = join(absoluteResourcePath, CLAUDE_PLUGIN_PATHS.PLUGIN_MANIFEST);
-  if (await exists(pluginPath)) {
-    logger.info('Base detected via plugin.json', { base: absoluteResourcePath });
-    return {
-      base: absoluteResourcePath,
-      matchType: 'plugin'
-    };
+  // Marketplace-aware plugin base inference:
+  // If this repo is a Claude marketplace AND the user provided a file/dir resource path within it,
+  // try to resolve the plugin base from marketplace.json plugin entries (e.g. "./plugins/unit-testing").
+  if (marketplaceRoot && resourcePath && !isAbsolute(resourcePath)) {
+    try {
+      const raw = await readTextFile(marketplaceRoot.manifestPath);
+      const parsed = JSON.parse(raw) as { plugins?: Array<{ name?: string; source?: any; strict?: boolean }> };
+      const plugins = Array.isArray(parsed.plugins) ? parsed.plugins : [];
+
+      const normalizeRel = (value: string): string => value.replace(/\\/g, '/').replace(/^\.\/?/, '').replace(/^\/+/, '');
+      const normalizedResource = normalizeRel(resourcePath);
+
+      let bestMatch: { rel: string; pluginName?: string } | null = null;
+      for (const p of plugins) {
+        const source = (p as any)?.source;
+        const relRaw = typeof source === 'string' ? source : undefined;
+        if (!relRaw) continue;
+        const rel = normalizeRel(relRaw);
+        if (!rel) continue;
+        if (normalizedResource === rel || normalizedResource.startsWith(`${rel}/`)) {
+          if (!bestMatch || rel.length > bestMatch.rel.length) {
+            bestMatch = { rel, pluginName: p?.name };
+          }
+        }
+      }
+
+      if (bestMatch) {
+        const inferredBase = resolve(repoRootResolved, bestMatch.rel);
+        logger.info('Base inferred from marketplace plugin entry', { base: inferredBase, plugin: bestMatch.pluginName, rel: bestMatch.rel });
+        return {
+          base: inferredBase,
+          matchType: 'plugin'
+        };
+      }
+    } catch (error) {
+      // Ignore marketplace parsing issues; fall back to patterns/marketplace mode.
+    }
   }
 
   // Priority 4: Pattern matching
-  return detectBaseFromPatterns(resourcePath, repoRoot, platformsConfig);
+  const patternResult = await detectBaseFromPatterns(resourcePath, repoRoot, platformsConfig);
+  if (patternResult.matchType !== 'none') {
+    return patternResult;
+  }
+
+  // Fallback: if we discovered a marketplace root and nothing else matched, return marketplace.
+  if (marketplaceRoot) {
+    return {
+      base: marketplaceRoot.base,
+      matchType: 'marketplace',
+      manifestPath: marketplaceRoot.manifestPath
+    };
+  }
+
+  return patternResult;
 }
 
 /**

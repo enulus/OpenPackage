@@ -27,6 +27,19 @@ export async function loadPackageFromGit(options: GitPackageLoadOptions): Promis
   
   const { path: sourcePath, repoPath, commitSha } = cloneResult;
   
+  // If the caller provided a resourcePath, we must NOT treat a repo-root marketplace
+  // as "install a marketplace" yet. The upper layer will detect base from the resource path
+  // and then load the specific plugin/package base (avoids marketplace selection prompt).
+  if (options.resourcePath) {
+    return {
+      pkg: null,
+      sourcePath,
+      repoPath,
+      commitSha,
+      isMarketplace: false
+    };
+  }
+
   // Check if this is a marketplace first - marketplaces don't have openpackage.yml
   // and need to be handled differently
   const pluginDetection = await detectPluginType(sourcePath);

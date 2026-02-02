@@ -166,8 +166,9 @@ export async function readWorkspaceIndex(cwd: string): Promise<WorkspaceIndexRec
       return { path: indexPath, index: { packages: {} } };
     }
     
-    // No migration on read - return data as-is from disk
-    return { path: indexPath, index: sanitized };
+    // Migrate in-memory on read so consumers see a unified key format.
+    // (Disk is only updated when writeWorkspaceIndex is called.)
+    return { path: indexPath, index: migrateGitHubPackageNames(sanitized) };
   } catch (error) {
     logger.warn(`Failed to read workspace index at ${indexPath}: ${error}`);
     return { path: indexPath, index: { packages: {} } };
@@ -211,6 +212,7 @@ function migrateGitHubPackageNames(index: WorkspaceIndex): WorkspaceIndex {
     let username: string | undefined;
     let repo: string | undefined;
     let nameHasGhPrefix = false;
+    let nameSubpathFromName: string | undefined;
     
     // Check for gh@ prefix first
     if (pkgName.startsWith('gh@')) {
@@ -219,6 +221,7 @@ function migrateGitHubPackageNames(index: WorkspaceIndex): WorkspaceIndex {
       if (ghMatch) {
         username = ghMatch[1];
         repo = ghMatch[2];
+        nameSubpathFromName = ghMatch[3] || undefined;
       }
     }
     // Check for @ prefix (old format)
@@ -227,6 +230,7 @@ function migrateGitHubPackageNames(index: WorkspaceIndex): WorkspaceIndex {
       if (atMatch) {
         username = atMatch[1];
         repo = atMatch[2];
+        nameSubpathFromName = atMatch[3] || undefined;
       }
     }
     // Check for no prefix (missing @)
@@ -235,6 +239,7 @@ function migrateGitHubPackageNames(index: WorkspaceIndex): WorkspaceIndex {
       if (noAtMatch) {
         username = noAtMatch[1];
         repo = noAtMatch[2];
+        nameSubpathFromName = noAtMatch[3] || undefined;
       }
     }
     
@@ -243,16 +248,42 @@ function migrateGitHubPackageNames(index: WorkspaceIndex): WorkspaceIndex {
       migratedPackages[pkgName] = pkgData;
       continue;
     }
-    
-    // Build the correct package name
-    let correctName: string;
-    if (actualSubpath) {
-      // Has a subpath, include it in the name
-      correctName = `gh@${username}/${repo}/${actualSubpath}`;
-    } else {
-      // Standalone repo
-      correctName = `gh@${username}/${repo}`;
+
+    // Decide whether to migrate the subpath portion.
+    // IMPORTANT: Never "collapse" a more-specific resource name to a less-specific path.
+    // Example: keep gh@u/r/plugins/x/skills/y even if cache path is plugins/x.
+    const nameSubpath = nameSubpathFromName;
+
+    let targetSubpath: string | undefined = actualSubpath;
+    if (actualSubpath && nameSubpath) {
+      const actualNorm = actualSubpath.replace(/\\/g, '/');
+      const nameNorm = nameSubpath.replace(/\\/g, '/');
+
+      if (nameNorm === actualNorm) {
+        // exact match, ok
+        targetSubpath = actualSubpath;
+      } else if (actualNorm.endsWith(`/${nameNorm}`)) {
+        // Old basename-style name: gh@u/r/basename → gh@u/r/full/path
+        targetSubpath = actualSubpath;
+      } else if (nameNorm.startsWith(`${actualNorm}/`)) {
+        // Resource-scoped install: keep the more-specific name
+        targetSubpath = nameSubpath;
+      } else {
+        // Unknown relationship: prefer not to rewrite (avoid data loss)
+        targetSubpath = nameSubpath;
+      }
+    } else if (!actualSubpath && nameSubpath) {
+      // No cache subpath detected, keep explicit name subpath
+      targetSubpath = nameSubpath;
+    } else if (actualSubpath && !nameSubpath) {
+      // Name has no subpath but cache does → upgrade to include subpath
+      targetSubpath = actualSubpath;
     }
+
+    // Build the correct package name (at minimum, normalize to gh@ prefix)
+    const correctName = targetSubpath
+      ? `gh@${username}/${repo}/${targetSubpath}`
+      : `gh@${username}/${repo}`;
     
     // Use the correct name (which might be the same as original if already correct)
     migratedPackages[correctName] = pkgData;
