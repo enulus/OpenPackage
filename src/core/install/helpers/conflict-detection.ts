@@ -2,7 +2,7 @@
  * Conflict Detection Helpers
  * 
  * Utilities for detecting conflicts when multiple packages write to the same target files.
- * Used by installPackagesWithFlows for multi-package priority-based conflict detection.
+ * Used for multi-package priority-based conflict detection (e.g. in tests).
  */
 
 import type { Flow } from '../../../types/flows.js';

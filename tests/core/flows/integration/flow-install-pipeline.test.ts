@@ -11,15 +11,86 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { 
-  installPackageWithFlows, 
-  installPackagesWithFlows,
-  type FlowInstallContext 
+import {
+  installPackageWithFlows,
+  type FlowInstallContext,
+  type FlowInstallResult
 } from '../../../../src/core/install/flow-based-installer.js';
+import {
+  detectFormatWithContextFromDirectory
+} from '../../../../src/core/install/helpers/format-detection.js';
+import { aggregateFlowResults } from '../../../../src/core/install/helpers/result-aggregation.js';
+import {
+  trackTargetFiles,
+  generateConflictReports
+} from '../../../../src/core/install/helpers/conflict-detection.js';
+import { getApplicableFlows } from '../../../../src/core/install/strategies/helpers/flow-helpers.js';
+import type { FlowContext } from '../../../../src/types/flows.js';
+import type { Platform } from '../../../../src/core/platforms.js';
 import { clearPlatformsCache } from '../../../../src/core/platforms.js';
 import { installPackageByIndexWithFlows } from '../../../../src/utils/flow-index-installer.js';
 import { readWorkspaceIndex } from '../../../../src/utils/workspace-index-yml.js';
 import { removeFileMapping } from '../../../../src/core/uninstall/flow-aware-uninstaller.js';
+
+/**
+ * Test helper: install multiple packages with flows (replaces removed installPackagesWithFlows).
+ */
+async function installPackagesWithFlowsForTest(
+  packages: Array<{ packageName: string; packageRoot: string; packageVersion: string; priority: number }>,
+  workspaceRoot: string,
+  platform: Platform,
+  options?: { dryRun?: boolean }
+): Promise<FlowInstallResult> {
+  const aggregatedResult: FlowInstallResult = {
+    success: true,
+    filesProcessed: 0,
+    filesWritten: 0,
+    conflicts: [],
+    errors: [],
+    targetPaths: [],
+    fileMapping: {}
+  };
+  const dryRun = options?.dryRun ?? false;
+  const sortedPackages = [...packages].sort((a, b) => a.priority - b.priority);
+  const fileTargets = new Map<string, Array<{ packageName: string; priority: number }>>();
+
+  for (const pkg of sortedPackages) {
+    const { format, context: conversionContext } =
+      await detectFormatWithContextFromDirectory(pkg.packageRoot);
+    const installContext: FlowInstallContext = {
+      packageName: pkg.packageName,
+      packageRoot: pkg.packageRoot,
+      workspaceRoot,
+      platform,
+      packageVersion: pkg.packageVersion,
+      priority: pkg.priority,
+      dryRun,
+      packageFormat: format,
+      conversionContext
+    };
+    const flows = getApplicableFlows(platform, workspaceRoot);
+    const flowContext: FlowContext = {
+      workspaceRoot,
+      packageRoot: pkg.packageRoot,
+      platform,
+      packageName: pkg.packageName,
+      direction: 'install',
+      variables: {
+        name: pkg.packageName,
+        version: pkg.packageVersion,
+        priority: pkg.priority,
+        targetRoot: workspaceRoot
+      },
+      dryRun
+    };
+    await trackTargetFiles(fileTargets, pkg.packageName, pkg.priority, pkg.packageRoot, flows, flowContext);
+    const result = await installPackageWithFlows(installContext, options);
+    aggregateFlowResults(aggregatedResult, result);
+  }
+  const detectedConflicts = generateConflictReports(fileTargets);
+  aggregatedResult.conflicts.push(...detectedConflicts);
+  return aggregatedResult;
+}
 
 // ============================================================================
 // Test Setup
@@ -440,7 +511,7 @@ describe('Flow-Based Install Pipeline', () => {
       }, null, 2));
       
       // Install both packages
-      const result = await installPackagesWithFlows([
+      const result = await installPackagesWithFlowsForTest([
         {
           packageName: '@test/pkg-a',
           packageRoot: packageRootA,
@@ -494,7 +565,7 @@ describe('Flow-Based Install Pipeline', () => {
         extra: 'field'
       }));
       
-      const result = await installPackagesWithFlows([
+      const result = await installPackagesWithFlowsForTest([
         {
           packageName: '@test/pkg-a',
           packageRoot: packageRootA,
@@ -534,7 +605,7 @@ describe('Flow-Based Install Pipeline', () => {
       await createPackageFile(packageRootA, 'config.json', JSON.stringify({ from: 'a' }));
       await createPackageFile(packageRootB, 'config.json', JSON.stringify({ from: 'b' }));
       
-      const result = await installPackagesWithFlows([
+      const result = await installPackagesWithFlowsForTest([
         {
           packageName: '@test/conflict-a',
           packageRoot: packageRootA,

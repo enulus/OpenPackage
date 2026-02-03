@@ -4,6 +4,21 @@ This directory contains the core installation system for OpenPackage.
 
 ## Directory Structure
 
+### `orchestrator/`
+Entry point for the install command. Classifies input, selects a strategy, and routes to the pipeline or handlers.
+
+- `orchestrator.ts` - InstallOrchestrator: validates input, runs strategy preprocess, routes by special handling (marketplace, ambiguous, multi-resource, or unified pipeline)
+- `types.ts` - NormalizedInstallOptions, InputClassification, PreprocessResult, InstallStrategy
+- `strategies/` - Source-type strategies: git, path, registry, bulk (each implements buildContext + preprocess)
+
+### `preprocessing/`
+Context preparation before the pipeline.
+
+- `input-classifier.ts` - Classify user input (bulk | git | path | registry)
+- `options-normalizer.ts` - Normalize CLI options (plugins, conflict strategy, platforms)
+- `base-resolver.ts` - Apply base detection and path scoping
+- `convenience-preprocessor.ts` - Resolve --agents / --skills filters
+
 ### `unified/`
 Unified installation pipeline and context management.
 
@@ -30,6 +45,15 @@ Source loaders for different package types.
 - `loader-factory.ts` - Factory for creating loaders
 - `index.ts` - Public exports
 
+### `validators/`
+Input validation at orchestrator entry.
+
+- `target-validator.ts` - assertTargetDirOutsideMetadata
+- `options-validator.ts` - validateResolutionFlags
+
+### `handlers/`
+Special-case handlers (marketplace handler lives in parent directory; ambiguity is handled inline in the orchestrator).
+
 ### `operations/`
 Core operations used by the pipeline.
 
@@ -44,10 +68,10 @@ Helper utilities specific to installation.
 - `index.ts` - Public exports
 
 ### Other Files
-- `install-flow.ts` - Legacy install flow (to be migrated)
+- `install-flow.ts` - Core install flow used by pipeline phases
 - `remote-flow.ts` - Remote package pulling
-- `dry-run.ts` - Dry run mode handling
 - `file-updater.ts` - File update utilities
+- `marketplace-handler.ts` - Marketplace plugin selection and install
 - Various loaders and utilities
 
 ## Architecture
@@ -93,50 +117,26 @@ The installation system follows a unified pipeline architecture:
 
 ### Command Layer
 
-Commands use context builders and invoke the unified pipeline:
+The install command normalizes options and delegates to the orchestrator:
 
 ```typescript
-import { buildRegistryInstallContext } from './unified/context-builders.js';
-import { runUnifiedInstallPipeline } from './unified/pipeline.js';
+import { createOrchestrator } from './orchestrator/index.js';
+import { normalizeInstallOptions } from './preprocessing/index.js';
 
-// Build context
-const context = await buildRegistryInstallContext({
-  cwd,
-  packageSpec: 'package-name@1.0.0',
-  options,
-  platforms
-});
-
-// Run pipeline
-const result = await runUnifiedInstallPipeline(context);
+const normalizedOptions = normalizeInstallOptions(options);
+const orchestrator = createOrchestrator();
+const result = await orchestrator.execute(packageName, normalizedOptions, cwd);
 ```
+
+The orchestrator classifies input, selects a strategy (git, path, registry, bulk), runs strategy preprocess, then routes to the marketplace handler, ambiguity handling, multi-context pipeline, or unified pipeline.
 
 ### Adding a New Source Type
 
 1. Create a new source loader in `sources/`
 2. Implement the `PackageSourceLoader` interface
 3. Register in `loader-factory.ts`
-4. Add context builder in `context-builders.ts`
-
-```typescript
-// sources/my-source.ts
-export class MySourceLoader implements PackageSourceLoader {
-  canHandle(source: PackageSource): boolean {
-    return source.type === 'my-type';
-  }
-  
-  async load(source: PackageSource): Promise<LoadedPackage> {
-    // Implementation
-  }
-  
-  getDisplayName(source: PackageSource): string {
-    return `my-source:${source.specifier}`;
-  }
-}
-
-// Register in loader-factory.ts
-registerSourceLoader(new MySourceLoader());
-```
+4. Add an install strategy in `orchestrator/strategies/` that implements `InstallStrategy` (canHandle, buildContext, preprocess)
+5. Register the strategy in `createOrchestrator()` in `orchestrator/orchestrator.ts`
 
 ## Testing
 
@@ -154,19 +154,19 @@ npm run test:install        # Install tests only
 
 ## Migration Notes
 
-This module is the result of a major refactoring (Phase 1-6):
+This module is the result of a major refactoring (Phases 1-11):
 
-- **Phase 1-2**: Created unified context and source abstraction
-- **Phase 3**: Unified root file operations
-- **Phase 4**: Created unified pipeline
-- **Phase 5**: Simplified command layer
-- **Phase 6**: Cleanup and organization
+- **Phase 1-2**: Type foundation, validators, options normalizer
+- **Phase 3-4**: Orchestrator shell, input classification
+- **Phase 5-6**: Strategies (git, path, registry, bulk), preprocessing (base resolver, convenience filters)
+- **Phase 7-8**: Ambiguity handled inline in orchestrator; marketplace handler receives context from orchestrator
+- **Phase 9-11**: Single path through orchestrator; pipeline assertion at entry; dead code removed
 
-Legacy code is gradually being migrated to the new unified pipeline. See `plans/install-apply-refactor/` for details.
+See `plans/install-organization/` for the full refactoring plan.
 
 ## Related Documentation
 
 - [Install Command Spec](../../specs/install/)
 - [Apply Command Spec](../../specs/apply/)
 - [Platform Flows](../../specs/platforms/)
-- [Refactoring Plan](../../plans/install-apply-refactor/)
+- [Install Refactoring Plan](../../plans/install-organization/)

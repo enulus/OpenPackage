@@ -55,6 +55,8 @@ export async function runUnifiedInstallPipeline(
     
     // Phase 1: Load package from source (always)
     await loadPackagePhase(ctx);
+    
+    // Assert context is complete after load phase
     assertPipelineContextComplete(ctx);
 
     // Phase 2: Resolve dependencies (skip for apply mode)
