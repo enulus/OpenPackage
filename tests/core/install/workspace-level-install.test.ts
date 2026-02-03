@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { rm, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { buildWorkspaceRootInstallContext, buildInstallContext } from '../../../src/core/install/unified/context-builders.js';
+import { buildWorkspaceRootInstallContext, buildInstallContext, type BulkInstallContextsResult } from '../../../src/core/install/unified/context-builders.js';
 import { exists, readTextFile } from '../../../src/utils/fs.js';
 import { createWorkspacePackageYml } from '../../../src/utils/package-management.js';
 import { parsePackageYml } from '../../../src/utils/package-yml.js';
@@ -67,16 +67,17 @@ async function testBuildWorkspaceRootContext() {
 
 async function testBulkInstallIncludesWorkspace() {
   console.log('Testing bulk install includes workspace...');
-  
-  const contexts = await buildInstallContext(testDir, undefined, {});
-  
-  assert.ok(Array.isArray(contexts), 'Should return array of contexts');
-  assert.ok(contexts.length > 0, 'Should have at least workspace context');
-  
-  const workspaceCtx = contexts[0];
-  assert.equal(workspaceCtx.source.type, 'workspace', 'First context should be workspace');
+
+  const result = await buildInstallContext(testDir, undefined, {}) as BulkInstallContextsResult;
+
+  assert.ok(result && 'workspaceContext' in result && 'dependencyContexts' in result, 'Should return bulk result with workspaceContext and dependencyContexts');
+  assert.ok(result.workspaceContext != null, 'Should have workspace context');
+  assert.ok(Array.isArray(result.dependencyContexts), 'dependencyContexts should be an array');
+
+  const workspaceCtx = result.workspaceContext!;
+  assert.equal(workspaceCtx.source.type, 'workspace', 'Workspace context should be workspace type');
   assert.equal(workspaceCtx.source.packageName, 'test-workspace', 'Should be workspace package');
-  
+
   console.log('✓ Bulk install includes workspace context');
 }
 

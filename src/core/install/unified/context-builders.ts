@@ -12,6 +12,15 @@ import { resolveDeclaredPath } from '../../../utils/path-resolution.js';
 import type { ResourceInstallationSpec } from '../convenience-matchers.js';
 
 /**
+ * Result of building contexts for bulk install.
+ * Workspace root is separate from dependency contexts so the orchestrator can run it as a distinct stage.
+ */
+export interface BulkInstallContextsResult {
+  workspaceContext: InstallationContext | null;
+  dependencyContexts: InstallationContext[];
+}
+
+/**
  * Build context for registry-based installation
  */
 export async function buildRegistryInstallContext(
@@ -163,8 +172,8 @@ export async function buildInstallContext(
   cwd: string,
   packageInput: string | undefined,
   options: InstallOptions
-): Promise<InstallationContext | InstallationContext[]> {
-  // No input = bulk install
+): Promise<InstallationContext | InstallationContext[] | BulkInstallContextsResult> {
+  // No input = bulk install (returns workspace + dependency contexts separately)
   if (!packageInput) {
     return buildBulkInstallContexts(cwd, options);
   }
@@ -196,27 +205,25 @@ export async function buildInstallContext(
 }
 
 /**
- * Build contexts for bulk installation
+ * Build contexts for bulk installation.
+ * Returns workspace root and dependency contexts separately so the orchestrator can run workspace as a distinct stage.
  */
 async function buildBulkInstallContexts(
   cwd: string,
   options: InstallOptions
-): Promise<InstallationContext[]> {
-  const contexts: InstallationContext[] = [];
-  
-  // First, try to build workspace root context
+): Promise<BulkInstallContextsResult> {
+  const dependencyContexts: InstallationContext[] = [];
+
+  // First, try to build workspace root context (run as distinct stage, not in dependency loop)
   const workspaceContext = await buildWorkspaceRootInstallContext(cwd, options, 'install');
-  if (workspaceContext) {
-    contexts.push(workspaceContext);
-  }
-  
+
   // Ensure workspace manifest exists before reading
   await createWorkspacePackageYml(cwd);
-  
+
   // Read openpackage.yml and create context for each package
   const opkgYmlPath = getLocalPackageYmlPath(cwd);
   const opkgYml = await parsePackageYml(opkgYmlPath);
-  
+
   // Get workspace package name to exclude it from bulk install
   const workspacePackageName = workspaceContext?.source.packageName;
 
@@ -336,11 +343,11 @@ async function buildBulkInstallContexts(
         logger.debug(`Using base from manifest for ${dep.name}`, { base: dep.base });
       }
       
-      contexts.push(context);
+      dependencyContexts.push(context);
     }
   }
 
-  return contexts;
+  return { workspaceContext: workspaceContext ?? null, dependencyContexts };
 }
 
 /**

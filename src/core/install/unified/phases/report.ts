@@ -16,7 +16,8 @@ export async function reportResultsPhase(
   
   const mainPackage = ctx.resolvedPackages.find(pkg => pkg.isRoot);
   
-  // Display results
+  // Display results (only show "dependency recorded" for dependency installs, not workspace-root)
+  const isDependencyInstall = ctx.source.type !== 'workspace';
   displayInstallationResults(
     ctx.source.packageName,
     ctx.resolvedPackages,
@@ -29,7 +30,8 @@ export async function reportResultsPhase(
     [], // missing packages already handled
     {}, // remote outcomes already handled
     installResult.errorCount,
-    installResult.errors
+    installResult.errors,
+    isDependencyInstall
   );
   
   // Build result data

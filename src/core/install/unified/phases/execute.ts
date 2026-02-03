@@ -27,7 +27,7 @@ export async function executeInstallationPhase(
   // Display dependency tree
   displayDependencyTree(ctx.resolvedPackages, true);
   
-  // Resolve platforms if not already set
+  // Resolve platforms if not already set (orchestrator preflight sets for bulk/single)
   if (ctx.platforms.length === 0) {
     const canPrompt = Boolean(process.stdin.isTTY && process.stdout.isTTY);
     ctx.platforms = await resolvePlatforms(
@@ -35,6 +35,8 @@ export async function executeInstallationPhase(
       ctx.options.platforms,
       { interactive: canPrompt }
     );
+  } else {
+    logger.debug('Platforms already resolved', { platforms: ctx.platforms });
   }
   
   // Get conflict result from context

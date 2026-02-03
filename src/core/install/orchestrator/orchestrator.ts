@@ -19,6 +19,7 @@ import {
   installMarketplacePlugins,
   validatePluginNames
 } from '../marketplace-handler.js';
+import { resolvePlatforms } from '../platform-resolution.js';
 import { Spinner } from '../../../utils/spinner.js';
 import { classifyInput } from '../preprocessing/input-classifier.js';
 import { assertTargetDirOutsideMetadata, validateResolutionFlags } from '../validators/index.js';
@@ -126,7 +127,11 @@ export class InstallOrchestrator {
         return this.handleMultiResource(result, options, cwd);
       
       default:
-        // Normal pipeline flow
+        // Normal pipeline flow: resolve platforms once if not set
+        if (context.platforms.length === 0) {
+          const interactive = canPrompt();
+          context.platforms = await resolvePlatforms(cwd, options.platforms, { interactive });
+        }
         return runUnifiedInstallPipeline(context);
     }
   }
@@ -230,7 +235,10 @@ export class InstallOrchestrator {
     const { context, ambiguousMatches } = result;
     
     if (!ambiguousMatches || ambiguousMatches.length === 0) {
-      // No ambiguity, proceed normally
+      if (context.platforms.length === 0) {
+        const interactive = canPrompt();
+        context.platforms = await resolvePlatforms(cwd, options.platforms, { interactive });
+      }
       return runUnifiedInstallPipeline(context);
     }
     
@@ -263,7 +271,11 @@ export class InstallOrchestrator {
       base: context.detectedBase,
       pattern: context.matchedPattern
     });
-    
+
+    if (context.platforms.length === 0) {
+      const interactive = canPrompt();
+      context.platforms = await resolvePlatforms(cwd, options.platforms, { interactive });
+    }
     return runUnifiedInstallPipeline(context);
   }
   
@@ -275,10 +287,25 @@ export class InstallOrchestrator {
     options: NormalizedInstallOptions,
     cwd: string
   ): Promise<CommandResult> {
-    const { context, resourceContexts } = result;
-    
-    if (!resourceContexts || resourceContexts.length === 0) {
-      // Check if this is a bulk install with no packages
+    const { context, resourceContexts, workspaceContext } = result;
+    const dependencyContexts = resourceContexts ?? [];
+
+    const needsPlatforms =
+      dependencyContexts.some((ctx) => ctx.platforms.length === 0) ||
+      (workspaceContext?.platforms.length === 0);
+
+    if (needsPlatforms) {
+      const interactive = canPrompt();
+      const resolvedPlatforms = await resolvePlatforms(cwd, options.platforms, { interactive });
+      for (const ctx of dependencyContexts) {
+        if (ctx.platforms.length === 0) ctx.platforms = resolvedPlatforms;
+      }
+      if (workspaceContext && workspaceContext.platforms.length === 0) {
+        workspaceContext.platforms = resolvedPlatforms;
+      }
+    }
+
+    if (dependencyContexts.length === 0 && !workspaceContext) {
       if (context.source.packageName === '__bulk__') {
         console.log('⚠️  No packages found in openpackage.yml');
         console.log('\n💡 Tips:');
@@ -287,20 +314,31 @@ export class InstallOrchestrator {
         console.log('  • Use "opkg install <package-name>" to install a specific package');
         return { success: true, data: { installed: 0, skipped: 0 } };
       }
-      
       return {
         success: false,
         error: 'No resources matched the specified filters'
       };
     }
-    
-    // For bulk installs, show context
-    if (context.source.packageName === '__bulk__') {
-      console.log(`✓ Installing ${resourceContexts.length} package${resourceContexts.length === 1 ? '' : 's'} from openpackage.yml`);
+
+    if (context.source.packageName === '__bulk__' && dependencyContexts.length > 0) {
+      console.log(`✓ Installing ${dependencyContexts.length} package${dependencyContexts.length === 1 ? '' : 's'} from openpackage.yml`);
     }
-    
-    // Run bulk install with proper result aggregation
-    return this.runBulkInstall(resourceContexts);
+
+    // Run workspace root as distinct stage first (if any)
+    if (workspaceContext) {
+      try {
+        await runUnifiedInstallPipeline(workspaceContext);
+      } catch (error) {
+        logger.warn('Workspace root install failed', { error });
+        // Non-fatal: continue with dependency installs
+      }
+    }
+
+    if (dependencyContexts.length === 0) {
+      return { success: true, data: { installed: 0, skipped: 0 } };
+    }
+
+    return this.runBulkInstall(dependencyContexts);
   }
   
   /**

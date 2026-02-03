@@ -27,7 +27,9 @@ export function displayInstallationResults(
   missingPackages?: string[],
   missingPackageOutcomes?: Record<string, PackageRemoteResolutionOutcome>,
   errorCount?: number,
-  errors?: string[]
+  errors?: string[],
+  /** When true, show "dependency recorded in your manifest" for 0-install success. Omit or true for dependency installs; false for workspace-root. */
+  isDependencyInstall: boolean = true
 ): void {
   // Check if installation actually succeeded
   const hadErrors = (errorCount && errorCount > 0) || false;
@@ -56,7 +58,9 @@ export function displayInstallationResults(
     summaryText += ' with 0 installs';
     console.log(`${summaryText}`);
     console.log(`💡 No files matched the specified filters or directory is empty`);
-    console.log(`   The dependency has been recorded in your manifest.`);
+    if (isDependencyInstall) {
+      console.log(`   The dependency has been recorded in your manifest.`);
+    }
     return;
   }
   

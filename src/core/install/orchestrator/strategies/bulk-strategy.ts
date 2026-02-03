@@ -7,7 +7,7 @@
 import type { InstallationContext } from '../../unified/context.js';
 import type { NormalizedInstallOptions, InputClassification, PreprocessResult } from '../types.js';
 import { BaseInstallStrategy } from './base.js';
-import { buildInstallContext } from '../../unified/context-builders.js';
+import { buildInstallContext, type BulkInstallContextsResult } from '../../unified/context-builders.js';
 
 export class BulkInstallStrategy extends BaseInstallStrategy {
   readonly name = 'bulk';
@@ -42,18 +42,29 @@ export class BulkInstallStrategy extends BaseInstallStrategy {
     options: NormalizedInstallOptions,
     cwd: string
   ): Promise<PreprocessResult> {
-    // Build all contexts from openpackage.yml
-    const contexts = await buildInstallContext(cwd, undefined, options);
-    
-    if (Array.isArray(contexts)) {
-      if (contexts.length === 0) {
-        // Return context that will trigger "no packages" message
+    // Build workspace + dependency contexts from openpackage.yml
+    const raw = await buildInstallContext(cwd, undefined, options);
+
+    const bulk = raw as BulkInstallContextsResult;
+    if (bulk?.dependencyContexts && 'workspaceContext' in bulk) {
+      const { workspaceContext: wsCtx, dependencyContexts: depCtxs } = bulk;
+      if (depCtxs.length === 0 && !wsCtx) {
         return this.createNormalResult(context);
       }
-      return this.createMultiResourceResult(contexts[0], contexts);
+      return {
+        context,
+        specialHandling: 'multi-resource',
+        resourceContexts: depCtxs,
+        workspaceContext: wsCtx ?? null
+      };
     }
-    
-    // Single context (shouldn't happen for bulk, but handle gracefully)
-    return this.createNormalResult(contexts);
+
+    // Legacy array shape (shouldn't happen for bulk)
+    if (Array.isArray(raw)) {
+      if (raw.length === 0) return this.createNormalResult(context);
+      return this.createMultiResourceResult(raw[0], raw);
+    }
+
+    return this.createNormalResult(raw as InstallationContext);
   }
 }

@@ -33,6 +33,9 @@ export interface PreprocessResult {
   
   /** Multiple resource contexts (when specialHandling is 'multi-resource') */
   resourceContexts?: InstallationContext[];
+
+  /** Workspace root context for bulk install (run as distinct stage, not in dependency loop) */
+  workspaceContext?: InstallationContext | null;
 }
 
 /**
