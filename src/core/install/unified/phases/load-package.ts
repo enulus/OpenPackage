@@ -46,6 +46,29 @@ export async function loadPackagePhase(ctx: InstallationContext): Promise<void> 
     ctx.source.packageName = loaded.packageName;
     ctx.source.version = loaded.version;
     
+    // Apply version fallback chain for resource installations (agents/skills)
+    // Priority: resourceVersion (from frontmatter) > metadata.version > parent version > undefined
+    if (ctx.source.resourceVersion !== undefined) {
+      // Resource has explicit version from frontmatter, use it as final version
+      const effectiveVersion = ctx.source.resourceVersion;
+      logger.debug('Using resource version from frontmatter', {
+        packageName: loaded.packageName,
+        resourceVersion: ctx.source.resourceVersion,
+        parentVersion: loaded.version
+      });
+      ctx.source.version = effectiveVersion;
+    } else if (loaded.metadata?.version && loaded.metadata.version !== loaded.version) {
+      // Metadata has different version than loader provided (e.g., openpackage.yml in resource dir)
+      const effectiveVersion = loaded.metadata.version;
+      logger.debug('Using metadata version for resource', {
+        packageName: loaded.packageName,
+        metadataVersion: loaded.metadata.version,
+        parentVersion: loaded.version
+      });
+      ctx.source.version = effectiveVersion;
+    }
+    // Otherwise, keep loaded.version (parent package/plugin version)
+    
     // Apply base detection results from loader (resource model).
     // Bulk installs previously missed this, causing unscoped installs and incorrect workspace-index paths.
     applyBaseDetection(ctx, loaded);
@@ -94,9 +117,12 @@ export async function loadPackagePhase(ctx: InstallationContext): Promise<void> 
     }
     
     // Create root resolved package (simplified - full dependency resolution in next phase)
+    // Use the effective version from context (which has fallback chain applied)
+    const effectiveVersion = ctx.source.version || loaded.version;
+    
     const rootPackage: any = {
       name: loaded.packageName,
-      version: loaded.version,
+      version: effectiveVersion,
       pkg: { 
         metadata: loaded.metadata, 
         files: [], 
@@ -112,9 +138,14 @@ export async function loadPackagePhase(ctx: InstallationContext): Promise<void> 
       rootPackage.marketplaceMetadata = ctx.source.pluginMetadata.marketplaceSource;
     }
     
+    // Add resource version if present (for agents/skills with individual versions)
+    if (ctx.source.resourceVersion !== undefined) {
+      rootPackage.resourceVersion = ctx.source.resourceVersion;
+    }
+    
     ctx.resolvedPackages = [rootPackage];
     
-    logger.info(`Loaded ${loaded.packageName}@${loaded.version} from ${loaded.source}`);
+    logger.info(`Loaded ${loaded.packageName}@${effectiveVersion} from ${loaded.source}`);
     
   } catch (error) {
     spinner.stop();

@@ -30,6 +30,9 @@ export interface ResourceMatchResult {
   /** How the resource was matched */
   matchedBy?: 'frontmatter' | 'filename' | 'dirname';
   
+  /** Version extracted from frontmatter (if present) */
+  version?: string;
+  
   /** Error message (if not found) */
   error?: string;
 }
@@ -55,6 +58,9 @@ export interface ResourceInstallationSpec {
 
   /** How the resource was matched */
   matchedBy: 'frontmatter' | 'filename' | 'dirname';
+
+  /** Version extracted from resource frontmatter (if present) */
+  resourceVersion?: string;
 }
 
 export interface ConvenienceMatcherResult {
@@ -141,7 +147,8 @@ export async function applyConvenienceFilters(
           resourcePath,
           basePath: baseRoot,
           resourceKind: 'file',
-          matchedBy: (result.matchedBy || 'filename') as 'frontmatter' | 'filename' | 'dirname'
+          matchedBy: (result.matchedBy || 'filename') as 'frontmatter' | 'filename' | 'dirname',
+          resourceVersion: result.version
         });
       } else if (result.error) {
         errors.push(result.error);
@@ -167,7 +174,8 @@ export async function applyConvenienceFilters(
           resourcePath,
           basePath: baseRoot,
           resourceKind: 'directory',
-          matchedBy: (result.matchedBy || 'dirname') as 'frontmatter' | 'filename' | 'dirname'
+          matchedBy: (result.matchedBy || 'dirname') as 'frontmatter' | 'filename' | 'dirname',
+          resourceVersion: result.version
         });
       } else if (result.error) {
         errors.push(result.error);
@@ -227,7 +235,8 @@ async function matchAgents(
         name,
         found: true,
         path: match.path,
-        matchedBy: match.matchedBy
+        matchedBy: match.matchedBy,
+        version: match.version
       });
     } else {
       results.push({
@@ -243,19 +252,21 @@ async function matchAgents(
 
 /**
  * Find an agent by name using frontmatter or filename.
+ * Extracts version from frontmatter when available.
  */
 async function findAgentByName(
   files: string[],
   name: string
-): Promise<{ path: string; matchedBy: 'frontmatter' | 'filename' } | null> {
+): Promise<{ path: string; matchedBy: 'frontmatter' | 'filename'; version?: string } | null> {
   // Priority 1: Frontmatter name match
   for (const file of files) {
     try {
       const content = await readTextFile(file);
       const { frontmatter } = splitFrontmatter(content);
       if (frontmatter?.name === name) {
-        logger.debug('Agent matched by frontmatter', { name, file });
-        return { path: file, matchedBy: 'frontmatter' };
+        const version = extractVersionFromFrontmatter(frontmatter);
+        logger.debug('Agent matched by frontmatter', { name, file, version });
+        return { path: file, matchedBy: 'frontmatter', version };
       }
     } catch (error) {
       // Ignore frontmatter parsing errors
@@ -267,8 +278,10 @@ async function findAgentByName(
   const byFilename = files.filter(f => basename(f, '.md') === name);
 
   if (byFilename.length === 1) {
-    logger.debug('Agent matched by filename (single)', { name, file: byFilename[0] });
-    return { path: byFilename[0], matchedBy: 'filename' };
+    const file = byFilename[0];
+    const version = await extractVersionFromFile(file);
+    logger.debug('Agent matched by filename (single)', { name, file, version });
+    return { path: file, matchedBy: 'filename', version };
   }
 
   if (byFilename.length > 1) {
@@ -276,8 +289,9 @@ async function findAgentByName(
     const deepest = byFilename.sort((a, b) =>
       b.split('/').length - a.split('/').length
     )[0];
-    logger.debug('Agent matched by filename (deepest)', { name, file: deepest, candidates: byFilename.length });
-    return { path: deepest, matchedBy: 'filename' };
+    const version = await extractVersionFromFile(deepest);
+    logger.debug('Agent matched by filename (deepest)', { name, file: deepest, candidates: byFilename.length, version });
+    return { path: deepest, matchedBy: 'filename', version };
   }
 
   return null;
@@ -324,7 +338,8 @@ async function matchSkills(
         found: true,
         path: match.path,
         installDir: dirname(match.path), // Install entire parent directory
-        matchedBy: match.matchedBy
+        matchedBy: match.matchedBy,
+        version: match.version
       });
     } else {
       results.push({
@@ -340,19 +355,21 @@ async function matchSkills(
 
 /**
  * Find a skill by name using SKILL.md frontmatter or directory name.
+ * Extracts version from SKILL.md frontmatter when available.
  */
 async function findSkillByName(
   skillFiles: string[],
   name: string
-): Promise<{ path: string; matchedBy: 'frontmatter' | 'dirname' } | null> {
+): Promise<{ path: string; matchedBy: 'frontmatter' | 'dirname'; version?: string } | null> {
   // Priority 1: Frontmatter name match in SKILL.md
   for (const file of skillFiles) {
     try {
       const content = await readTextFile(file);
       const { frontmatter } = splitFrontmatter(content);
       if (frontmatter?.name === name) {
-        logger.debug('Skill matched by frontmatter', { name, file });
-        return { path: file, matchedBy: 'frontmatter' };
+        const version = extractVersionFromFrontmatter(frontmatter);
+        logger.debug('Skill matched by frontmatter', { name, file, version });
+        return { path: file, matchedBy: 'frontmatter', version };
       }
     } catch (error) {
       // Ignore frontmatter parsing errors
@@ -364,8 +381,9 @@ async function findSkillByName(
   for (const file of skillFiles) {
     const dirName = basename(dirname(file));
     if (dirName === name) {
-      logger.debug('Skill matched by dirname (immediate)', { name, file });
-      return { path: file, matchedBy: 'dirname' };
+      const version = await extractVersionFromFile(file);
+      logger.debug('Skill matched by dirname (immediate)', { name, file, version });
+      return { path: file, matchedBy: 'dirname', version };
     }
   }
 
@@ -381,8 +399,9 @@ async function findSkillByName(
     const deepest = matchingByNested.sort((a, b) =>
       b.split('/').length - a.split('/').length
     )[0];
-    logger.debug('Skill matched by dirname (nested deepest)', { name, file: deepest, candidates: matchingByNested.length });
-    return { path: deepest, matchedBy: 'dirname' };
+    const version = await extractVersionFromFile(deepest);
+    logger.debug('Skill matched by dirname (nested deepest)', { name, file: deepest, candidates: matchingByNested.length, version });
+    return { path: deepest, matchedBy: 'dirname', version };
   }
 
   return null;
@@ -402,5 +421,42 @@ export function displayFilterErrors(errors: string[]): void {
   console.error('\n❌ The following resources were not found:');
   for (const error of errors) {
     console.error(`  • ${error}`);
+  }
+}
+
+/**
+ * Extract version from frontmatter object.
+ * Returns trimmed version string or undefined if not present/invalid.
+ * Supports both top-level 'version' and nested 'metadata.version'.
+ */
+function extractVersionFromFrontmatter(frontmatter: any): string | undefined {
+  if (!frontmatter || typeof frontmatter !== 'object') {
+    return undefined;
+  }
+
+  // Priority 1: Top-level version
+  // Priority 2: Nested metadata.version
+  const version = frontmatter.version ?? frontmatter.metadata?.version;
+
+  if (typeof version === 'string') {
+    const trimmed = version.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  return undefined;
+}
+
+/**
+ * Extract version from a markdown file by parsing its frontmatter.
+ * Returns undefined if file cannot be read or has no version.
+ */
+async function extractVersionFromFile(filePath: string): Promise<string | undefined> {
+  try {
+    const content = await readTextFile(filePath);
+    const { frontmatter } = splitFrontmatter(content);
+    return extractVersionFromFrontmatter(frontmatter);
+  } catch (error) {
+    logger.debug('Failed to extract version from file', { filePath, error });
+    return undefined;
   }
 }

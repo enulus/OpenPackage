@@ -88,7 +88,8 @@ export async function installPackageByIndexWithFlows(
     commitSha: string;
     pluginName: string;
   },
-  matchedPattern?: string  // Phase 4: Pattern from base detection
+  matchedPattern?: string,  // Phase 4: Pattern from base detection
+  resourceVersion?: string  // Resource-specific version (for agents/skills)
 ): Promise<IndexInstallResult> {
   logger.debug(`Installing ${packageName}@${version} with flows for platforms: ${platforms.join(', ')}`);
 
@@ -288,7 +289,8 @@ export async function installPackageByIndexWithFlows(
       version,
       indexSourcePath,
       fileMapping,
-      marketplaceMetadata
+      marketplaceMetadata,
+      resourceVersion
     );
   }
 
@@ -316,7 +318,8 @@ async function updateWorkspaceIndexForFlows(
     url: string;
     commitSha: string;
     pluginName: string;
-  }
+  },
+  resourceVersion?: string
 ): Promise<void> {
   try {
     const wsRecord = await readWorkspaceIndex(cwd);
@@ -333,11 +336,15 @@ async function updateWorkspaceIndexForFlows(
     // Convert to workspace-relative path if under workspace, then apply tilde notation for global paths
     const formattedPath = formatPathForYaml(packagePath, cwd);
     
+    // Apply version fallback chain: resourceVersion > version > undefined
+    // This ensures agents/skills can have individual versions
+    const effectiveVersion = resourceVersion ?? version;
+    
     // Update package entry
     const packageEntry: any = {
       ...wsRecord.index.packages[packageName],
       path: formattedPath,
-      version,
+      version: effectiveVersion,
       files: sortMapping(files)
     };
     

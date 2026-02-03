@@ -16,6 +16,9 @@ export interface PackageSource {
   /** Version (optional for path/git sources) */
   version?: string;
   
+  /** Resource-specific version (for agent/skill installations) */
+  resourceVersion?: string;
+  
   // Registry source fields
   registryPath?: string;
   

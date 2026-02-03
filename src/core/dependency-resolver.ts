@@ -58,6 +58,10 @@ export interface ResolvedPackage {
     commitSha: string;
     pluginName: string;
   };
+  /**
+   * Resource-specific version (for agent/skill installations with individual versions)
+   */
+  resourceVersion?: string;
 }
 
 /**

@@ -453,7 +453,8 @@ export function buildResourceInstallContexts(
   return resourceSpecs.map(spec => {
     const source: PackageSource = {
       ...baseContext.source,
-      resourcePath: spec.resourcePath
+      resourcePath: spec.resourcePath,
+      resourceVersion: spec.resourceVersion
     };
 
     const effectiveBase = baseContext.detectedBase ?? spec.basePath;

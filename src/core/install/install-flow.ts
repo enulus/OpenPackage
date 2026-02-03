@@ -203,7 +203,8 @@ export async function performIndexBasedInstallationPhases(params: InstallationPh
         resolved.contentRoot,  // Pass contentRoot for path-based packages
         resolved.pkg._format,   // Pass format metadata from Package object
         resolved.marketplaceMetadata,  // Pass marketplace metadata if present
-        matchedPattern  // Phase 4: Pass matched pattern for filtering
+        matchedPattern,  // Phase 4: Pass matched pattern for filtering
+        resolved.resourceVersion  // Resource-specific version for agents/skills
       );
 
       totalInstalled += installResult.installed;
