@@ -192,6 +192,13 @@ export interface InstallOptions {
    * Skill filter: install only matching skills from source.
    */
   skills?: string[];
+
+  /**
+   * Internal: when true, do not write to the workspace manifest during install.
+   * Used by recursive dependency resolution (bulk install) to avoid bubbling transitive deps
+   * into the workspace `openpackage.yml`.
+   */
+  skipManifestUpdate?: boolean;
 }
 
 export interface UninstallOptions {

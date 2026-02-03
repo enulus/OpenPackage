@@ -83,8 +83,12 @@ export class GitSourceLoader implements PackageSourceLoader {
         }
       }
       
-      // Check if marketplace - return metadata, let command handle selection
-      if (result.isMarketplace || detectedBaseInfo?.matchType === 'marketplace') {
+      // When resourcePath is set, treat as concrete resource install (no marketplace selection).
+      // Otherwise, if repo is a marketplace, return placeholder for selection flow.
+      if (
+        !source.resourcePath &&
+        (result.isMarketplace || detectedBaseInfo?.matchType === 'marketplace')
+      ) {
         const pluginDetection = await detectPluginType(result.sourcePath);
         
         return {
@@ -146,13 +150,14 @@ export class GitSourceLoader implements PackageSourceLoader {
       if (error instanceof SourceLoadError) {
         throw error;
       }
-      
+      const err = error as Error;
       const ref = source.gitRef ? `#${source.gitRef}` : '';
       const subdir = source.gitPath ? ` (path: ${source.gitPath})` : '';
+      const causeMsg = err?.message ? ` - ${err.message}` : '';
       throw new SourceLoadError(
         source,
-        `Failed to load package from git: ${source.gitUrl}${ref}${subdir}`,
-        error as Error
+        `Failed to load package from git: ${source.gitUrl}${ref}${subdir}${causeMsg}`,
+        err
       );
     }
   }

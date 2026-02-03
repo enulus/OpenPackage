@@ -26,6 +26,8 @@ import { assertTargetDirOutsideMetadata, validateResolutionFlags } from '../vali
 import { runUnifiedInstallPipeline } from '../unified/pipeline.js';
 import { runMultiContextPipeline } from '../unified/multi-context-pipeline.js';
 import { createAllStrategies } from './strategies/index.js';
+import { DependencyResolutionExecutor } from '../resolution/executor.js';
+import { getManifestPathAtContentRoot } from '../resolution/manifest-reader.js';
 import { logger } from '../../../utils/logger.js';
 
 /**
@@ -126,13 +128,68 @@ export class InstallOrchestrator {
       case 'multi-resource':
         return this.handleMultiResource(result, options, cwd);
       
-      default:
+      default: {
         // Normal pipeline flow: resolve platforms once if not set
         if (context.platforms.length === 0) {
           const interactive = canPrompt();
           context.platforms = await resolvePlatforms(cwd, options.platforms, { interactive });
         }
+        // For path/git sources, recursively install root and its dependencies via graph executor
+        const isPathOrGit = context.source.type === 'path' || context.source.type === 'git';
+        const contentRoot = context.source.contentRoot;
+        const rootManifestPath =
+          isPathOrGit && contentRoot ? await getManifestPathAtContentRoot(contentRoot) : null;
+        if (rootManifestPath) {
+          const rootResult = await runUnifiedInstallPipeline(context);
+          const platforms =
+            context.platforms.length > 0
+              ? context.platforms
+              : await resolvePlatforms(cwd, options.platforms, { interactive: canPrompt() });
+          const executor = new DependencyResolutionExecutor(cwd, {
+            graphOptions: {
+              workspaceRoot: cwd,
+              rootManifestPath,
+              includeDev: true,
+              maxDepth: 10
+            },
+            loaderOptions: {
+              cwd,
+              parallel: true,
+              cacheEnabled: true,
+              installOptions: { ...options, skipManifestUpdate: true }
+            },
+            plannerOptions: {
+              cwd,
+              platforms,
+              installOptions: { ...options, skipManifestUpdate: true },
+              force: options.force ?? false
+            },
+            dryRun: options.dryRun ?? false,
+            failFast: false
+          });
+          const execResult = await executor.execute();
+          const rootInstalled = (rootResult.data as { installed?: number })?.installed ?? 0;
+          const depInstalled = execResult.summary?.installed ?? 0;
+          const depSkipped = (execResult.summary?.skipped ?? 0) + (execResult.summary?.failed ?? 0);
+          if (execResult.summary) {
+            console.log(
+              `✓ Installation complete: ${rootInstalled + depInstalled} installed${depSkipped > 0 ? `, ${depSkipped} skipped` : ''}`
+            );
+          }
+          return {
+            success: rootResult.success && execResult.success,
+            data: {
+              packageName: context.source.packageName,
+              installed: rootInstalled + depInstalled,
+              skipped: depSkipped,
+              results: execResult.results
+            },
+            error: execResult.error ?? rootResult.error,
+            warnings: execResult.warnings ?? rootResult.warnings
+          };
+        }
         return runUnifiedInstallPipeline(context);
+      }
     }
   }
   
@@ -281,6 +338,7 @@ export class InstallOrchestrator {
   
   /**
    * Handle multi-resource installation (bulk install or convenience filters).
+   * For bulk install (opkg i), uses DependencyResolutionExecutor for recursive dependency resolution.
    */
   private async handleMultiResource(
     result: PreprocessResult,
@@ -320,17 +378,19 @@ export class InstallOrchestrator {
       };
     }
 
-    if (context.source.packageName === '__bulk__' && dependencyContexts.length > 0) {
+    if (context.source.packageName === '__bulk__') {
+      return this.runRecursiveBulkInstall(cwd, options, workspaceContext ?? undefined);
+    }
+
+    if (dependencyContexts.length > 0) {
       console.log(`✓ Installing ${dependencyContexts.length} package${dependencyContexts.length === 1 ? '' : 's'} from openpackage.yml`);
     }
 
-    // Run workspace root as distinct stage first (if any)
     if (workspaceContext) {
       try {
         await runUnifiedInstallPipeline(workspaceContext);
       } catch (error) {
         logger.warn('Workspace root install failed', { error });
-        // Non-fatal: continue with dependency installs
       }
     }
 
@@ -339,6 +399,66 @@ export class InstallOrchestrator {
     }
 
     return this.runBulkInstall(dependencyContexts);
+  }
+
+  /**
+   * Run bulk install using recursive dependency resolution (graph + pipeline per package).
+   */
+  private async runRecursiveBulkInstall(
+    cwd: string,
+    options: NormalizedInstallOptions,
+    workspaceContext?: InstallationContext | null
+  ): Promise<CommandResult> {
+    if (workspaceContext) {
+      try {
+        await runUnifiedInstallPipeline(workspaceContext);
+      } catch (error) {
+        logger.warn('Workspace root install failed', { error });
+      }
+    }
+
+    const interactive = canPrompt();
+    const platforms = await resolvePlatforms(cwd, options.platforms, { interactive });
+
+    const executor = new DependencyResolutionExecutor(cwd, {
+      graphOptions: {
+        workspaceRoot: cwd,
+        includeDev: true,
+        maxDepth: 10
+      },
+      loaderOptions: {
+        cwd,
+        parallel: true,
+        cacheEnabled: true,
+        // Recursive dependency installs should not modify workspace openpackage.yml
+        installOptions: { ...options, skipManifestUpdate: true }
+      },
+      plannerOptions: {
+        cwd,
+        platforms,
+        // Recursive dependency installs should not modify workspace openpackage.yml
+        installOptions: { ...options, skipManifestUpdate: true },
+        force: options.force ?? false
+      },
+      dryRun: options.dryRun ?? false,
+      failFast: false
+    });
+
+    const execResult = await executor.execute();
+
+    const summary = execResult.summary;
+    if (summary) {
+      console.log(`✓ Installation complete: ${summary.installed} installed${summary.failed > 0 ? `, ${summary.failed} failed` : ''}${summary.skipped > 0 ? `, ${summary.skipped} skipped` : ''}`);
+    }
+
+    return {
+      success: execResult.success,
+      data: summary
+        ? { installed: summary.installed, skipped: summary.failed + summary.skipped, results: execResult.results }
+        : { installed: 0, skipped: 0 },
+      error: execResult.error,
+      warnings: execResult.warnings
+    };
   }
   
   /**

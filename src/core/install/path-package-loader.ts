@@ -8,7 +8,7 @@ import { isJunk } from 'junk';
 import { logger } from '../../utils/logger.js';
 import { ValidationError } from '../../utils/errors.js';
 import { FILE_PATTERNS, PACKAGE_PATHS, CLAUDE_PLUGIN_PATHS } from '../../constants/index.js';
-import { detectPluginType, detectPluginWithMarketplace } from './plugin-detector.js';
+import { detectPluginType, detectPluginWithMarketplace, hasPluginContent } from './plugin-detector.js';
 import { transformPluginToPackage } from './plugin-transformer.js';
 import type { MarketplacePluginEntry } from './marketplace-handler.js';
 import { generateGitHubPackageName } from '../../utils/plugin-naming.js';
@@ -70,6 +70,24 @@ export async function loadPackageFromDirectory(
   // Load openpackage.yml for regular packages
   let config = await loadPackageConfig(dirPath);
   if (!config) {
+    // Marketplace-defined plugins (no plugin.json) may have only plugin content (commands/agents/skills).
+    // Treat as loadable so install can proceed without marketplace selection.
+    const hasContent = await hasPluginContent(dirPath);
+    if (hasContent) {
+      const syntheticEntry: MarketplacePluginEntry = {
+        strict: false,
+        name: context?.packageName ?? basename(dirPath),
+        source: '.' // minimal spec for marketplace-defined plugin without marketplace manifest
+      };
+      const marketplaceDefined = await detectPluginWithMarketplace(dirPath, syntheticEntry);
+      if (marketplaceDefined.isPlugin && marketplaceDefined.type === 'marketplace-defined') {
+        const { package: pkg } = await transformPluginToPackage(dirPath, {
+          ...context,
+          marketplaceEntry: syntheticEntry
+        });
+        return pkg;
+      }
+    }
     // Resource-centric installs (Phase 3) can operate on directories without openpackage.yml,
     // as long as they match installable patterns (base detection ensures this upstream).
     if (!context?.resourcePath) {

@@ -29,7 +29,11 @@ export function shouldResolveDependencies(ctx: InstallationContext): boolean {
  * Check if context should update manifest
  */
 export function shouldUpdateManifest(ctx: InstallationContext): boolean {
-  return ctx.mode !== 'apply';
+  return (
+    ctx.mode !== 'apply' &&
+    ctx.source.type !== 'workspace' &&
+    ctx.options.skipManifestUpdate !== true
+  );
 }
 
 /**

@@ -13,7 +13,8 @@ const testFiles: string[] = [
   'tests/core/install/cli-modes.test.ts',
   'tests/core/install/install-selection.test.ts',
   'tests/core/install/workspace-level-install.test.ts',
-  
+  'tests/core/install/recursive-resolution.test.ts',
+
   // Core - Platforms
   'tests/core/platforms/platform-extension-filter.test.ts',
   'tests/core/platforms/platform-flows-config.test.ts',

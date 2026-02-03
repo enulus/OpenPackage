@@ -77,13 +77,13 @@ export async function cloneRepoToCache(options: GitCloneOptions): Promise<GitClo
     lastFetched: new Date().toISOString()
   });
   
-  // Create a temporary clone location
-  const tempClonePath = join(repoDir, '.temp-clone');
-  
-  // Remove temp location if it exists from a previous failed clone
-  if (await exists(tempClonePath)) {
-    await rm(tempClonePath, { recursive: true, force: true });
-  }
+  // Create a unique temporary clone location.
+  // IMPORTANT: recursive dependency resolution may clone multiple resources from the same repo in parallel.
+  // A fixed temp dir causes collisions ("File exists") and leaves partial clones behind.
+  const tempClonePath = join(
+    repoDir,
+    `.temp-clone-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
+  );
   
   logger.debug(`Cloning repository to cache`, { url, ref, subdir });
   
@@ -131,10 +131,26 @@ export async function cloneRepoToCache(options: GitCloneOptions): Promise<GitClo
       };
     }
     
-    // Move temp clone to final location
-    await rename(tempClonePath, commitDir);
+    // Move temp clone to final location.
+    // If another parallel clone won the race and created the commitDir, fall back to using the cached copy.
+    try {
+      await rename(tempClonePath, commitDir);
+    } catch (error: any) {
+      const code = error?.code as string | undefined;
+      if (code === 'EEXIST' || code === 'ENOTEMPTY') {
+        // Another process wrote this commit in parallel.
+        await rm(tempClonePath, { recursive: true, force: true });
+      } else {
+        throw error;
+      }
+    }
     
     logger.debug(`Moved clone to final cache location`, { commitDir });
+    
+    // If a parallel clone created commitDir, ensure we treat it as cached from here on.
+    if (await isCommitCached(url, commitSha)) {
+      await touchCacheEntry(commitDir);
+    }
     
     // Write commit metadata
     await writeCommitMetadata(commitDir, {

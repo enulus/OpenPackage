@@ -103,8 +103,9 @@ export async function detectPluginWithMarketplace(
 /**
  * Check if a directory has plugin content (commands, agents, etc.)
  * Used to validate marketplace-defined plugins that don't have plugin.json.
+ * Exported for use in file-discovery and path-package-loader.
  */
-async function hasPluginContent(dirPath: string): Promise<boolean> {
+export async function hasPluginContent(dirPath: string): Promise<boolean> {
   const pluginContentDirs = ['commands', 'agents', 'skills', 'hooks'];
   const pluginContentFiles = ['.mcp.json', '.lsp.json'];
   
