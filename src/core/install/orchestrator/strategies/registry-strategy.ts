@@ -1,3 +1,9 @@
+/**
+ * RegistryInstallStrategy handles installs from the OpenPackage registry.
+ *
+ * Registry sources are loaded by the unified pipeline (load phase), since their metadata
+ * and resolution behavior is centralized there.
+ */
 import type { InstallationContext, PackageSource } from '../../unified/context.js';
 import type { NormalizedInstallOptions, InputClassification, PreprocessResult } from '../types.js';
 import { BaseInstallStrategy } from './base.js';

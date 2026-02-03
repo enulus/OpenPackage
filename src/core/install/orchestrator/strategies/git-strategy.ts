@@ -6,12 +6,11 @@ import type {
 } from '../types.js';
 import { BaseInstallStrategy } from './base.js';
 import { getLoaderForSource } from '../../sources/loader-factory.js';
-import { applyConvenienceFilters, displayFilterErrors } from '../../convenience-matchers.js';
 import { buildResourceInstallContexts } from '../../unified/context-builders.js';
 import { normalizePlatforms } from '../../../../utils/platform-mapper.js';
 import { logger } from '../../../../utils/logger.js';
-import { join, relative } from 'path';
-import { stat } from 'fs/promises';
+import { applyBaseDetection, computePathScoping } from '../../preprocessing/base-resolver.js';
+import { resolveConvenienceResources } from '../../preprocessing/convenience-preprocessor.js';
 
 export class GitInstallStrategy extends BaseInstallStrategy {
   readonly name = 'git';
@@ -75,32 +74,37 @@ export class GitInstallStrategy extends BaseInstallStrategy {
       return this.createMarketplaceResult(context);
     }
     
-    // Process base detection
-    if (loaded.sourceMetadata?.baseDetection) {
-      const baseDetection = loaded.sourceMetadata.baseDetection;
-      context.detectedBase = baseDetection.base;
-      context.matchedPattern = baseDetection.matchedPattern;
-      context.baseSource = baseDetection.matchType as any;
-      
-      if (baseDetection.matchType === 'marketplace') {
-        return this.createMarketplaceResult(context);
-      }
-      
-      if (baseDetection.matchType === 'ambiguous' && baseDetection.ambiguousMatches) {
-        return this.createAmbiguousResult(context, baseDetection.ambiguousMatches);
-      }
-      
-      // Calculate base relative path
-      if (context.detectedBase && loaded.contentRoot) {
-        context.baseRelative = relative(loaded.contentRoot, context.detectedBase) || '.';
-      }
+    // Process base detection (centralized)
+    const baseResult = applyBaseDetection(context, loaded);
+    if (baseResult.specialHandling === 'marketplace') {
+      return this.createMarketplaceResult(context);
+    }
+    if (baseResult.specialHandling === 'ambiguous') {
+      return this.createAmbiguousResult(context, baseResult.ambiguousMatches ?? []);
     }
     
     // Apply resource path scoping
     const resourcePath = context.source.resourcePath;
     if (resourcePath) {
-      await this.applyResourcePathScoping(context, loaded, resourcePath);
+      await computePathScoping(context, loaded, resourcePath);
     }
+
+    // Populate root resolved package so the pipeline can skip re-loading.
+    // (The unified load phase is the only other place that populates ctx.resolvedPackages.)
+    context.resolvedPackages = [
+      {
+        name: context.source.packageName,
+        version: context.source.version || loaded.version,
+        pkg: {
+          metadata: loaded.metadata,
+          files: [],
+          _format: (loaded.metadata as any)?._format || context.source.pluginMetadata?.format
+        },
+        isRoot: true,
+        source: 'git',
+        contentRoot: context.source.contentRoot || loaded.contentRoot
+      } as any
+    ];
     
     // Apply convenience filters (--agents, --skills)
     if (options.agents?.length || options.skills?.length) {
@@ -116,37 +120,6 @@ export class GitInstallStrategy extends BaseInstallStrategy {
   }
   
   /**
-   * Apply resource path scoping to narrow installation.
-   */
-  private async applyResourcePathScoping(
-    context: InstallationContext,
-    loaded: any,
-    resourcePath: string
-  ): Promise<void> {
-    const repoRoot = loaded.sourceMetadata?.repoPath || loaded.contentRoot || context.detectedBase || context.cwd;
-    const baseAbs = context.detectedBase || loaded.contentRoot || context.cwd;
-    const absResourcePath = join(repoRoot, resourcePath);
-    const relativeToBase = relative(baseAbs, absResourcePath).replace(/\\/g, '/').replace(/^\.\/?/, '');
-    
-    if (relativeToBase && !relativeToBase.startsWith('..')) {
-      let isDirectory = false;
-      try {
-        const s = await stat(absResourcePath);
-        isDirectory = s.isDirectory();
-      } catch {
-        // Keep existing matchedPattern
-        return;
-      }
-      
-      const scopedPattern = isDirectory
-        ? `${relativeToBase.replace(/\/$/, '')}/**`
-        : relativeToBase;
-      
-      context.matchedPattern = scopedPattern;
-    }
-  }
-  
-  /**
    * Handle convenience filter options.
    */
   private async handleConvenienceFilters(
@@ -157,23 +130,13 @@ export class GitInstallStrategy extends BaseInstallStrategy {
   ): Promise<PreprocessResult> {
     const basePath = context.detectedBase || loaded.contentRoot || cwd;
     const repoRoot = loaded.sourceMetadata?.repoPath || loaded.contentRoot || basePath;
-    
-    const filterResult = await applyConvenienceFilters(basePath, repoRoot, {
+
+    const resources = await resolveConvenienceResources(basePath, repoRoot, {
       agents: options.agents,
       skills: options.skills
     });
-    
-    if (filterResult.errors.length > 0) {
-      displayFilterErrors(filterResult.errors);
-      
-      if (filterResult.resources.length === 0) {
-        throw new Error('None of the requested resources were found');
-      }
-      
-      console.log(`\n⚠️  Continuing with ${filterResult.resources.length} resource(s)\n`);
-    }
-    
-    const resourceContexts = buildResourceInstallContexts(context, filterResult.resources, repoRoot);
+
+    const resourceContexts = buildResourceInstallContexts(context, resources, repoRoot);
     return this.createMultiResourceResult(context, resourceContexts);
   }
 }

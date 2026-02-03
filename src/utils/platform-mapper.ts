@@ -42,6 +42,31 @@ export function normalizePlatforms(platforms?: string[]): string[] | undefined {
 }
 
 /**
+ * Resolve the target directory for a registry-relative path within a package directory.
+ *
+ * This is intentionally simple: it preserves the directory structure of the registry path.
+ * (Platform-specific mapping is handled elsewhere via flows.)
+ */
+export function resolveTargetDirectory(packageDir: string, registryPath: string): string {
+  const normalized = registryPath.replace(/\\/g, '/').replace(/^\/+/, '');
+  const parts = normalized.split('/');
+  if (parts.length <= 1) {
+    return packageDir;
+  }
+  return join(packageDir, parts.slice(0, -1).join('/'));
+}
+
+/**
+ * Resolve the final target file path given a target directory and a registry-relative path.
+ */
+export function resolveTargetFilePath(targetDir: string, registryPath: string): string {
+  const normalized = registryPath.replace(/\\/g, '/').replace(/^\/+/, '');
+  const parts = normalized.split('/');
+  const fileName = parts[parts.length - 1] || normalized;
+  return join(targetDir, fileName);
+}
+
+/**
  * Platform Mapper Module
  * Unified functions for mapping between universal subdirs and platform-specific paths
  * 

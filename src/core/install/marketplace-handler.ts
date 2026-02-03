@@ -2,17 +2,17 @@ import { join, basename, relative } from 'path';
 import { readTextFile, exists } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
 import { ValidationError, UserCancellationError } from '../../utils/errors.js';
-import { buildGitInstallContext } from './unified/context-builders.js';
+import { buildGitInstallContext, buildPathInstallContext, buildResourceInstallContexts } from './unified/context-builders.js';
 import { runUnifiedInstallPipeline } from './unified/pipeline.js';
-import { detectPluginType, validatePluginManifest } from './plugin-detector.js';
+import { detectPluginType, detectPluginWithMarketplace, validatePluginManifest } from './plugin-detector.js';
 import { safePrompts } from '../../utils/prompts.js';
 import { Spinner } from '../../utils/spinner.js';
 import type { CommandResult, InstallOptions } from '../../types/index.js';
 import { CLAUDE_PLUGIN_PATHS } from '../../constants/index.js';
-import { applyConvenienceFilters, displayFilterErrors } from './convenience-matchers.js';
-import { buildResourceInstallContexts } from './unified/context-builders.js';
 import { runMultiContextPipeline } from './unified/multi-context-pipeline.js';
 import { getLoaderForSource } from './sources/loader-factory.js';
+import { applyBaseDetection } from './preprocessing/base-resolver.js';
+import { resolveConvenienceResources } from './preprocessing/convenience-preprocessor.js';
 import {
   normalizePluginSource,
   isRelativePathSource,
@@ -362,7 +362,6 @@ async function installRelativePathPlugin(
   }
   
   // Validate plugin structure with marketplace context
-  const { detectPluginWithMarketplace } = await import('./plugin-detector.js');
   const detection = await detectPluginWithMarketplace(pluginDir, pluginEntry);
   
   if (!detection.isPlugin) {
@@ -399,7 +398,6 @@ async function installRelativePathPlugin(
   
   // Build path context for the already-cloned plugin directory
   // Use path-based loading (efficient, no re-clone) with git source override for manifest
-  const { buildPathInstallContext } = await import('./unified/context-builders.js');
   const ctx = await buildPathInstallContext(
     cwd,
     pluginDir,
@@ -443,16 +441,9 @@ async function installRelativePathPlugin(
 
     // Convenience matching should return a full repo-relative resourcePath for naming consistency:
     // e.g. plugins/javascript-typescript/agents/typescript-pro.md
-    const filterResult = await applyConvenienceFilters(pluginDir, marketplaceDir, convenienceOptions ?? {});
-    if (filterResult.errors.length > 0) {
-      displayFilterErrors(filterResult.errors);
-      if (filterResult.resources.length === 0) {
-        return { success: false, error: 'None of the requested resources were found' };
-      }
-      console.log(`\n⚠️  Continuing with ${filterResult.resources.length} resource(s)\n`);
-    }
+    const resources = await resolveConvenienceResources(pluginDir, marketplaceDir, convenienceOptions ?? {});
 
-    const resourceContexts = buildResourceInstallContexts(ctx, filterResult.resources, marketplaceDir).map(rc => {
+    const resourceContexts = buildResourceInstallContexts(ctx, resources, marketplaceDir).map(rc => {
       // Ensure path-based loader can resolve repo-relative resourcePath by pointing localPath at repo root.
       // Base detection will still land on pluginDir due to deepest pattern match.
       if (rc.source.type === 'path') {
@@ -548,28 +539,14 @@ async function installGitPlugin(
     }
 
     if (loaded.sourceMetadata?.baseDetection) {
-      const baseDetection = loaded.sourceMetadata.baseDetection;
-      ctx.detectedBase = baseDetection.base;
-      ctx.matchedPattern = baseDetection.matchedPattern;
-      ctx.baseSource = baseDetection.matchType as any;
-
-      if (ctx.detectedBase && loaded.contentRoot) {
-        ctx.baseRelative = relative(loaded.contentRoot, ctx.detectedBase) || '.';
-      }
+      applyBaseDetection(ctx, loaded);
     }
 
     const basePath = ctx.detectedBase || loaded.contentRoot || cwd;
     const repoRoot = loaded.sourceMetadata?.repoPath || loaded.contentRoot || basePath;
-    const filterResult = await applyConvenienceFilters(basePath, repoRoot, convenienceOptions ?? {});
-    if (filterResult.errors.length > 0) {
-      displayFilterErrors(filterResult.errors);
-      if (filterResult.resources.length === 0) {
-        return { success: false, error: 'None of the requested resources were found' };
-      }
-      console.log(`\n⚠️  Continuing with ${filterResult.resources.length} resource(s)\n`);
-    }
+    const resources = await resolveConvenienceResources(basePath, repoRoot, convenienceOptions ?? {});
 
-    const resourceContexts = buildResourceInstallContexts(ctx, filterResult.resources, repoRoot);
+    const resourceContexts = buildResourceInstallContexts(ctx, resources, repoRoot);
     const multiResult = await runMultiContextPipeline(resourceContexts);
     return {
       success: multiResult.success,

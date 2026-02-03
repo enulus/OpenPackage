@@ -1,3 +1,9 @@
+/**
+ * PathInstallStrategy handles installs from local directories/tarballs.
+ *
+ * It preloads the source once and populates the root resolved package so the unified
+ * pipeline can skip re-loading.
+ */
 import type { InstallationContext, PackageSource } from '../../unified/context.js';
 import type { NormalizedInstallOptions, InputClassification, PreprocessResult } from '../types.js';
 import { BaseInstallStrategy } from './base.js';
@@ -52,6 +58,21 @@ export class PathInstallStrategy extends BaseInstallStrategy {
     context.source.version = loaded.version;
     context.source.contentRoot = loaded.contentRoot;
     context.source.pluginMetadata = loaded.pluginMetadata;
+
+    context.resolvedPackages = [
+      {
+        name: context.source.packageName,
+        version: context.source.version || loaded.version,
+        pkg: {
+          metadata: loaded.metadata,
+          files: [],
+          _format: (loaded.metadata as any)?._format || context.source.pluginMetadata?.format
+        },
+        isRoot: true,
+        source: 'path',
+        contentRoot: context.source.contentRoot || loaded.contentRoot
+      } as any
+    ];
     
     if (loaded.pluginMetadata?.pluginType === 'marketplace') {
       return this.createMarketplaceResult(context);

@@ -89,7 +89,13 @@ async function loadManifestDependencies(
     return [];
   }
   const manifest = await parsePackageYml(manifestPath);
-  return manifest[DEPENDENCY_ARRAYS.PACKAGES] || [];
+
+  // Support both legacy (`packages`, `dev-packages`) and current (`dependencies`, `dev-dependencies`) keys.
+  const deps = (manifest as any)[DEPENDENCY_ARRAYS.DEPENDENCIES] ?? (manifest as any)[DEPENDENCY_ARRAYS.PACKAGES] ?? [];
+  const devDeps =
+    (manifest as any)[DEPENDENCY_ARRAYS.DEV_DEPENDENCIES] ?? (manifest as any)[DEPENDENCY_ARRAYS.DEV_PACKAGES] ?? [];
+
+  return [...(Array.isArray(deps) ? deps : []), ...(Array.isArray(devDeps) ? devDeps : [])];
 }
 
 /**

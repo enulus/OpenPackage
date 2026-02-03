@@ -4,12 +4,8 @@ import type { InstallationContext } from './context.js';
  * Check if context should resolve dependencies
  */
 export function shouldResolveDependencies(ctx: InstallationContext): boolean {
-  // Skip dependency resolution for apply mode and marketplaces
-  // Marketplaces don't have dependencies - they're collections of plugins
+  // Skip dependency resolution for apply mode
   if (ctx.mode === 'apply') {
-    return false;
-  }
-  if (ctx.source.pluginMetadata?.pluginType === 'marketplace') {
     return false;
   }
   // Git/path installs are already fully specified by their source content.

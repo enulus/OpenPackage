@@ -58,8 +58,9 @@ export function isSkippableRegistryPath(registryPath: string, cwd?: string): boo
 export function isAllowedRegistryPath(registryPath: string, cwd?: string): boolean {
   const normalized = normalizeRegistryPath(registryPath);
 
-  // Exclude root files (handled separately)
-  if (isRootRegistryPath(normalized)) return false;
+  // Root-level platform files (AGENTS.md, CLAUDE.md, etc.) are allowed as package content.
+  // They are mapped by platform flows during install/apply.
+  if (isRootRegistryPath(normalized)) return true;
   
   // Exclude platform-specific YML files
   if (isSkippableRegistryPath(normalized, cwd)) return false;

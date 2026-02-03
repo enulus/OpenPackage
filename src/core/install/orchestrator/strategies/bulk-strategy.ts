@@ -1,3 +1,9 @@
+/**
+ * BulkInstallStrategy handles `opkg install` with no package argument.
+ *
+ * It expands the workspace manifest into multiple `InstallationContext`s and hands them
+ * off to the multi-context pipeline via the orchestrator.
+ */
 import type { InstallationContext } from '../../unified/context.js';
 import type { NormalizedInstallOptions, InputClassification, PreprocessResult } from '../types.js';
 import { BaseInstallStrategy } from './base.js';

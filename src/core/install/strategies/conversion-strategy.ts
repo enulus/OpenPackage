@@ -33,6 +33,7 @@ import {
   cleanupTempDirectory
 } from './helpers/temp-directory.js';
 import { createContextFromFormat } from '../../conversion-context/index.js';
+import { FlowBasedInstallStrategy } from './flow-based-strategy.js';
 
 /**
  * Format Conversion Installation Strategy
@@ -186,8 +187,6 @@ export class ConversionInstallStrategy extends BaseStrategy {
       );
       
       // Install from temp directory using flow-based installation
-      // Import here to avoid circular dependency
-      const { FlowBasedInstallStrategy } = await import('./flow-based-strategy.js');
       const flowStrategy = new FlowBasedInstallStrategy();
       
       const convertedContext: FlowInstallContext = {

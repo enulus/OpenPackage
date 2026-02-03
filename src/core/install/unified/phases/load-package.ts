@@ -8,14 +8,15 @@ import { getLoaderForSource } from '../../sources/loader-factory.js';
 import { addError, getSourceDisplayName } from '../context-helpers.js';
 import { logger } from '../../../../utils/logger.js';
 import { Spinner } from '../../../../utils/spinner.js';
-import { join, relative } from 'path';
+import { applyBaseDetection, computePathScoping } from '../../preprocessing/base-resolver.js';
 
 /**
  * Load package from source
  */
 export async function loadPackagePhase(ctx: InstallationContext): Promise<void> {
   // Skip if context already has loaded data (preprocessed by strategy)
-  if (ctx.source.contentRoot && ctx.source.packageName) {
+  // NOTE: We require resolvedPackages to be populated too; otherwise later phases break.
+  if (ctx.source.contentRoot && ctx.source.packageName && ctx.resolvedPackages.length > 0) {
     logger.debug('Skipping load phase - context already preprocessed', {
       packageName: ctx.source.packageName,
       contentRoot: ctx.source.contentRoot
@@ -45,43 +46,22 @@ export async function loadPackagePhase(ctx: InstallationContext): Promise<void> 
     ctx.source.packageName = loaded.packageName;
     ctx.source.version = loaded.version;
     
-    // Propagate base detection results from loader into context (resource model).
+    // Apply base detection results from loader (resource model).
     // Bulk installs previously missed this, causing unscoped installs and incorrect workspace-index paths.
-    const baseDetection: any = (loaded.sourceMetadata as any)?.baseDetection;
-    if (baseDetection?.base) {
-      ctx.detectedBase = baseDetection.base;
-      ctx.baseSource = baseDetection.matchType;
-      if (baseDetection.matchedPattern && !ctx.matchedPattern) {
-        ctx.matchedPattern = baseDetection.matchedPattern;
-      }
-      if (!ctx.baseRelative && (loaded.sourceMetadata as any)?.repoPath) {
-        ctx.baseRelative = relative((loaded.sourceMetadata as any).repoPath, baseDetection.base) || '.';
-      }
+    applyBaseDetection(ctx, loaded);
+
+    // Ensure contentRoot is always set after load phase
+    // This is required by the pipeline validation and may not be set if base detection was skipped
+    if (!ctx.source.contentRoot) {
+      ctx.source.contentRoot = loaded.contentRoot;
     }
 
     // If this install targets a concrete resource (file or dir), scope matchedPattern to that resource.
     // This matches the behavior of individual resource installs.
     const resourcePath = (ctx.source as any).resourcePath as string | undefined;
-    const repoRoot = (loaded.sourceMetadata as any)?.repoPath as string | undefined;
-    if (resourcePath && repoRoot) {
-      const baseAbs = ctx.detectedBase || loaded.contentRoot;
-      const absResourcePath = join(repoRoot, resourcePath);
-      const relToBaseRaw = relative(baseAbs, absResourcePath).replace(/\\/g, '/').replace(/^\.\/?/, '');
-      if (relToBaseRaw && !relToBaseRaw.startsWith('..')) {
-        let isDirectory = false;
-        try {
-          const stat = await import('fs/promises').then(m => m.stat(absResourcePath));
-          isDirectory = stat.isDirectory();
-        } catch {
-          // If stat fails, fall back to file-like behavior using the relative path.
-        }
-        ctx.matchedPattern = isDirectory ? `${relToBaseRaw.replace(/\/$/, '')}/**` : relToBaseRaw;
-      }
+    if (resourcePath) {
+      await computePathScoping(ctx, loaded, resourcePath);
     }
-
-    // Use detected base as content root if available (Phase 4: Resource model)
-    const effectiveContentRoot = ctx.detectedBase || loaded.contentRoot;
-    ctx.source.contentRoot = effectiveContentRoot;
     
     ctx.source.pluginMetadata = loaded.pluginMetadata;
     
@@ -124,7 +104,7 @@ export async function loadPackagePhase(ctx: InstallationContext): Promise<void> 
       },
       isRoot: true,
       source: resolvedSource,
-      contentRoot: effectiveContentRoot  // Use detected base as content root
+      contentRoot: ctx.source.contentRoot || loaded.contentRoot  // Use detected base as content root
     };
     
     // Add marketplace metadata if present

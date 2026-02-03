@@ -3,6 +3,7 @@ import type { PackageSource } from '../unified/context.js';
 import type { InstallOptions } from '../../../types/index.js';
 import { SourceLoadError } from './base.js';
 import { loadPackageFromGit } from '../git-package-loader.js';
+import { loadPackageFromPath } from '../path-package-loader.js';
 import { detectPluginType } from '../plugin-detector.js';
 import { detectBase } from '../base-detector.js';
 import { getPlatformsState } from '../../../core/platforms.js';
@@ -109,7 +110,6 @@ export class GitSourceLoader implements PackageSourceLoader {
       const contentRoot = detectedBaseInfo?.base || result.sourcePath;
       
       // Load individual package/plugin
-      const { loadPackageFromPath } = await import('../path-package-loader.js');
       let sourcePackage = await loadPackageFromPath(contentRoot, {
         gitUrl: source.gitUrl,
         path: source.gitPath,

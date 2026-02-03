@@ -10,6 +10,24 @@ import { shouldResolveDependencies, shouldUpdateManifest } from './context-helpe
 import { logger } from '../../../utils/logger.js';
 import { createWorkspacePackageYml } from '../../../utils/package-management.js';
 
+function assertPipelineContextComplete(ctx: InstallationContext): void {
+  if (!ctx.source.type) {
+    throw new Error('Pipeline context invalid: ctx.source.type is required');
+  }
+  if (!ctx.source.packageName) {
+    throw new Error('Pipeline context invalid: ctx.source.packageName must be set after load phase');
+  }
+  if (!ctx.source.contentRoot) {
+    throw new Error('Pipeline context invalid: ctx.source.contentRoot must be set after load phase');
+  }
+  if (!Array.isArray(ctx.resolvedPackages) || ctx.resolvedPackages.length === 0) {
+    throw new Error('Pipeline context invalid: ctx.resolvedPackages must contain a root package after load phase');
+  }
+  if (!ctx.resolvedPackages.some(p => (p as any).isRoot)) {
+    throw new Error('Pipeline context invalid: ctx.resolvedPackages must contain an isRoot package');
+  }
+}
+
 /**
  * Unified installation pipeline
  * 
@@ -37,16 +55,9 @@ export async function runUnifiedInstallPipeline(
     
     // Phase 1: Load package from source (always)
     await loadPackagePhase(ctx);
-    
-    // Check if marketplace was detected - marketplaces need special handling
-    if (ctx.source.pluginMetadata?.pluginType === 'marketplace') {
-      return {
-        success: false,
-        error: 'Marketplace detected but not handled. This should be handled at command level before calling the pipeline.'
-      };
-    }
-    
-    // Phase 2: Resolve dependencies (skip for apply and marketplaces)
+    assertPipelineContextComplete(ctx);
+
+    // Phase 2: Resolve dependencies (skip for apply mode)
     if (shouldResolveDependencies(ctx)) {
       await resolveDependenciesPhase(ctx);
     }

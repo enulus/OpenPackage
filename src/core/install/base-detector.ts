@@ -16,6 +16,7 @@ import { exists, readTextFile } from '../../utils/fs.js';
 import { extractAllFromPatterns, findDeepestMatch, type PatternMatch } from '../../utils/pattern-matcher.js';
 import { logger } from '../../utils/logger.js';
 import { FILE_PATTERNS, CLAUDE_PLUGIN_PATHS } from '../../constants/index.js';
+import { stat } from 'fs/promises';
 
 /**
  * Result of base detection
@@ -78,10 +79,10 @@ export async function detectBase(
   let statIsDir: boolean | null = null;
   let statIsFile: boolean | null = null;
   try {
-    const stat = await import('fs/promises').then(m => m.stat(absoluteResourcePath));
-    statIsDir = stat.isDirectory();
-    statIsFile = stat.isFile();
-    if (!stat.isDirectory()) {
+    const s = await stat(absoluteResourcePath);
+    statIsDir = s.isDirectory();
+    statIsFile = s.isFile();
+    if (!s.isDirectory()) {
       probeStart = dirname(absoluteResourcePath);
     }
   } catch {
@@ -277,10 +278,10 @@ export async function detectBaseForFilepath(
   // and checking each parent directory for manifest files or pattern matches
 
   let currentPath = absolutePath;
-  const stat = await import('fs/promises').then(m => m.stat(absolutePath));
+  const s = await stat(absolutePath);
   
   // If it's a file, start from its directory
-  if (!stat.isDirectory()) {
+  if (!s.isDirectory()) {
     currentPath = dirname(absolutePath);
   }
 
@@ -343,10 +344,10 @@ async function detectBaseForFilepathViaPatterns(
   const patterns = extractAllFromPatterns(platformsConfig);
   
   let currentPath = absolutePath;
-  const stat = await import('fs/promises').then(m => m.stat(absolutePath));
+  const s = await stat(absolutePath);
   
   // If it's a file, start from its directory
-  if (!stat.isDirectory()) {
+  if (!s.isDirectory()) {
     currentPath = dirname(absolutePath);
   }
 
