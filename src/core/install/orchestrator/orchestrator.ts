@@ -165,17 +165,20 @@ export class InstallOrchestrator {
         ? context.platforms
         : await resolvePlatforms(context.targetDir, options.platforms, { interactive: canPrompt() });
 
+    const skipCache = options.resolutionMode === 'remote-primary';
+    
     const executor = new DependencyResolutionExecutor(execContext, {
       graphOptions: {
         workspaceRoot: execContext.targetDir,
         rootManifestPath,
         includeRoot: false, // Root already installed, just deps
         includeDev: true,
-        maxDepth: 10
+        maxDepth: 10,
+        skipCache
       },
       loaderOptions: {
         parallel: true,
-        cacheEnabled: true,
+        cacheEnabled: !skipCache,
         installOptions: { ...options, skipManifestUpdate: true }
       },
       plannerOptions: {
@@ -434,15 +437,18 @@ export class InstallOrchestrator {
     const interactive = canPrompt();
     const platforms = await resolvePlatforms(execContext.targetDir, options.platforms, { interactive });
 
+    const skipCache = options.resolutionMode === 'remote-primary';
+    
     const executor = new DependencyResolutionExecutor(execContext, {
       graphOptions: {
         workspaceRoot: execContext.targetDir,
         includeDev: true,
-        maxDepth: 10
+        maxDepth: 10,
+        skipCache
       },
       loaderOptions: {
         parallel: true,
-        cacheEnabled: true,
+        cacheEnabled: !skipCache,
         // Recursive dependency installs should not modify workspace openpackage.yml
         installOptions: { ...options, skipManifestUpdate: true }
       },

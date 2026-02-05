@@ -233,6 +233,8 @@ export interface GraphBuilderOptions {
    * in a single unified flow. Default: false.
    */
   includeRoot?: boolean;
+  /** Skip git cache (for --remote flag) */
+  skipCache?: boolean;
 }
 
 /**

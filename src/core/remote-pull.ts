@@ -13,6 +13,7 @@ import { PACKAGE_PATHS } from '../constants/index.js';
 import { formatVersionLabel } from '../utils/package-versioning.js';
 import { normalizeRegistryPath } from '../utils/registry-entry-filter.js';
 import { mergePackageFiles } from '../utils/package-merge.js';
+import { createCacheManager } from './cache-manager.js';
 
 const NETWORK_ERROR_PATTERN = /(fetch failed|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EHOSTUNREACH|ENETUNREACH|network)/i;
 
@@ -51,6 +52,7 @@ export interface RemotePullOptions {
   httpClient?: HttpClient;
   recursive?: boolean;
   paths?: string[];
+  skipLocalCheck?: boolean; // For --remote flag, bypass local registry check
 }
 
 export interface RemoteBatchPullOptions extends RemotePullOptions {
@@ -453,6 +455,27 @@ export async function pullPackageFromRemote(
   options: RemotePullOptions = {}
 ): Promise<RemotePullResult> {
   try {
+    // CACHE CHECK: If specific version requested, check if already in local registry
+    // Skip this check if skipLocalCheck is set (--remote flag forces fresh fetch)
+    if (version && version !== 'latest' && !options.skipLocalCheck) {
+      const cacheManager = createCacheManager();
+      const localPath = await cacheManager.getLocalPackagePath(name, version);
+      if (localPath) {
+        logger.debug('Package already exists in local registry, skipping remote pull', { name, version, localPath });
+        return {
+          success: true,
+          name,
+          version,
+          response: {} as PullPackageResponse,
+          extracted: { files: [], checksum: '' },
+          registryUrl: '',
+          profile: '',
+          downloadUrl: '',
+          tarballSize: undefined
+        };
+      }
+    }
+    
     const metadataResult = options.preFetchedResponse
       ? await createResultFromPrefetched(options)
       : await fetchRemotePackageMetadata(name, version, options);

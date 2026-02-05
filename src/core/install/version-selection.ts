@@ -16,6 +16,7 @@ import { isScopedName } from '../scoping/package-scoping.js';
 import { Spinner } from '../../utils/spinner.js';
 import { extractRemoteErrorReason } from '../../utils/error-reasons.js';
 import { UNVERSIONED } from '../../constants/index.js';
+import { createCacheManager } from '../cache-manager.js';
 
 export interface VersionSourceSummary {
   localVersions: string[];
@@ -71,6 +72,7 @@ export interface UnifiedInstallVersionSelectionResult extends InstallVersionSele
 interface RemoteVersionLookupOptions {
   profile?: string;
   apiKey?: string;
+  skipCache?: boolean; // For --remote flag, bypass metadata cache
 }
 
 interface RemoteVersionLookupSuccess {
@@ -102,7 +104,8 @@ export async function gatherVersionSourcesForInstall(args: GatherVersionSourcesA
     } else {
       const remoteLookup = await fetchRemoteVersions(args.packageName, {
         profile: args.profile,
-        apiKey: args.apiKey
+        apiKey: args.apiKey,
+        skipCache: args.mode === 'remote-primary'
       });
 
       if (remoteLookup.success) {
@@ -278,6 +281,16 @@ async function fetchRemoteVersions(
   packageName: string,
   options: RemoteVersionLookupOptions
 ): Promise<RemoteVersionLookupResult> {
+  const cacheManager = createCacheManager();
+  
+  // Check cached metadata first (skip if --remote flag is set)
+  if (!options.skipCache) {
+    const cachedMeta = await cacheManager.getCachedMetadata(packageName);
+    if (cachedMeta && cachedMeta.versions.length > 0) {
+      return { success: true, versions: cachedMeta.versions };
+    }
+  }
+  
   const spinner =
     process.stdout.isTTY && process.stderr.isTTY
       ? new Spinner(`Checking remote versions for ${packageName}...`)
@@ -299,6 +312,12 @@ async function fetchRemoteVersions(
     }
 
     const versions = extractVersionsFromRemoteResponse(metadataResult.response);
+    
+    // Cache the fetched versions
+    if (versions.length > 0) {
+      await cacheManager.cacheMetadata(packageName, versions);
+    }
+    
     return { success: true, versions };
   } finally {
     if (spinner) {

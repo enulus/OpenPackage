@@ -38,6 +38,7 @@ interface DependencyResolverOptions {
   profile?: string;
   apiKey?: string;
   onWarning?: (message: string) => void;
+  skipCache?: boolean;  // Force fresh git clones (for --remote flag)
 }
 
 export interface ResolveDependenciesResult {
@@ -228,7 +229,8 @@ export async function resolveDependencies(
             
             const result = await loadPackageFromGit({
               url: gitUrl,
-              ref
+              ref,
+              skipCache: resolverOptions.skipCache
             });
             if (result.isMarketplace) {
               logger.error(`Dependency '${dep.name}' points to a Claude Code plugin marketplace, which cannot be used as a dependency`);
@@ -731,7 +733,8 @@ export async function resolveDependencies(
           
           const result = await loadPackageFromGit({
             url: gitUrl,
-            ref
+            ref,
+            skipCache: resolverOptions.skipCache
           });
           if (result.isMarketplace) {
             logger.error(`Dependency '${dep.name}' points to a Claude Code plugin marketplace, which cannot be used as a dependency`);

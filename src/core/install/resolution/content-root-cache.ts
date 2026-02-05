@@ -26,11 +26,18 @@ function getCacheKey(source: ResolvedSource): string {
   return `${source.gitUrl}#${source.gitRef ?? 'default'}#${source.resourcePath ?? ''}`;
 }
 
+export interface EnsureContentRootOptions {
+  skipCache?: boolean;
+}
+
 /**
  * Ensure content root is loaded for a git source, using cache.
  * Returns undefined contentRoot if load fails.
  */
-export async function ensureContentRoot(source: ResolvedSource): Promise<ContentRootResult> {
+export async function ensureContentRoot(
+  source: ResolvedSource,
+  options: EnsureContentRootOptions = {}
+): Promise<ContentRootResult> {
   if (source.type !== 'git') {
     return {
       contentRoot: source.contentRoot ?? source.absolutePath,
@@ -39,9 +46,13 @@ export async function ensureContentRoot(source: ResolvedSource): Promise<Content
   }
 
   const key = getCacheKey(source);
-  const cached = contentRootCache.get(key);
-  if (cached) {
-    return cached;
+  
+  // Skip in-memory cache if skipCache is set (forces fresh git fetch)
+  if (!options.skipCache) {
+    const cached = contentRootCache.get(key);
+    if (cached) {
+      return cached;
+    }
   }
 
   try {
@@ -49,7 +60,8 @@ export async function ensureContentRoot(source: ResolvedSource): Promise<Content
       url: source.gitUrl!,
       ref: source.gitRef,
       path: undefined,
-      resourcePath: source.resourcePath
+      resourcePath: source.resourcePath,
+      skipCache: options.skipCache
     });
 
     const contentRoot = source.resourcePath

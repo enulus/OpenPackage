@@ -18,13 +18,16 @@ import {
   touchCacheEntry,
   isCommitCached
 } from './git-cache.js';
+import { createCacheManager } from '../core/cache-manager.js';
 
 const execFileAsync = promisify(execFile);
+const cacheManager = createCacheManager();
 
 export interface GitCloneOptions {
   url: string;
   ref?: string; // branch/tag/sha
   subdir?: string; // subdir within repository
+  skipCache?: boolean; // Force fresh clone, bypass ref cache (for --remote flag)
 }
 
 export interface GitCloneResult {
@@ -35,6 +38,10 @@ export interface GitCloneResult {
 
 function isSha(ref: string): boolean {
   return /^[0-9a-f]{7,40}$/i.test(ref);
+}
+
+function isFullSha(ref: string): boolean {
+  return /^[0-9a-f]{40}$/i.test(ref);
 }
 
 async function runGit(args: string[], cwd?: string): Promise<string> {
@@ -56,6 +63,36 @@ async function getCurrentCommitSha(repoPath: string): Promise<string> {
 }
 
 /**
+ * Resolve a ref to a commit SHA using ls-remote (without cloning).
+ * Returns the 7-char short SHA or null if resolution fails.
+ * 
+ * When ref is undefined or 'HEAD', resolves the default branch.
+ */
+async function resolveRefWithLsRemote(url: string, ref?: string): Promise<string | null> {
+  try {
+    const targetRef = ref || 'HEAD';
+    const output = await runGit(['ls-remote', url, targetRef]);
+    if (!output) {
+      return null;
+    }
+    const match = output.match(/^([0-9a-f]{40})\s/i);
+    return match ? match[1].substring(0, 7) : null;
+  } catch {
+    return null;
+  }
+}
+
+const SEMVER_TAG_PATTERN = /^v?\d+\.\d+\.\d+(?:[-+].*)?$/;
+
+/**
+ * Check if a ref is immutable (full SHA or semver tag).
+ * Immutable refs never change, so we can trust cached mappings forever.
+ */
+function isImmutableRef(ref: string): boolean {
+  return isFullSha(ref) || SEMVER_TAG_PATTERN.test(ref);
+}
+
+/**
  * Clone a Git repository to the structured cache.
  * Uses shallow clones (--depth 1) for space efficiency.
  * 
@@ -65,7 +102,73 @@ async function getCurrentCommitSha(repoPath: string): Promise<string> {
  * Returns the path to the cloned repository (or subdir if specified).
  */
 export async function cloneRepoToCache(options: GitCloneOptions): Promise<GitCloneResult> {
-  const { url, ref, subdir } = options;
+  const { url, ref, subdir, skipCache } = options;
+  
+  // Format URL for display (extract repo name from URL)
+  const getDisplayUrl = () => {
+    const match = url.match(/([^/]+\/[^/]+?)(?:\.git)?$/);
+    return match ? match[1] : url;
+  };
+  
+  // Helper to check cache and return result if hit
+  const tryCache = async (shortSha: string, source: string): Promise<GitCloneResult | null> => {
+    if (await isCommitCached(url, shortSha)) {
+      const commitDir = getGitCommitCacheDir(url, shortSha);
+      await touchCacheEntry(commitDir);
+      const finalPath = subdir ? join(commitDir, subdir) : commitDir;
+      if (!subdir || await exists(finalPath)) {
+        logger.debug(`Using cached commit (${source})`, { url, ref, commit: shortSha });
+        // Show cache hit to user
+        const refDisplay = ref ? `#${ref}` : '';
+        const subdirDisplay = subdir ? `/${subdir}` : '';
+        console.log(`✓ Using cached ${getDisplayUrl()}${refDisplay}${subdirDisplay} [${shortSha}]`);
+        return { path: finalPath, commitSha: shortSha, repoPath: commitDir };
+      }
+    }
+    return null;
+  };
+  
+  // CACHE CHECK: Skip if skipCache is set (--remote flag forces fresh fetch)
+  if (!skipCache) {
+    // Case 1: Full SHA provided - check cache directly (no network needed)
+    if (ref && isFullSha(ref)) {
+      const shortSha = ref.substring(0, 7);
+      const cached = await tryCache(shortSha, 'full SHA');
+      if (cached) return cached;
+    }
+    
+    // Case 2: Immutable ref (semver tag) - trust ref cache without TTL
+    if (ref && isImmutableRef(ref) && !isFullSha(ref)) {
+      const cachedCommit = await cacheManager.getCachedCommitForRef(url, ref);
+      if (cachedCommit) {
+        const cached = await tryCache(cachedCommit, 'immutable ref cache');
+        if (cached) return cached;
+      }
+    }
+    
+    // Case 3: Mutable ref (branch) or no ref (default branch)
+    // Always do ls-remote to get current SHA, then check cache
+    // This is the key fix: we now handle ref === undefined
+    const refDisplay = ref ? `#${ref}` : '';
+    const spinner = new Spinner(`Checking ${getDisplayUrl()}${refDisplay}`);
+    spinner.start();
+    
+    const resolvedSha = await resolveRefWithLsRemote(url, ref);
+    spinner.stop();
+    
+    if (resolvedSha) {
+      // Update ref cache for future lookups
+      if (ref) {
+        await cacheManager.cacheRefCommit(url, ref, resolvedSha);
+      }
+      
+      const cached = await tryCache(resolvedSha, 'ls-remote');
+      if (cached) return cached;
+      
+      // SHA resolved but not cached - will need to clone
+      logger.debug('Commit not cached, will clone', { url, ref, resolvedSha });
+    }
+  }
   
   // Clone to a temporary commit directory (we'll get the actual SHA after cloning)
   const repoDir = getGitRepoCacheDir(url);
@@ -172,6 +275,11 @@ export async function cloneRepoToCache(options: GitCloneOptions): Promise<GitClo
       clonedAt: new Date().toISOString(),
       lastAccessed: new Date().toISOString()
     });
+    
+    // Cache the ref→commit mapping for future lookups
+    if (ref) {
+      await cacheManager.cacheRefCommit(url, ref, commitSha);
+    }
     
     // Validate subdir if specified
     const finalPath = subdir ? join(commitDir, subdir) : commitDir;

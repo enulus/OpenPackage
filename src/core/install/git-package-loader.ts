@@ -8,6 +8,7 @@ export interface GitPackageLoadOptions {
   ref?: string;
   path?: string;
   resourcePath?: string;
+  skipCache?: boolean; // Force fresh clone (for --remote flag)
 }
 
 export interface GitPackageLoadResult {
@@ -22,7 +23,8 @@ export async function loadPackageFromGit(options: GitPackageLoadOptions): Promis
   const cloneResult = await cloneRepoToCache({ 
     url: options.url, 
     ref: options.ref,
-    subdir: options.path
+    subdir: options.path,
+    skipCache: options.skipCache
   });
   
   const { path: sourcePath, repoPath, commitSha } = cloneResult;

@@ -243,7 +243,7 @@ export class DependencyGraphBuilder {
     let contentRoot: string | undefined = source.contentRoot ?? source.absolutePath;
 
     if (source.type === 'git' && !contentRoot) {
-      const result = await ensureContentRoot(source);
+      const result = await ensureContentRoot(source, { skipCache: this.options.skipCache });
       if (result.isMarketplace) {
         this.warnings.push(`Dependency '${declaration.name}' is a marketplace; skipping nested deps`);
       } else if (result.contentRoot) {

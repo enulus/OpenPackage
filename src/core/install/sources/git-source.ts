@@ -29,11 +29,14 @@ export class GitSourceLoader implements PackageSourceLoader {
     
     try {
       // Load package from git
+      // Use skipCache when resolutionMode is 'remote-primary' (--remote flag)
+      const skipCache = options.resolutionMode === 'remote-primary';
       const result = await loadPackageFromGit({
         url: source.gitUrl,
         ref: source.gitRef,
         path: source.gitPath,
-        resourcePath: source.resourcePath
+        resourcePath: source.resourcePath,
+        skipCache
       });
       
       // Phase 5: If manifest base is present, skip detection (reproducibility)
