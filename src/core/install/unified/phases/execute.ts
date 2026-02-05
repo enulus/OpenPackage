@@ -63,6 +63,37 @@ export async function executeInstallationPhase(
     outcome.rootFileResults.installed.length > 0 ||
     outcome.rootFileResults.updated.length > 0;
   
+  // Record telemetry for successful installations
+  if (installedAnyFiles && ctx.execution.telemetryCollector) {
+    for (const pkg of ctx.resolvedPackages) {
+      // Determine resource type
+      let resourceType: string | undefined;
+      if (pkg.marketplaceMetadata) {
+        resourceType = 'plugin';
+      } else if (ctx.matchedPattern) {
+        // Check if this was an agent or skill based on pattern
+        if (ctx.matchedPattern.includes('agent')) {
+          resourceType = 'agent';
+        } else if (ctx.matchedPattern.includes('skill')) {
+          resourceType = 'skill';
+        }
+      }
+      
+      // Extract resource name from package name
+      const resourceName = pkg.name.split('/').pop() || pkg.name;
+      
+      ctx.execution.telemetryCollector.recordInstall({
+        packageName: pkg.name,
+        version: pkg.version,
+        resourcePath: ctx.matchedPattern,
+        resourceType,
+        resourceName,
+        marketplaceName: pkg.marketplaceMetadata?.pluginName,
+        pluginName: pkg.marketplaceMetadata?.pluginName
+      });
+    }
+  }
+  
   return {
     ...outcome,
     hadErrors,
