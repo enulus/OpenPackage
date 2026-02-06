@@ -12,6 +12,7 @@ import { readWorkspaceIndex } from '../../utils/workspace-index-yml.js';
 import { matchPattern } from '../flows/flow-source-discovery.js';
 import { resolveDeclaredPath } from '../../utils/path-resolution.js';
 import { normalizePathForProcessing } from '../../utils/path-normalization.js';
+import { normalizePlatforms } from '../../utils/platform-mapper.js';
 import { logger } from '../../utils/logger.js';
 import type { Flow, SwitchExpression } from '../../types/flows.js';
 
@@ -59,16 +60,27 @@ interface PatternInfo {
  * Scan workspace for files that match platform patterns but are not tracked in index
  * 
  * @param workspaceRoot - Root directory of the workspace
+ * @param platformFilter - Optional array of platform names to filter by
  * @returns Scan result with all untracked files
  */
 export async function scanUntrackedFiles(
-  workspaceRoot: string
+  workspaceRoot: string,
+  platformFilter?: string[]
 ): Promise<UntrackedScanResult> {
-  logger.debug('Starting untracked files scan', { workspaceRoot });
+  logger.debug('Starting untracked files scan', { workspaceRoot, platformFilter });
 
   // Step 1: Detect platforms in workspace
-  const platforms = await getDetectedPlatforms(workspaceRoot);
-  logger.debug(`Detected platforms: ${platforms.join(', ') || 'none'}`);
+  let platforms = await getDetectedPlatforms(workspaceRoot);
+  
+  // Apply platform filter if specified
+  const normalizedFilter = normalizePlatforms(platformFilter);
+  if (normalizedFilter && normalizedFilter.length > 0) {
+    platforms = platforms.filter(p => normalizedFilter.includes(p.toLowerCase()));
+    logger.debug(`Filtered to platforms: ${platforms.join(', ') || 'none'}`);
+  } else {
+    logger.debug(`Detected platforms: ${platforms.join(', ') || 'none'}`);
+  }
+  
   if (platforms.length === 0) {
     logger.debug('No platforms detected in workspace');
     return createEmptyResult();

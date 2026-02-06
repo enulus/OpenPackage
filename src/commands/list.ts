@@ -42,14 +42,18 @@ function printTreeNode(
   isLast: boolean,
   showFiles: boolean
 ): void {
-  const connector = isLast ? '└── ' : '├── ';
-  const childPrefix = prefix + (isLast ? '    ' : '│   ');
+  const hasChildren = node.children.length > 0;
+  const hasFiles = showFiles && node.report.fileList && node.report.fileList.length > 0;
+  const hasBranches = hasChildren || hasFiles;
+  
+  const connector = isLast ? (hasBranches ? '└─┬ ' : '└── ') : (hasBranches ? '├─┬ ' : '├── ');
+  const childPrefix = prefix + (isLast ? '  ' : '│ ');
   
   console.log(`${prefix}${connector}${formatPackageName(node.report)}`);
   
   // Print files if available
-  if (showFiles && node.report.fileList && node.report.fileList.length > 0) {
-    const files = node.report.fileList;
+  if (hasFiles) {
+    const files = node.report.fileList!;
     files.forEach((file, fileIndex) => {
       const isLastFile = fileIndex === files.length - 1 && node.children.length === 0;
       const fileConnector = isLastFile ? '└── ' : '├── ';
@@ -115,12 +119,21 @@ function printUntrackedFiles(
     // Sort categories
     const sortedCategories = Array.from(categoryMap.keys()).sort();
     
-    for (const category of sortedCategories) {
+    for (let catIdx = 0; catIdx < sortedCategories.length; catIdx++) {
+      const category = sortedCategories[catIdx];
       const categoryFiles = categoryMap.get(category)!;
-      console.log(`  ${category}/`);
+      const isLastCategory = catIdx === sortedCategories.length - 1;
+      const catPrefix = isLastCategory ? '└─┬ ' : '├─┬ ';
+      const catIndent = isLastCategory ? '  ' : '│ ';
       
-      for (const file of categoryFiles) {
-        console.log(`    ${dim(file.workspacePath)}`);
+      console.log(`${catPrefix}${category}/`);
+      
+      for (let fileIdx = 0; fileIdx < categoryFiles.length; fileIdx++) {
+        const file = categoryFiles[fileIdx];
+        const isLastFile = fileIdx === categoryFiles.length - 1;
+        const filePrefix = isLastFile ? '└── ' : '├── ';
+        
+        console.log(`${catIndent}${filePrefix}${dim(file.workspacePath)}`);
       }
     }
     
