@@ -63,10 +63,15 @@ export function extractAllFromPatterns(platformsConfig: any): string[] {
 function addFlowPatterns(from: any, patterns: Set<string>): void {
   if (typeof from === 'string') {
     patterns.add(from);
+  } else if (typeof from === 'object' && from !== null && 'pattern' in from && typeof from.pattern === 'string') {
+    // Pattern object (e.g. { pattern: "agents/**/*.md", schema?: "..." })
+    patterns.add(from.pattern);
   } else if (Array.isArray(from)) {
     for (const p of from) {
       if (typeof p === 'string') {
         patterns.add(p);
+      } else if (typeof p === 'object' && p !== null && 'pattern' in p && typeof (p as any).pattern === 'string') {
+        patterns.add((p as any).pattern);
       }
     }
   } else if (typeof from === 'object' && from.$switch) {
@@ -79,14 +84,20 @@ function addFlowPatterns(from: any, patterns: Set<string>): void {
           for (const v of c.value) {
             if (typeof v === 'string') {
               patterns.add(v);
+            } else if (typeof v === 'object' && v !== null && 'pattern' in v && typeof (v as any).pattern === 'string') {
+              patterns.add((v as any).pattern);
             }
           }
+        } else if (typeof c.value === 'object' && c.value !== null && 'pattern' in c.value && typeof (c.value as any).pattern === 'string') {
+          patterns.add((c.value as any).pattern);
         }
       }
     }
     if (from.$switch.default) {
       if (typeof from.$switch.default === 'string') {
         patterns.add(from.$switch.default);
+      } else if (typeof from.$switch.default === 'object' && from.$switch.default !== null && 'pattern' in from.$switch.default && typeof (from.$switch.default as any).pattern === 'string') {
+        patterns.add((from.$switch.default as any).pattern);
       }
     }
   }

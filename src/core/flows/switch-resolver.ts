@@ -6,8 +6,39 @@
  */
 
 import { minimatch } from 'minimatch';
-import type { SwitchExpression, SwitchCase, FlowContext } from '../../types/flows.js';
+import type { SwitchExpression, SwitchCase, SwitchCaseValue, FlowContext } from '../../types/flows.js';
 import { smartEquals } from '../../utils/path-comparison.js';
+
+/**
+ * Result of resolving a switch expression
+ * Contains both the resolved pattern string and optional schema
+ */
+export interface SwitchResolutionResult {
+  /** Resolved pattern string */
+  pattern: string;
+  /** Optional schema path (if value was a FlowPattern with schema) */
+  schema?: string;
+}
+
+/**
+ * Extract pattern string from a SwitchCaseValue
+ */
+function extractPattern(value: SwitchCaseValue): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  return value.pattern;
+}
+
+/**
+ * Extract schema from a SwitchCaseValue (if present)
+ */
+function extractSchema(value: SwitchCaseValue): string | undefined {
+  if (typeof value === 'string') {
+    return undefined;
+  }
+  return value.schema;
+}
 
 /**
  * Resolve a switch expression to a concrete target path
@@ -18,13 +49,28 @@ import { smartEquals } from '../../utils/path-comparison.js';
  * 
  * @param switchExpr - The switch expression to resolve
  * @param context - Flow execution context with variables
- * @returns Resolved target path string
+ * @returns Resolved target path string (for backward compatibility)
  * @throws Error if no cases match and no default is provided
  */
 export function resolveSwitchExpression(
   switchExpr: SwitchExpression,
   context: FlowContext
 ): string {
+  return resolveSwitchExpressionFull(switchExpr, context).pattern;
+}
+
+/**
+ * Resolve a switch expression to a full result with pattern and optional schema
+ * 
+ * @param switchExpr - The switch expression to resolve
+ * @param context - Flow execution context with variables
+ * @returns Full resolution result with pattern and optional schema
+ * @throws Error if no cases match and no default is provided
+ */
+export function resolveSwitchExpressionFull(
+  switchExpr: SwitchExpression,
+  context: FlowContext
+): SwitchResolutionResult {
   const { field, cases, default: defaultValue } = switchExpr.$switch;
 
   // Resolve the field value from context variables
@@ -33,13 +79,19 @@ export function resolveSwitchExpression(
   // Evaluate cases in order (first match wins)
   for (const switchCase of cases) {
     if (matchesPattern(fieldValue, switchCase.pattern)) {
-      return switchCase.value;
+      return {
+        pattern: extractPattern(switchCase.value),
+        schema: extractSchema(switchCase.value),
+      };
     }
   }
 
   // No match - return default or throw error
   if (defaultValue !== undefined) {
-    return defaultValue;
+    return {
+      pattern: extractPattern(defaultValue),
+      schema: extractSchema(defaultValue),
+    };
   }
 
   throw new Error(
@@ -164,19 +216,33 @@ export function validateSwitchExpression(
 
       if (!('value' in switchCase)) {
         errors.push(`Case at index ${index} missing required field: value`);
-      } else if (typeof switchCase.value !== 'string') {
-        errors.push(`Case at index ${index} value must be a string`);
+      } else if (!isValidSwitchCaseValue(switchCase.value)) {
+        errors.push(`Case at index ${index} value must be a string or object with 'pattern' field`);
       }
     });
   }
 
-  // Validate default (optional, but must be string if provided)
-  if (defaultValue !== undefined && typeof defaultValue !== 'string') {
-    errors.push('Switch expression default must be a string');
+  // Validate default (optional, but must be valid SwitchCaseValue if provided)
+  if (defaultValue !== undefined && !isValidSwitchCaseValue(defaultValue)) {
+    errors.push('Switch expression default must be a string or object with \'pattern\' field');
   }
 
   return {
     valid: errors.length === 0,
     errors,
   };
+}
+
+/**
+ * Check if a value is a valid SwitchCaseValue (string or FlowPattern with pattern field)
+ */
+function isValidSwitchCaseValue(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return true;
+  }
+  if (typeof value === 'object' && value !== null && 'pattern' in value) {
+    const pattern = (value as { pattern: unknown }).pattern;
+    return typeof pattern === 'string';
+  }
+  return false;
 }

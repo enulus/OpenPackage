@@ -15,6 +15,17 @@ import { type UniversalSubdir } from '../constants/index.js';
 import { normalizePathForProcessing, findSubpathIndex } from './path-normalization.js';
 
 /**
+ * Extract pattern string from a flow pattern value
+ * Handles both string patterns and FlowPattern objects with { pattern, schema }
+ */
+function extractPatternString(pattern: string | { pattern: string; schema?: string }): string {
+  if (typeof pattern === 'string') {
+    return pattern;
+  }
+  return pattern.pattern;
+}
+
+/**
  * Result of mapping a universal path to a platform path.
  *
  * IMPORTANT CONTRACT:
@@ -131,7 +142,8 @@ export function mapPlatformFileToUniversal(
           }
           // Extract universal subdir from 'from' pattern
           // For array patterns, use the first pattern
-          const fromPattern = Array.isArray(flow.from) ? flow.from[0] : flow.from;
+          const fromPatternRaw = Array.isArray(flow.from) ? flow.from[0] : flow.from;
+          const fromPattern = extractPatternString(fromPatternRaw);
           const fromParts = fromPattern.split('/');
           const subdir = fromParts[0];
           
@@ -148,9 +160,7 @@ export function mapPlatformFileToUniversal(
           // Handle extension transformations from flow
           const workspaceExtMatch = relPath.match(/\.[^.]+$/);
           const toExtMatch = toPattern.match(/\.[^./]+$/);
-          // For array patterns, use the first pattern
-          const fromPatternStr = Array.isArray(flow.from) ? flow.from[0] : flow.from;
-          const fromExtMatch = fromPatternStr.match(/\.[^./]+$/);
+          const fromExtMatch = fromPattern.match(/\.[^./]+$/);
           
           if (workspaceExtMatch && toExtMatch && fromExtMatch) {
             const workspaceExt = workspaceExtMatch[0];
@@ -202,8 +212,9 @@ export function mapWorkspaceFileToUniversal(
         if (typeof flow.from === 'object' && '$switch' in flow.from) {
           continue;
         }
-        const fromPattern = Array.isArray(flow.from) ? flow.from[0] : flow.from;
-        if (!fromPattern) continue;
+        const fromPatternRaw = Array.isArray(flow.from) ? flow.from[0] : flow.from;
+        if (!fromPatternRaw) continue;
+        const fromPattern = extractPatternString(fromPatternRaw);
         
         // Check if this file matches the full pattern (using relative path)
         if (!matchesFlowPattern(relativePath, fromPattern)) {
@@ -355,7 +366,8 @@ function mapUniversalToPlatformWithFlows(
     if (typeof flow.from === 'object' && '$switch' in flow.from) {
       return false;
     }
-    const fromPattern = Array.isArray(flow.from) ? flow.from[0] : flow.from;
+    const fromPatternRaw = Array.isArray(flow.from) ? flow.from[0] : flow.from;
+    const fromPattern = extractPatternString(fromPatternRaw);
     return fromPattern.startsWith(`${subdir}/`);
   });
   if (candidateFlows.length === 0) {
@@ -368,7 +380,8 @@ function mapUniversalToPlatformWithFlows(
     if (typeof flow.from === 'object' && '$switch' in flow.from) {
       return false;
     }
-    const fromPattern = Array.isArray(flow.from) ? flow.from[0] : flow.from;
+    const fromPatternRaw = Array.isArray(flow.from) ? flow.from[0] : flow.from;
+    const fromPattern = extractPatternString(fromPatternRaw);
     
     // Check if the source path matches the pattern
     // Handle glob patterns with ** and *
@@ -402,7 +415,8 @@ function mapUniversalToPlatformWithFlows(
             if (typeof flow.from === 'object' && '$switch' in flow.from) {
               return '';
             }
-            const fromPattern = Array.isArray(flow.from) ? flow.from[0] : flow.from;
+            const fromPatternRaw = Array.isArray(flow.from) ? flow.from[0] : flow.from;
+            const fromPattern = extractPatternString(fromPatternRaw);
             return extname(fromPattern);
           })
           .filter((ext: string) => typeof ext === 'string' && ext.length > 0)

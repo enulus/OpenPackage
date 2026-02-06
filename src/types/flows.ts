@@ -68,6 +68,23 @@ export interface MultiTargetFlows {
 }
 
 /**
+ * Flow pattern with optional schema reference
+ * Used in switch case values to specify format detection schema
+ */
+export interface FlowPatternValue {
+  /** Glob pattern (e.g., "agents/**\/*.md") */
+  pattern: string;
+  
+  /** Explicit path to schema (e.g., "./schemas/formats/claude-agent.schema.json") */
+  schema?: string;
+}
+
+/**
+ * Switch case value - either a simple string path or a pattern with schema
+ */
+export type SwitchCaseValue = string | FlowPatternValue;
+
+/**
  * Switch expression for conditional target path resolution
  * Inspired by MongoDB's $switch aggregation operator
  */
@@ -80,7 +97,7 @@ export interface SwitchExpression {
     cases: SwitchCase[];
     
     /** Optional default value if no pattern matches */
-    default?: string;
+    default?: SwitchCaseValue;
   };
 }
 
@@ -91,8 +108,8 @@ export interface SwitchCase {
   /** Pattern to match (string for equality/glob, object for shape matching) */
   pattern: string | object;
   
-  /** Target path to use if pattern matches */
-  value: string;
+  /** Target path to use if pattern matches (string or pattern with schema) */
+  value: SwitchCaseValue;
 }
 
 /**

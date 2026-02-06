@@ -795,9 +795,18 @@
           "$switch": {
             "field": "$$targetRoot",
             "cases": [
-              { "pattern": "~/", "value": ".config/opencode/agents/**/*.md" }
+              { 
+                "pattern": "~/", 
+                "value": { 
+                  "pattern": ".config/opencode/agents/**/*.md",
+                  "schema": "./schemas/formats/opencode-agent.schema.json"
+                }
+              }
             ],
-            "default": ".opencode/agents/**/*.md"
+            "default": { 
+              "pattern": ".opencode/agents/**/*.md",
+              "schema": "./schemas/formats/opencode-agent.schema.json"
+            }
           }
         },
         "map": [

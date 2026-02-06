@@ -10,12 +10,13 @@ import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { logger } from '../../utils/logger.js';
-import type { Flow } from '../../types/flows.js';
+import type { Flow, FlowContext, SwitchExpression } from '../../types/flows.js';
 import type { 
   DetectionSchema, 
   FlowPattern,
   PlatformId 
 } from './detection-types.js';
+import { resolveSwitchExpressionFull } from '../flows/switch-resolver.js';
 
 // Get the path to platforms.jsonc for resolving relative schema paths
 const __filename = fileURLToPath(import.meta.url);
@@ -81,14 +82,29 @@ class SchemaRegistry {
    * 
    * @param flow - Flow object (may use string or object patterns)
    * @param direction - Which pattern to extract schema from ('from' or 'to')
+   * @param context - Optional flow context for resolving $switch expressions
    * @returns Schema if pattern has schema reference, null otherwise
    */
-  getSchemaForFlow(flow: Flow, direction: 'from' | 'to'): DetectionSchema | null {
+  getSchemaForFlow(flow: Flow, direction: 'from' | 'to', context?: FlowContext): DetectionSchema | null {
     const pattern = flow[direction];
     
-    // Skip switch expressions (not eligible for detection)
+    // Handle switch expressions - resolve with context if available
     if (typeof pattern === 'object' && '$switch' in pattern) {
-      return null;
+      if (!context) {
+        // Without context, cannot resolve switch expression
+        return null;
+      }
+      
+      try {
+        const result = resolveSwitchExpressionFull(pattern as SwitchExpression, context);
+        if (result.schema) {
+          return this.loadSchema(result.schema);
+        }
+        return null;
+      } catch {
+        // If switch resolution fails, return null
+        return null;
+      }
     }
     
     // Extract schema path from pattern

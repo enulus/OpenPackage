@@ -14,6 +14,19 @@ import { getAllPlatforms } from '../platforms.js';
 import type { Platform } from '../platforms.js';
 import { logger } from '../../utils/logger.js';
 
+function isFlowPatternValue(value: any): value is { pattern: string; schema?: string } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'pattern' in value &&
+    typeof (value as any).pattern === 'string'
+  );
+}
+
+function unwrapPatternValue(value: any): any {
+  return isFlowPatternValue(value) ? value.pattern : value;
+}
+
 /**
  * Discovery result for a single flow
  */
@@ -131,14 +144,21 @@ export async function discoverFlowSources(
  * @returns Resolved pattern
  */
 export function resolvePattern(
-  pattern: string | SwitchExpression,
+  pattern: any,
   context: FlowContext,
   capturedName?: string
 ): string {
+  pattern = unwrapPatternValue(pattern);
+
   // Handle switch expressions
   if (typeof pattern === 'object' && '$switch' in pattern) {
     throw new Error('Cannot resolve SwitchExpression in resolvePattern - expression must be resolved first');
   }
+
+  if (typeof pattern !== 'string') {
+    throw new Error(`Invalid flow pattern type: expected string, got ${typeof pattern}`);
+  }
+
   return pattern.replace(/{(\w+)}/g, (match, key) => {
     // If capturedName is provided and this is {name}, use the captured value
     if (key === 'name' && capturedName !== undefined) {
@@ -192,10 +212,14 @@ export function extractCapturedName(sourcePath: string, pattern: string): string
  * @returns First pattern
  */
 export function getFirstFromPattern(from: string | string[] | SwitchExpression): string {
-  if (typeof from === 'object' && '$switch' in from) {
+  const value = unwrapPatternValue(Array.isArray(from) ? from[0] : from);
+  if (typeof value === 'object' && value !== null && '$switch' in value) {
     throw new Error('Cannot get first pattern from SwitchExpression - expression must be resolved first');
   }
-  return Array.isArray(from) ? from[0] : from;
+  if (typeof value !== 'string') {
+    throw new Error(`Invalid flow.from pattern type: expected string, got ${typeof value}`);
+  }
+  return value;
 }
 
 /**

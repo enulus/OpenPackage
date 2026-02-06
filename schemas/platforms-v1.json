@@ -268,7 +268,16 @@
               }
             },
             "default": {
-              "type": "string",
+              "oneOf": [
+                {
+                  "type": "string",
+                  "description": "Default target path if no pattern matches"
+                },
+                {
+                  "$ref": "#/definitions/flowPatternWithSchema",
+                  "description": "Default target path with schema for format detection"
+                }
+              ],
               "description": "Optional default value if no pattern matches"
             }
           }
@@ -293,8 +302,16 @@
           ]
         },
         "value": {
-          "type": "string",
-          "description": "Target path to use if pattern matches"
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Target path to use if pattern matches"
+            },
+            {
+              "$ref": "#/definitions/flowPatternWithSchema",
+              "description": "Target path with schema for format detection"
+            }
+          ]
         }
       }
     },
