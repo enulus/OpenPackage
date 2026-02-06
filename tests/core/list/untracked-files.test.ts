@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { scanUntrackedFiles } from '../../../src/core/list/untracked-files-scanner.js';
+import { scanUntrackedFiles, extractStaticWalkRoot } from '../../../src/core/list/untracked-files-scanner.js';
 import { writeWorkspaceIndex } from '../../../src/utils/workspace-index-yml.js';
 import { getWorkspaceIndexPath } from '../../../src/utils/workspace-index-yml.js';
 import type { WorkspaceIndex } from '../../../src/types/workspace-index.js';
@@ -276,6 +276,72 @@ async function createCursorPlatform(dir: string): Promise<void> {
     assert.equal(result.totalFiles, 0, 'Should recognize tracked file');
     
     console.log('✓ Normalize paths correctly for comparison');
+  } finally {
+    await fs.rm(testDir, { recursive: true, force: true });
+  }
+}
+
+// Test: extractStaticWalkRoot correctly identifies walk roots
+{
+  // Platform directory patterns -> scoped walk root
+  const claude = extractStaticWalkRoot('.claude/rules/*.md');
+  assert.deepEqual(claude, { root: '.claude/rules', rootOnly: false });
+
+  const cursor = extractStaticWalkRoot('.cursor/rules/*.mdc');
+  assert.deepEqual(cursor, { root: '.cursor/rules', rootOnly: false });
+
+  const nested = extractStaticWalkRoot('.claude/commands/deep/nested/*.md');
+  assert.deepEqual(nested, { root: '.claude/commands/deep/nested', rootOnly: false });
+
+  // Root-level file patterns -> rootOnly (no recursive walk)
+  const agents = extractStaticWalkRoot('AGENTS.md');
+  assert.deepEqual(agents, { root: null, rootOnly: true });
+
+  const dotfile = extractStaticWalkRoot('.cursorrules');
+  assert.deepEqual(dotfile, { root: null, rootOnly: true });
+
+  // Unsafe patterns (glob in first segment) -> null root
+  const doublestar = extractStaticWalkRoot('**/*.md');
+  assert.deepEqual(doublestar, { root: null, rootOnly: false });
+
+  const starFirst = extractStaticWalkRoot('*/rules/*.md');
+  assert.deepEqual(starFirst, { root: null, rootOnly: false });
+
+  // Backslash normalization
+  const backslash = extractStaticWalkRoot('.claude\\rules\\*.md');
+  assert.deepEqual(backslash, { root: '.claude/rules', rootOnly: false });
+
+  console.log('✓ extractStaticWalkRoot correctly identifies walk roots');
+}
+
+// Test: Scanner does not walk unrelated directories (performance guard)
+{
+  const testDir = join(tmpdir(), `opkg-test-untracked-${Date.now()}-perf`);
+  await fs.mkdir(testDir, { recursive: true });
+
+  try {
+    await createClaudePlatform(testDir);
+
+    // Create a large unrelated directory tree that should NOT be walked
+    const unrelatedDir = join(testDir, 'huge-project', 'src', 'deeply', 'nested');
+    await fs.mkdir(unrelatedDir, { recursive: true });
+    await fs.writeFile(join(unrelatedDir, 'file.md'), 'Should not be found');
+
+    // Create actual platform files
+    await fs.mkdir(join(testDir, '.claude', 'rules'), { recursive: true });
+    await fs.writeFile(join(testDir, '.claude', 'rules', 'real.md'), 'Real rule');
+
+    await createWorkspaceIndex(testDir, { packages: {} });
+
+    const start = Date.now();
+    const result = await scanUntrackedFiles(testDir);
+    const elapsed = Date.now() - start;
+
+    assert.equal(result.totalFiles, 1, 'Should only find platform files');
+    assert.ok(result.files[0].workspacePath.includes('real.md'));
+    assert.ok(elapsed < 5000, `Scan should complete quickly (took ${elapsed}ms)`);
+
+    console.log('✓ Scanner does not walk unrelated directories');
   } finally {
     await fs.rm(testDir, { recursive: true, force: true });
   }

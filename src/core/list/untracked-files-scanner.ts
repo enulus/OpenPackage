@@ -3,13 +3,19 @@
  * 
  * Discovers files in workspace that match platform patterns but are not tracked
  * in the workspace index (.openpackage/openpackage.index.yml).
+ * 
+ * Uses static-prefix extraction to determine minimal walk roots from patterns,
+ * then delegates to fast-glob for efficient, bounded directory traversal.
+ * This prevents unbounded walks when workspaceRoot is ~ (home directory).
  */
 
-import { join, relative } from 'path';
+import { join } from 'path';
+import { homedir } from 'os';
+import fg from 'fast-glob';
+import { minimatch } from 'minimatch';
 import type { Platform } from '../platforms.js';
 import { getDetectedPlatforms, getPlatformDefinition } from '../platforms.js';
 import { readWorkspaceIndex } from '../../utils/workspace-index-yml.js';
-import { matchPattern } from '../flows/flow-source-discovery.js';
 import { resolveDeclaredPath } from '../../utils/path-resolution.js';
 import { normalizePathForProcessing } from '../../utils/path-normalization.js';
 import { normalizePlatforms } from '../../utils/platform-mapper.js';
@@ -203,38 +209,137 @@ function extractCategoryFromPattern(pattern: string): string {
 }
 
 /**
- * Discover files matching all patterns
- * Returns Map of absolute path -> UntrackedFile info
+ * Extract the static (non-glob) prefix directory from a pattern.
+ * Consumes path segments until a segment containing glob metacharacters is found.
+ * 
+ * Examples:
+ *   ".claude/rules/*.md"  -> { root: ".claude/rules", rootOnly: false }
+ *   ".cursor/rules/*.md"  -> { root: ".cursor/rules", rootOnly: false }
+ *   "AGENTS.md"           -> { root: null, rootOnly: true }
+ *   "**\/*.md"             -> { root: null, rootOnly: false } (unsafe)
+ */
+export function extractStaticWalkRoot(pattern: string): { root: string | null; rootOnly: boolean } {
+  const normalized = pattern.replace(/\\/g, '/');
+
+  if (!normalized.includes('/')) {
+    return { root: null, rootOnly: true };
+  }
+
+  const segments = normalized.split('/');
+  const hasGlobMeta = (seg: string) => /[*?\[\]{}()!+@]/.test(seg);
+  const staticSegments: string[] = [];
+
+  for (const seg of segments) {
+    if (!seg) continue;
+    if (hasGlobMeta(seg)) break;
+    staticSegments.push(seg);
+  }
+
+  if (staticSegments.length === 0) {
+    return { root: null, rootOnly: false };
+  }
+
+  return { root: staticSegments.join('/'), rootOnly: false };
+}
+
+const IGNORED_DIRS = ['**/.openpackage/**', '**/node_modules/**', '**/.git/**'];
+
+/**
+ * Check if workspaceRoot is a "dangerous" unbounded directory (home or filesystem root)
+ */
+function isDangerousRoot(workspaceRoot: string): boolean {
+  const normalized = workspaceRoot.replace(/\/+$/, '');
+  return normalized === homedir() || normalized === '/' || normalized === '';
+}
+
+/**
+ * Discover files matching all patterns using fast-glob with static-prefix scoping.
+ * 
+ * Strategy:
+ * 1. Extract static walk roots from each pattern to avoid unbounded traversal
+ * 2. Group patterns by walk root for efficient single-pass scanning
+ * 3. Use fast-glob scoped to each walk root
+ * 4. For root-only patterns (e.g. "AGENTS.md"), scan only immediate children
+ * 5. Skip unsafe patterns (no static prefix) when workspaceRoot is ~ or /
  */
 async function discoverFilesFromPatterns(
   patterns: PatternInfo[],
   workspaceRoot: string
 ): Promise<Map<string, UntrackedFile>> {
   const filesMap = new Map<string, UntrackedFile>();
-  const { minimatch } = await import('minimatch');
-  const fs = await import('fs/promises');
+  const dangerous = isDangerousRoot(workspaceRoot);
+
+  const rootOnlyPatterns: PatternInfo[] = [];
+  const unsafePatterns: PatternInfo[] = [];
+  const rootedGroups = new Map<string, PatternInfo[]>();
 
   for (const patternInfo of patterns) {
+    const { root, rootOnly } = extractStaticWalkRoot(patternInfo.pattern);
+
+    if (rootOnly) {
+      rootOnlyPatterns.push(patternInfo);
+    } else if (root === null) {
+      unsafePatterns.push(patternInfo);
+    } else {
+      if (!rootedGroups.has(root)) {
+        rootedGroups.set(root, []);
+      }
+      rootedGroups.get(root)!.push(patternInfo);
+    }
+  }
+
+  if (unsafePatterns.length > 0) {
+    if (dangerous) {
+      logger.debug(
+        `Skipping ${unsafePatterns.length} unsafe patterns for dangerous root ${workspaceRoot}: ` +
+        unsafePatterns.map(p => p.pattern).join(', ')
+      );
+    } else {
+      rootedGroups.set('', unsafePatterns);
+    }
+  }
+
+  if (rootOnlyPatterns.length > 0) {
     try {
-      const matchedPaths = await matchFilesInWorkspace(patternInfo.pattern, workspaceRoot, fs);
-      
-      for (const relativePath of matchedPaths) {
-        const absolutePath = join(workspaceRoot, relativePath);
-        const normalizedPath = normalizePathForProcessing(absolutePath);
-        
-        // Store first match (don't override with later patterns)
-        if (!filesMap.has(normalizedPath)) {
-          filesMap.set(normalizedPath, {
-            absolutePath: normalizedPath,
-            workspacePath: normalizePathForProcessing(relativePath),
-            platform: patternInfo.platform,
-            flowPattern: patternInfo.pattern,
-            category: patternInfo.category
-          });
-        }
+      const rootLevelGlobs = rootOnlyPatterns.map(p => p.pattern);
+      const matched = await fg(rootLevelGlobs, {
+        cwd: workspaceRoot,
+        dot: true,
+        onlyFiles: true,
+        deep: 1,
+        ignore: IGNORED_DIRS,
+      });
+
+      for (const relativePath of matched) {
+        addMatchToMap(filesMap, relativePath, rootOnlyPatterns, workspaceRoot);
       }
     } catch (error) {
-      logger.debug(`Error matching pattern ${patternInfo.pattern}`, { error });
+      logger.debug('Error scanning root-only patterns', { error });
+    }
+  }
+
+  for (const [root, groupPatterns] of rootedGroups) {
+    try {
+      const scopedGlobs = groupPatterns.map(p => {
+        if (root && p.pattern.startsWith(root + '/')) {
+          return p.pattern.slice(root.length + 1);
+        }
+        return p.pattern;
+      });
+
+      const matched = await fg(scopedGlobs, {
+        cwd: root ? join(workspaceRoot, root) : workspaceRoot,
+        dot: true,
+        onlyFiles: true,
+        ignore: IGNORED_DIRS,
+      });
+
+      for (const matchedRelative of matched) {
+        const relativePath = root ? `${root}/${matchedRelative}` : matchedRelative;
+        addMatchToMap(filesMap, relativePath, groupPatterns, workspaceRoot);
+      }
+    } catch (error) {
+      logger.debug(`Error scanning rooted group "${root}"`, { error });
     }
   }
 
@@ -242,45 +347,30 @@ async function discoverFilesFromPatterns(
 }
 
 /**
- * Simple workspace file matcher
+ * Add a matched file path to the results map, attributing it to the first matching pattern
  */
-async function matchFilesInWorkspace(
-  pattern: string,
-  workspaceRoot: string,
-  fs: any
-): Promise<string[]> {
-  const { minimatch } = await import('minimatch');
-  const matches: string[] = [];
-  
-  // Recursively walk directory
-  async function walk(dir: string, relativePath: string = ''): Promise<void> {
-    try {
-      const entries = await fs.readdir(dir, { withFileTypes: true });
-      
-      for (const entry of entries) {
-        const entryRelative = relativePath ? `${relativePath}/${entry.name}` : entry.name;
-        const entryFull = join(dir, entry.name);
-        
-        if (entry.isDirectory()) {
-          // Skip .openpackage and node_modules
-          if (entry.name === '.openpackage' || entry.name === 'node_modules' || entry.name === '.git') {
-            continue;
-          }
-          await walk(entryFull, entryRelative);
-        } else if (entry.isFile()) {
-          // Check if file matches pattern
-          if (minimatch(entryRelative, pattern, { dot: true })) {
-            matches.push(entryRelative);
-          }
-        }
-      }
-    } catch (error) {
-      // Ignore permission errors
-    }
-  }
-  
-  await walk(workspaceRoot);
-  return matches;
+function addMatchToMap(
+  filesMap: Map<string, UntrackedFile>,
+  relativePath: string,
+  patterns: PatternInfo[],
+  workspaceRoot: string
+): void {
+  const absolutePath = join(workspaceRoot, relativePath);
+  const normalizedPath = normalizePathForProcessing(absolutePath);
+
+  if (filesMap.has(normalizedPath)) return;
+
+  const matchingPattern = patterns.find(p =>
+    minimatch(relativePath, p.pattern, { dot: true })
+  ) || patterns[0];
+
+  filesMap.set(normalizedPath, {
+    absolutePath: normalizedPath,
+    workspacePath: normalizePathForProcessing(relativePath),
+    platform: matchingPattern.platform,
+    flowPattern: matchingPattern.pattern,
+    category: matchingPattern.category,
+  });
 }
 
 /**

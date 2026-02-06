@@ -15,7 +15,7 @@ import { setupRemoveCommand } from './commands/remove.js';
 import { setupInstallCommand } from './commands/install.js';
 import { setupUninstallCommand } from './commands/uninstall.js';
 import { setupListCommand } from './commands/list.js';
-import { setupStatusCommand } from './commands/status.js';
+
 import { setupPackCommand } from './commands/pack.js';
 import { setupPublishCommand } from './commands/publish.js';
 import { setupConfigureCommand } from './commands/configure.js';
@@ -105,7 +105,7 @@ program
       
       // All commands section - ultra compact
       output += 'All commands:\n\n';
-      output += '    install, uninstall, list (ls), status,\n';
+      output += '    install, uninstall, list,\n';
       output += '    new, add, remove, set, pack, publish,\n';
       output += '    login, logout\n\n';
       
@@ -127,7 +127,6 @@ setupSetCommand(program);
 setupInstallCommand(program);
 setupUninstallCommand(program);
 setupListCommand(program);
-setupStatusCommand(program);
 setupPackCommand(program);
 setupPublishCommand(program);
 

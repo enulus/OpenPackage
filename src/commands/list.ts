@@ -2,38 +2,71 @@ import { Command } from 'commander';
 
 import { CommandResult } from '../types/index.js';
 import { withErrorHandling, ValidationError } from '../utils/errors.js';
-import { runListPipeline, type ListPackageReport, type ListTreeNode } from '../core/list/list-pipeline.js';
+import { runListPipeline, type ListPackageReport, type ListTreeNode, type ListPipelineResult } from '../core/list/list-pipeline.js';
 import { logger } from '../utils/logger.js';
 import { parsePackageYml } from '../utils/package-yml.js';
 import { getLocalPackageYmlPath } from '../utils/paths.js';
 import { createExecutionContext, getDisplayTargetDir } from '../core/execution-context.js';
+import type { UntrackedScanResult } from '../core/list/untracked-files-scanner.js';
 
 interface ListOptions {
   global?: boolean;
   all?: boolean;
   files?: boolean;
+  tracked?: boolean;
   untracked?: boolean;
+  platforms?: string[];
 }
 
-// ANSI escape codes for styling
 const DIM = '\x1b[2m';
 const RESET = '\x1b[0m';
+const GREEN = '\x1b[32m';
+const RED = '\x1b[31m';
 
 function dim(text: string): string {
   return `${DIM}${text}${RESET}`;
 }
 
-function formatPackageName(pkg: ListPackageReport): string {
+function green(text: string): string {
+  return `${GREEN}${text}${RESET}`;
+}
+
+function red(text: string): string {
+  return `${RED}${text}${RESET}`;
+}
+
+function formatPackageLine(pkg: ListPackageReport): string {
   const version = pkg.version && pkg.version !== '0.0.0' ? `@${pkg.version}` : '';
-  
-  let statusSuffix = '';
-  if (pkg.state === 'partial') {
-    statusSuffix = dim(` (partial ${pkg.existingFiles}/${pkg.totalFiles})`);
-  } else if (pkg.state === 'missing') {
-    statusSuffix = dim(' (missing)');
+
+  let fileCount = '';
+  if (pkg.totalFiles > 0) {
+    fileCount = dim(` (${pkg.totalFiles})`);
   }
-  
-  return `${pkg.name}${version}${statusSuffix}`;
+
+  let stateSuffix = '';
+  if (pkg.state === 'missing') {
+    stateSuffix = dim(' (missing)');
+  }
+
+  return `${pkg.name}${version}${stateSuffix}${fileCount}`;
+}
+
+function printFileList(
+  files: { source: string; target: string; exists: boolean }[],
+  prefix: string
+): void {
+  // Sort files alphabetically by target path
+  const sortedFiles = [...files].sort((a, b) => a.target.localeCompare(b.target));
+
+  for (let i = 0; i < sortedFiles.length; i++) {
+    const file = sortedFiles[i];
+    const isLast = i === sortedFiles.length - 1;
+    const connector = isLast ? '└── ' : '├── ';
+    const label = file.exists
+      ? dim(file.target)
+      : `${dim(file.target)} ${red('[MISSING]')}`;
+    console.log(`${prefix}${connector}${label}`);
+  }
 }
 
 function printTreeNode(
@@ -45,40 +78,112 @@ function printTreeNode(
   const hasChildren = node.children.length > 0;
   const hasFiles = showFiles && node.report.fileList && node.report.fileList.length > 0;
   const hasBranches = hasChildren || hasFiles;
-  
-  const connector = isLast ? (hasBranches ? '└─┬ ' : '└── ') : (hasBranches ? '├─┬ ' : '├── ');
+
+  const connector = isLast
+    ? (hasBranches ? '└─┬ ' : '└── ')
+    : (hasBranches ? '├─┬ ' : '├── ');
   const childPrefix = prefix + (isLast ? '  ' : '│ ');
-  
-  console.log(`${prefix}${connector}${formatPackageName(node.report)}`);
-  
-  // Print files if available
+
+  console.log(`${prefix}${connector}${formatPackageLine(node.report)}`);
+
   if (hasFiles) {
     const files = node.report.fileList!;
-    files.forEach((file, fileIndex) => {
-      const isLastFile = fileIndex === files.length - 1 && node.children.length === 0;
-      const fileConnector = isLastFile ? '└── ' : '├── ';
-      console.log(`${childPrefix}${fileConnector}${dim(`${file.source} → ${file.target}`)}`);
-    });
+    const filePrefix = node.children.length > 0 ? '│ ' : '  ';
+    printFileList(files, childPrefix);
   }
-  
-  // Print children (dependencies)
+
   node.children.forEach((child, index) => {
     const isLastChild = index === node.children.length - 1;
     printTreeNode(child, childPrefix, isLastChild, showFiles);
   });
 }
 
-function printTreeView(
-  workspaceName: string,
-  workspaceVersion: string | undefined,
+function printUntrackedSummary(result: UntrackedScanResult): void {
+  if (result.totalFiles === 0) return;
+
+  const platformCounts: string[] = [];
+  const sortedPlatforms = Array.from(result.platformGroups.keys()).sort();
+  for (const platform of sortedPlatforms) {
+    const files = result.platformGroups.get(platform)!;
+    platformCounts.push(`${platform}${dim(` (${files.length})`)}`);
+  }
+
+  console.log(`Untracked:`);
+  console.log(`  ${platformCounts.join('\n  ')}`);
+}
+
+function printUntrackedExpanded(result: UntrackedScanResult): void {
+  if (result.totalFiles === 0) {
+    console.log('No untracked files detected.');
+    console.log(dim('All files matching platform patterns are tracked in the index.'));
+    return;
+  }
+
+  console.log(`Untracked:`);
+
+  const sortedPlatforms = Array.from(result.platformGroups.keys()).sort();
+
+  for (const platform of sortedPlatforms) {
+    const files = result.platformGroups.get(platform)!;
+    console.log(`${platform}${dim(` (${files.length})`)}`);
+
+    // Sort files alphabetically by workspace path
+    const sortedFiles = [...files].sort((a, b) => a.workspacePath.localeCompare(b.workspacePath));
+
+    for (let i = 0; i < sortedFiles.length; i++) {
+      const file = sortedFiles[i];
+      const isLast = i === sortedFiles.length - 1;
+      const prefix = isLast ? '└── ' : '├── ';
+      console.log(`${prefix}${dim(file.workspacePath)}`);
+    }
+  }
+}
+
+function printDefaultView(
+  headerName: string,
+  headerVersion: string | undefined,
+  headerPath: string,
   tree: ListTreeNode[],
-  cwd: string,
+  data: ListPipelineResult,
   showFiles: boolean
 ): void {
-  const version = workspaceVersion && workspaceVersion !== '0.0.0' ? `@${workspaceVersion}` : '';
-  console.log(`${workspaceName}${version} ${cwd}`);
-  
+  const version = headerVersion && headerVersion !== '0.0.0' ? `@${headerVersion}` : '';
+  console.log(`${headerName}${version} ${headerPath}`);
+
   if (tree.length === 0) {
+    console.log(dim('  No packages installed.'));
+    return;
+  }
+
+  tree.forEach((node, index) => {
+    const isLast = index === tree.length - 1;
+    printTreeNode(node, '', isLast, showFiles);
+  });
+
+  if (data.untrackedFiles && data.untrackedFiles.totalFiles > 0) {
+    if (showFiles) {
+      console.log();
+      printUntrackedExpanded(data.untrackedFiles);
+    } else {
+      console.log();
+      printUntrackedSummary(data.untrackedFiles);
+    }
+  }
+}
+
+function printTrackedView(
+  headerName: string,
+  headerVersion: string | undefined,
+  headerPath: string,
+  tree: ListTreeNode[],
+  data: ListPipelineResult,
+  showFiles: boolean
+): void {
+  const version = headerVersion && headerVersion !== '0.0.0' ? `@${headerVersion}` : '';
+  console.log(`${headerName}${version} ${headerPath}`);
+
+  if (tree.length === 0) {
+    console.log(dim('  No packages installed.'));
     return;
   }
 
@@ -88,147 +193,134 @@ function printTreeView(
   });
 }
 
-function printUntrackedFiles(
-  result: import('../core/list/untracked-files-scanner.js').UntrackedScanResult,
-  cwd: string
+function printUntrackedView(
+  data: ListPipelineResult,
+  showFiles: boolean
 ): void {
-  if (result.totalFiles === 0) {
+  if (!data.untrackedFiles || data.untrackedFiles.totalFiles === 0) {
     console.log('No untracked files detected.');
+    console.log(dim('All files matching platform patterns are tracked in the index.'));
     return;
   }
-  
-  console.log(`Untracked files in ${cwd}`);
-  console.log(`Found ${result.totalFiles} file(s) matching platform patterns but not tracked in index\n`);
-  
-  // Group by platform
-  const sortedPlatforms = Array.from(result.platformGroups.keys()).sort();
-  
-  for (const platform of sortedPlatforms) {
-    const files = result.platformGroups.get(platform)!;
-    console.log(`${platform}:`);
-    
-    // Sub-group by category
-    const categoryMap = new Map<string, typeof files>();
-    for (const file of files) {
-      if (!categoryMap.has(file.category)) {
-        categoryMap.set(file.category, []);
-      }
-      categoryMap.get(file.category)!.push(file);
-    }
-    
-    // Sort categories
-    const sortedCategories = Array.from(categoryMap.keys()).sort();
-    
-    for (let catIdx = 0; catIdx < sortedCategories.length; catIdx++) {
-      const category = sortedCategories[catIdx];
-      const categoryFiles = categoryMap.get(category)!;
-      const isLastCategory = catIdx === sortedCategories.length - 1;
-      const catPrefix = isLastCategory ? '└─┬ ' : '├─┬ ';
-      const catIndent = isLastCategory ? '  ' : '│ ';
-      
-      console.log(`${catPrefix}${category}/`);
-      
-      for (let fileIdx = 0; fileIdx < categoryFiles.length; fileIdx++) {
-        const file = categoryFiles[fileIdx];
-        const isLastFile = fileIdx === categoryFiles.length - 1;
-        const filePrefix = isLastFile ? '└── ' : '├── ';
-        
-        console.log(`${catIndent}${filePrefix}${dim(file.workspacePath)}`);
-      }
-    }
-    
-    console.log(''); // Empty line between platforms
+
+  if (showFiles) {
+    printUntrackedExpanded(data.untrackedFiles);
+  } else {
+    printUntrackedSummary(data.untrackedFiles);
   }
 }
 
-async function listCommand(packageName: string | undefined, options: ListOptions, command: Command): Promise<CommandResult> {
-  // Get program-level options (for --cwd)
+function printPackageDetail(
+  targetPackage: ListPackageReport,
+  tree: ListTreeNode[],
+  data: ListPipelineResult,
+  showFiles: boolean
+): void {
+  console.log(formatPackageLine(targetPackage));
+
+  if (targetPackage.fileList && targetPackage.fileList.length > 0) {
+    printFileList(targetPackage.fileList, '');
+  }
+
+  if (tree.length > 0) {
+    console.log();
+    console.log('Dependencies:');
+    tree.forEach((node, index) => {
+      const isLast = index === tree.length - 1;
+      printTreeNode(node, '', isLast, showFiles);
+    });
+  }
+}
+
+async function listCommand(
+  packageName: string | undefined,
+  options: ListOptions,
+  command: Command
+): Promise<CommandResult> {
   const programOpts = command.parent?.opts() || {};
-  
-  // Create execution context
+
   const execContext = await createExecutionContext({
     global: options.global,
     cwd: programOpts.cwd
   });
-  
+
   const displayDir = getDisplayTargetDir(execContext);
-  
-  // Special handling for --untracked
-  if (options.untracked) {
-    logger.info(`Scanning for untracked files in: ${displayDir}`);
-  } else {
-    logger.info(`Listing packages for directory: ${displayDir}`);
+
+  if (options.tracked && options.untracked) {
+    throw new ValidationError('Cannot use --tracked and --untracked together.');
   }
+
+  if (packageName && options.untracked) {
+    throw new ValidationError('Cannot use --untracked with a specific package.');
+  }
+
+  if (options.all && options.untracked) {
+    throw new ValidationError('Cannot use --all with --untracked.');
+  }
+
+  const result = await runListPipeline(packageName, execContext, {
+    includeFiles: options.files || !!packageName,
+    all: options.all,
+    tracked: options.tracked,
+    untracked: options.untracked,
+    platforms: options.platforms
+  });
+
+  const packages = result.data?.packages ?? [];
+  const tree = result.data?.tree ?? [];
+  const data = result.data!;
+
+  if (packageName && packages.length === 0) {
+    throw new ValidationError(`Package '${packageName}' not found in workspace index`);
+  }
+
+  if (packageName && data.targetPackage) {
+    printPackageDetail(data.targetPackage, tree, data, !!options.files);
+    return { success: true };
+  }
+
+  if (options.untracked) {
+    printUntrackedView(data, !!options.files);
+    return { success: true };
+  }
+
+  let headerName: string;
+  let headerVersion: string | undefined;
+  let headerPath: string;
+
+  const manifestPath = getLocalPackageYmlPath(execContext.targetDir);
+  headerName = 'Unnamed';
+  headerPath = displayDir;
 
   try {
-    // Run list pipeline with execution context
-    const result = await runListPipeline(packageName, execContext, {
-      includeFiles: options.files,
-      all: options.all,
-      untracked: options.untracked
-    });
-    
-    // Handle --untracked output
-    if (options.untracked && result.data?.untrackedFiles) {
-      printUntrackedFiles(result.data.untrackedFiles, displayDir);
-      return { success: true, data: { packages: [], tree: [] } };
-    }
-
-    const packages = result.data?.packages ?? [];
-    const tree = result.data?.tree ?? [];
-    const targetPackage = result.data?.targetPackage;
-
-    if (packageName && packages.length === 0) {
-      throw new ValidationError(`Package '${packageName}' not found in workspace index`);
-    }
-
-    // Determine header info - use target package if specified, otherwise workspace manifest
-    let headerName: string;
-    let headerVersion: string | undefined;
-    let headerPath: string;
-
-    if (targetPackage) {
-      // Specific package requested - use it as the root
-      headerName = targetPackage.name;
-      headerVersion = targetPackage.version;
-      headerPath = targetPackage.path;
-    } else {
-      // Workspace view
-      const manifestPath = getLocalPackageYmlPath(execContext.targetDir);
-      headerName = 'Unnamed';
-      headerPath = displayDir;
-      
-      try {
-        const manifest = await parsePackageYml(manifestPath);
-        headerName = manifest.name || 'Unnamed';
-        headerVersion = manifest.version;
-      } catch (error) {
-        logger.warn(`Failed to read workspace manifest: ${error}`);
-      }
-    }
-
-    // Unified tree view
-    printTreeView(headerName, headerVersion, tree, headerPath, !!options.files);
-
-    return { success: true, data: { packages, tree } };
+    const manifest = await parsePackageYml(manifestPath);
+    headerName = manifest.name || 'Unnamed';
+    headerVersion = manifest.version;
   } catch (error) {
-    if (error instanceof ValidationError) {
-      throw error;
-    }
-    throw error;
+    logger.warn(`Failed to read workspace manifest: ${error}`);
   }
+
+  if (options.tracked) {
+    printTrackedView(headerName, headerVersion, headerPath, tree, data, !!options.files);
+  } else {
+    printDefaultView(headerName, headerVersion, headerPath, tree, data, !!options.files);
+  }
+
+  return { success: true };
 }
 
 export function setupListCommand(program: Command): void {
   program
     .command('list')
     .alias('ls')
-    .description('Show installed packages and files')
-    .argument('[package]', 'Optional package name to show details for')
-    .option('-g, --global', 'list packages installed in home directory (~/) instead of current workspace')
+    .description('Show installed packages, file status, and untracked files')
+    .argument('[package]', 'show details for a specific package')
+    .option('-g, --global', 'list packages in home directory (~/) instead of current workspace')
     .option('-a, --all', 'show full dependency tree including transitive dependencies')
-    .option('-f, --files', 'show files installed from each package')
-    .option('-u, --untracked', 'show files detected by platforms but not tracked in index')
+    .option('-f, --files', 'show individual files for each package')
+    .option('-t, --tracked', 'show only tracked file information (skip untracked scan)')
+    .option('-u, --untracked', 'show only untracked files detected by platforms')
+    .option('--platforms <platforms...>', 'filter by specific platforms (e.g., cursor, claude)')
     .action(withErrorHandling(async (packageName: string | undefined, options: ListOptions, command: Command) => {
       await listCommand(packageName, options, command);
     }));

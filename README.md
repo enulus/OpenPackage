@@ -112,7 +112,7 @@ opkg install github:anthropics/claude-code -g
 opkg list             # Lists resources installed to workspace at cwd
 opkg list <package>   # Lists installed files for specified resource
 ```  
-Use the status command to show an overview of packages and files installed.
+Use the list command to show an overview of packages and files installed.
 
 ### Uninstall packages
 ```bash title="Terminal"

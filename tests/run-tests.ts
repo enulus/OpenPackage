@@ -28,10 +28,7 @@ const testFiles: string[] = [
   
   // Core - List
   'tests/core/list/untracked-files.test.ts',
-  
-  // Core - Status
-  'tests/core/status/tracked-files-collector.test.ts',
-  
+
   // Core - Source Resolution
   'tests/core/source-resolution/source-mutability.test.ts',
   'tests/core/source-resolution/source-resolution.test.ts',
@@ -44,7 +41,6 @@ const testFiles: string[] = [
   
   // Commands
   'tests/commands/pack.test.ts',
-  'tests/commands/status.test.ts',
   'tests/commands/install-plugins-flag.test.ts',
   'tests/commands/install-plugins-integration.test.ts',
   'tests/commands/list-untracked.test.ts',

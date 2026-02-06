@@ -42,20 +42,20 @@ function runCli(
 
 // Test 2: Invalid --cwd errors with validation message (no chdir)
 {
-  const result = runCli(['status', '--cwd', '/nonexistent']);
+  const result = runCli(['list', '--cwd', '/nonexistent']);
   assert.ok(result.stderr.includes('Invalid --cwd'), 'Should error on invalid dir');
   assert.ok(result.stderr.includes('must exist'), 'Should mention existence check');
   assert.strictEqual(result.code, 1);
 }
 
-// Test 3: Valid --cwd chdirs and runs command (use status on empty dir - expects error on no pkg, but chdir succeeds)
+// Test 3: Valid --cwd chdirs and runs command (use list on empty dir - expects error on no pkg, but chdir succeeds)
 {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'opkg-cwd-test-'));
   try {
-    const result = runCli(['status', '--cwd', tempDir]);
-    // Status should fail (no package), but stderr should *not* have cwd error (valid dir)
+    const result = runCli(['list', '--cwd', tempDir]);
+    // List should fail (no package), but stderr should *not* have cwd error (valid dir)
     assert.ok(!result.stderr.includes('Invalid --cwd'), 'Valid dir should not error on validation');
-    assert.ok(result.stderr.includes('No .openpackage'), 'Should detect no pkg at target cwd'); // Expected status error
+    assert.ok(result.stderr.includes('No .openpackage'), 'Should detect no pkg at target cwd');
     assert.strictEqual(result.code, 1); // Fails as expected, but chdir worked
   } finally {
     await fs.rm(tempDir, { recursive: true });
@@ -74,9 +74,9 @@ function runCli(
 {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'opkg-cwd-rel-'));
   try {
-    const result = runCli(['status', '--cwd', path.relative(process.cwd(), tempDir)], process.cwd());
+    const result = runCli(['list', '--cwd', path.relative(process.cwd(), tempDir)], process.cwd());
     assert.ok(!result.stderr.includes('Invalid --cwd'), 'Relative valid dir ok');
-    assert.strictEqual(result.code, 1); // Status fails, but chdir ok
+    assert.strictEqual(result.code, 1); // List fails, but chdir ok
   } finally {
     await fs.rm(tempDir, { recursive: true });
   }

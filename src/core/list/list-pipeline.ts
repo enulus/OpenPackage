@@ -43,8 +43,12 @@ export interface ListPipelineOptions {
   includeFiles?: boolean;
   /** Build full recursive dependency tree */
   all?: boolean;
-  /** Scan for untracked files that match platform patterns */
+  /** Filter to tracked view only */
+  tracked?: boolean;
+  /** Filter to untracked view only */
   untracked?: boolean;
+  /** Filter by platform names */
+  platforms?: string[];
 }
 
 export interface ListPipelineResult {
@@ -53,7 +57,13 @@ export interface ListPipelineResult {
   rootPackageNames?: string[];
   /** When a specific package is targeted, this contains its info for the header */
   targetPackage?: ListPackageReport;
-  /** Untracked files scan result (when --untracked option used) */
+  /** Total tracked files that exist on disk */
+  trackedCount: number;
+  /** Total tracked files that are missing on disk */
+  missingCount: number;
+  /** Total untracked files found */
+  untrackedCount: number;
+  /** Untracked files scan result */
   untrackedFiles?: UntrackedScanResult;
 }
 
@@ -194,13 +204,18 @@ export async function runListPipeline(
   execContext: ExecutionContext,
   options: ListPipelineOptions = {}
 ): Promise<CommandResult<ListPipelineResult>> {
-  const { includeFiles = false, all = false, untracked = false } = options;
+  const { includeFiles = false, all = false, tracked = false, untracked = false, platforms } = options;
   
   // Use targetDir for list operations
   const targetDir = execContext.targetDir;
   const indexPath = getWorkspaceIndexPath(targetDir);
 
-  // For --untracked, only require workspace index (not manifest)
+  // Validate mutual exclusivity
+  if (tracked && untracked) {
+    throw new ValidationError('Cannot use --tracked and --untracked together.');
+  }
+
+  // For --untracked only, we just need the workspace index (not the full manifest)
   if (untracked) {
     if (!(await exists(indexPath))) {
       throw new ValidationError(
@@ -208,16 +223,18 @@ export async function runListPipeline(
       );
     }
 
-    // Run untracked scan and return
-    const untrackedResult = await scanUntrackedFiles(targetDir);
-    
+    const untrackedFiles = await scanUntrackedFiles(targetDir, platforms);
+
     return {
       success: true,
       data: {
         packages: [],
         tree: [],
         rootPackageNames: [],
-        untrackedFiles: untrackedResult
+        trackedCount: 0,
+        missingCount: 0,
+        untrackedCount: untrackedFiles.totalFiles,
+        untrackedFiles
       }
     };
   }
@@ -260,7 +277,7 @@ export async function runListPipeline(
     if (!pkgEntry) {
       return {
         success: true,
-        data: { packages: [], rootPackageNames: [] }
+        data: { packages: [], rootPackageNames: [], trackedCount: 0, missingCount: 0, untrackedCount: 0 }
       };
     }
 
@@ -332,10 +349,22 @@ export async function runListPipeline(
 
     // Build tree from the target package's dependencies (not the package itself)
     const tree = buildDependencyTree(depNames, reportMap, all);
-    
+
+    // Compute tracked/missing counts from reports
+    const trackedCount = reports.reduce((sum, r) => sum + r.existingFiles, 0);
+    const missingCount = reports.reduce((sum, r) => sum + (r.totalFiles - r.existingFiles), 0);
+
+    // Scan untracked files unless --tracked flag is set
+    let untrackedFiles: UntrackedScanResult | undefined;
+    let untrackedCount = 0;
+    if (!tracked) {
+      untrackedFiles = await scanUntrackedFiles(targetDir, platforms);
+      untrackedCount = untrackedFiles.totalFiles;
+    }
+
     return {
       success: true,
-      data: { packages: reports, tree, rootPackageNames: depNames, targetPackage }
+      data: { packages: reports, tree, rootPackageNames: depNames, targetPackage, trackedCount, missingCount, untrackedCount, untrackedFiles }
     };
   }
 
@@ -370,8 +399,20 @@ export async function runListPipeline(
   // Build dependency tree from root packages
   const tree = buildDependencyTree(rootPackageNames, reportMap, all);
 
+  // Compute tracked/missing counts from reports
+  const trackedCount = reports.reduce((sum, r) => sum + r.existingFiles, 0);
+  const missingCount = reports.reduce((sum, r) => sum + (r.totalFiles - r.existingFiles), 0);
+
+  // Scan untracked files unless --tracked flag is set
+  let untrackedFiles: UntrackedScanResult | undefined;
+  let untrackedCount = 0;
+  if (!tracked) {
+    untrackedFiles = await scanUntrackedFiles(targetDir, platforms);
+    untrackedCount = untrackedFiles.totalFiles;
+  }
+
   return {
     success: true,
-    data: { packages: reports, tree, rootPackageNames }
+    data: { packages: reports, tree, rootPackageNames, trackedCount, missingCount, untrackedCount, untrackedFiles }
   };
 }

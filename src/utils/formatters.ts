@@ -64,7 +64,7 @@ export interface PackageTableEntry {
 }
 
 /**
- * Format and display an extended package table with status information (used by status command)
+ * Format and display an extended package table with status information (used by list command)
  */
 export function displayExtendedPackageTable(packages: PackageTableEntry[]): void {
   if (packages.length === 0) {
