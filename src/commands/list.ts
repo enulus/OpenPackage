@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 
-import { CommandResult } from '../types/index.js';
+import { CommandResult, type ExecutionContext } from '../types/index.js';
 import { withErrorHandling, ValidationError } from '../utils/errors.js';
 import { runListPipeline, type ListPackageReport, type ListTreeNode, type ListPipelineResult } from '../core/list/list-pipeline.js';
 import { logger } from '../utils/logger.js';
@@ -8,6 +8,8 @@ import { parsePackageYml } from '../utils/package-yml.js';
 import { getLocalPackageYmlPath } from '../utils/paths.js';
 import { createExecutionContext, getDisplayTargetDir } from '../core/execution-context.js';
 import type { UntrackedScanResult } from '../core/list/untracked-files-scanner.js';
+import { classifyInput } from '../core/install/preprocessing/index.js';
+import { resolveRemoteList, type RemoteListResult } from '../core/list/remote-list-resolver.js';
 
 interface ListOptions {
   global?: boolean;
@@ -16,6 +18,9 @@ interface ListOptions {
   tracked?: boolean;
   untracked?: boolean;
   platforms?: string[];
+  remote?: boolean;
+  profile?: string;
+  apiKey?: string;
 }
 
 const DIM = '\x1b[2m';
@@ -232,6 +237,29 @@ function printPackageDetail(
   }
 }
 
+function printRemotePackageDetail(
+  result: RemoteListResult,
+  showFiles: boolean
+): void {
+  const pkg = result.package;
+  console.log(`${formatPackageLine(pkg)} ${dim(`[${result.sourceLabel}]`)}`);
+
+  if (showFiles && pkg.fileList && pkg.fileList.length > 0) {
+    printFileList(pkg.fileList, '');
+  }
+
+  if (result.dependencies.length > 0) {
+    console.log();
+    console.log('Dependencies:');
+    result.dependencies.forEach((dep, index) => {
+      const isLast = index === result.dependencies.length - 1;
+      const connector = isLast ? '└── ' : '├── ';
+      const versionSuffix = dep.version ? `@${dep.version}` : '';
+      console.log(`${connector}${dep.name}${versionSuffix}`);
+    });
+  }
+}
+
 async function listCommand(
   packageName: string | undefined,
   options: ListOptions,
@@ -258,29 +286,43 @@ async function listCommand(
     throw new ValidationError('Cannot use --all with --untracked.');
   }
 
-  const result = await runListPipeline(packageName, execContext, {
-    includeFiles: options.files || !!packageName,
-    all: options.all,
-    tracked: options.tracked,
-    untracked: options.untracked,
-    platforms: options.platforms
-  });
+  const skipLocal = options.remote && !!packageName;
 
-  const packages = result.data?.packages ?? [];
-  const tree = result.data?.tree ?? [];
-  const data = result.data!;
+  let result: CommandResult<ListPipelineResult> | undefined;
+  let packages: ListPackageReport[] = [];
+  let tree: ListTreeNode[] = [];
+  let data: ListPipelineResult | undefined;
 
-  if (packageName && packages.length === 0) {
-    throw new ValidationError(`Package '${packageName}' not found in workspace index`);
+  if (!skipLocal) {
+    result = await runListPipeline(packageName, execContext, {
+      includeFiles: options.files || !!packageName,
+      all: options.all,
+      tracked: options.tracked,
+      untracked: options.untracked,
+      platforms: options.platforms
+    });
+
+    packages = result.data?.packages ?? [];
+    tree = result.data?.tree ?? [];
+    data = result.data!;
   }
 
-  if (packageName && data.targetPackage) {
+  if (packageName && (skipLocal || packages.length === 0)) {
+    const remoteResult = await resolveRemoteListForPackage(packageName, execContext, options);
+    if (remoteResult) {
+      printRemotePackageDetail(remoteResult, !!options.files);
+      return { success: true };
+    }
+    throw new ValidationError(`Package '${packageName}' not found locally or remotely`);
+  }
+
+  if (packageName && data?.targetPackage) {
     printPackageDetail(data.targetPackage, tree, data, !!options.files);
     return { success: true };
   }
 
   if (options.untracked) {
-    printUntrackedView(data, !!options.files);
+    printUntrackedView(data!, !!options.files);
     return { success: true };
   }
 
@@ -301,12 +343,32 @@ async function listCommand(
   }
 
   if (options.tracked) {
-    printTrackedView(headerName, headerVersion, headerPath, tree, data, !!options.files);
+    printTrackedView(headerName, headerVersion, headerPath, tree, data!, !!options.files);
   } else {
-    printDefaultView(headerName, headerVersion, headerPath, tree, data, !!options.files);
+    printDefaultView(headerName, headerVersion, headerPath, tree, data!, !!options.files);
   }
 
   return { success: true };
+}
+
+async function resolveRemoteListForPackage(
+  packageName: string,
+  execContext: ExecutionContext,
+  options: ListOptions
+): Promise<RemoteListResult | null> {
+  try {
+    const classification = await classifyInput(packageName, {}, execContext);
+    if (classification.type === 'bulk' || classification.type === 'path') {
+      return null;
+    }
+    return await resolveRemoteList(classification, execContext, {
+      profile: options.profile,
+      apiKey: options.apiKey
+    });
+  } catch (error) {
+    logger.debug(`Remote list resolution failed for '${packageName}': ${error}`);
+    return null;
+  }
 }
 
 export function setupListCommand(program: Command): void {
@@ -321,6 +383,9 @@ export function setupListCommand(program: Command): void {
     .option('-t, --tracked', 'show only tracked file information (skip untracked scan)')
     .option('-u, --untracked', 'show only untracked files detected by platforms')
     .option('--platforms <platforms...>', 'filter by specific platforms (e.g., cursor, claude)')
+    .option('--remote', 'fetch package info from remote registry or git, skipping local lookup')
+    .option('--profile <profile>', 'profile to use for authentication')
+    .option('--api-key <key>', 'API key for authentication (overrides profile)')
     .action(withErrorHandling(async (packageName: string | undefined, options: ListOptions, command: Command) => {
       await listCommand(packageName, options, command);
     }));
