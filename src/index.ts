@@ -12,6 +12,7 @@ import { getVersion } from './utils/package.js';
 import { setupNewCommand } from './commands/new.js';
 import { setupAddCommand } from './commands/add.js';
 import { setupRemoveCommand } from './commands/remove.js';
+import { setupSaveCommand } from './commands/save.js';
 import { setupInstallCommand } from './commands/install.js';
 import { setupUninstallCommand } from './commands/uninstall.js';
 import { setupListCommand } from './commands/list.js';
@@ -106,7 +107,7 @@ program
       // All commands section - ultra compact
       output += 'All commands:\n\n';
       output += '    install, uninstall, list,\n';
-      output += '    new, add, remove, set, pack, publish,\n';
+      output += '    new, add, remove, save, set, pack, publish,\n';
       output += '    login, logout\n\n';
       
       // Version
@@ -123,6 +124,7 @@ program
 setupNewCommand(program);
 setupAddCommand(program);
 setupRemoveCommand(program);
+setupSaveCommand(program);
 setupSetCommand(program);
 setupInstallCommand(program);
 setupUninstallCommand(program);

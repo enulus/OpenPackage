@@ -1152,6 +1152,15 @@ export function inferPlatformFromWorkspaceFile(
   if (fromSource) {
     return fromSource
   }
+  
+  // Fallback: derive platform root dirs from flows
+  const state = getPlatformsState(targetDir)
+  for (const [platformId, def] of Object.entries(state.defs)) {
+    const derivedRoot = deriveRootDirFromFlows(def)
+    if (derivedRoot === sourceDir) {
+      return platformId as Platform
+    }
+  }
 
   // Fallback: check registry path for platform suffix
   const parsed = parseUniversalPath(registryPath, { allowPlatformSuffix: true })

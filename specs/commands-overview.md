@@ -9,6 +9,7 @@ This file provides high-level semantics for core commands in the path-based mode
 | `new` | N/A | Create package manifest | N/A | N/A |
 | `add` | Filesystem → Source | Add new files (source-only, path-only for workspace root) | ✅ | ❌ Error |
 | `remove` | Source → Deletion | Remove files from source (source-only, path-only for workspace root) | ✅ | ❌ Error |
+| `save` | Workspace → Source | Save workspace edits back to source (hash-based sync) | ✅ | ❌ Error |
 | `set` | N/A | Update manifest metadata | ✅ | ❌ Error |
 | `install` | Registry → Workspace | Install version (git/path too) + update index | N/A | ✅ |
 | `list` | N/A | Report sync state | ✅ | ✅ |
@@ -55,6 +56,23 @@ Remove files from mutable source or workspace root.
 - Works from any directory with any mutable package.
 - Opposite of `add` command.
 - See [Remove](remove/).
+
+### `save`
+
+Save workspace edits back to mutable package source.
+
+- Preconditions: Package installed in workspace; mutable source; has file mappings.
+- Flow: Read index → Compare hashes → Copy changed files → Report.
+- **Hash-based detection**: Only copies files where workspace content differs from source.
+- **Simple overwrite**: No conflict resolution - workspace wins.
+- **Minimal MVP**: ~230 LOC total (vs 5,000+ in previous implementation).
+- Example:
+  - `opkg save my-pkg` (save all changed files)
+  - Skips files with matching hashes
+  - Creates new files in source if needed
+  - Suggests running `opkg install my-pkg` to re-sync workspace
+- Bidirectional workflow: `install` goes forward, `save` goes backward.
+- See [Save](save/).
 
 ### `set`
 

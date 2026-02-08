@@ -920,7 +920,7 @@
         },
         "to": "mcp.jsonc",
         "map": [
-          { "$rename": { "mcpServers": "mcp" } }
+          { "$rename": { "mcp": "mcpServers" } }
         ]
       }
     ]
