@@ -27,9 +27,14 @@ export interface ProfileConfigDefaults {
   scope?: string;
 }
 
+export interface TelemetryConfig {
+  disabled?: boolean;
+}
+
 export interface OpenPackageConfig {
   defaults?: ConfigDefaults;
   profiles?: Record<string, ProfileConfig>;
+  telemetry?: TelemetryConfig;
 }
 
 export interface ProfileConfig {

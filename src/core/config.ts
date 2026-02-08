@@ -1,15 +1,17 @@
-import { join } from 'path';
+import { join, extname } from 'path';
 import { OpenPackageConfig, OpenPackageDirectories } from '../types/index.js';
-import { readJsonFile, writeJsonFile, exists } from '../utils/fs.js';
+import { readJsonOrJsoncFile, writeJsoncFile, writeJsonFile, exists } from '../utils/fs.js';
 import { logger } from '../utils/logger.js';
 import { ConfigError } from '../utils/errors.js';
 import { getOpenPackageDirectories } from './directory.js';
 
 /**
  * Configuration management for the OpenPackage CLI
+ * Supports both JSON and JSONC formats
  */
 
-const CONFIG_FILE_NAME = 'config.json';
+const CONFIG_FILE_NAMES = ['config.jsonc', 'config.json'];
+const DEFAULT_CONFIG_FILE = 'config.jsonc'; // Use JSONC by default for new configs
 
 // Default configuration values
 const DEFAULT_CONFIG: OpenPackageConfig = {
@@ -20,12 +22,47 @@ const DEFAULT_CONFIG: OpenPackageConfig = {
 
 class ConfigManager {
   private config: OpenPackageConfig | null = null;
-  private configPath: string;
+  private configPath: string | null = null;
   private openPackageDirs: OpenPackageDirectories;
 
   constructor() {
     this.openPackageDirs = getOpenPackageDirectories();
-    this.configPath = join(this.openPackageDirs.config, CONFIG_FILE_NAME);
+  }
+
+  /**
+   * Find the existing config file (supports both .json and .jsonc)
+   * Returns the path to the existing config file, or null if none exists
+   */
+  private async findConfigFile(): Promise<string | null> {
+    for (const fileName of CONFIG_FILE_NAMES) {
+      const path = join(this.openPackageDirs.config, fileName);
+      if (await exists(path)) {
+        return path;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Get the config path to use for saving
+   * If a config file already exists, use that format
+   * Otherwise, use the default format (JSONC)
+   */
+  private async getConfigPath(): Promise<string> {
+    if (this.configPath) {
+      return this.configPath;
+    }
+
+    // Check if a config file already exists
+    const existingPath = await this.findConfigFile();
+    if (existingPath) {
+      this.configPath = existingPath;
+      return existingPath;
+    }
+
+    // No existing config, use default
+    this.configPath = join(this.openPackageDirs.config, DEFAULT_CONFIG_FILE);
+    return this.configPath;
   }
 
   /**
@@ -37,9 +74,12 @@ class ConfigManager {
     }
 
     try {
-      if (await exists(this.configPath)) {
-        logger.debug(`Loading config from: ${this.configPath}`);
-        const fileConfig = await readJsonFile<OpenPackageConfig>(this.configPath);
+      const configPath = await this.findConfigFile();
+      
+      if (configPath) {
+        logger.debug(`Loading config from: ${configPath}`);
+        const fileConfig = await readJsonOrJsoncFile<OpenPackageConfig>(configPath);
+        this.configPath = configPath;
         this.config = {
           ...DEFAULT_CONFIG,
           ...fileConfig,
@@ -56,13 +96,14 @@ class ConfigManager {
 
       return this.config;
     } catch (error) {
-      logger.error('Failed to load configuration', { error, configPath: this.configPath });
+      logger.error('Failed to load configuration', { error });
       throw new ConfigError(`Failed to load configuration: ${error}`);
     }
   }
 
   /**
    * Save current configuration to file
+   * Uses JSONC format for new files, preserves existing format
    */
   async save(): Promise<void> {
     if (!this.config) {
@@ -70,8 +111,17 @@ class ConfigManager {
     }
 
     try {
-      logger.debug(`Saving config to: ${this.configPath}`);
-      await writeJsonFile(this.configPath, this.config);
+      const configPath = await this.getConfigPath();
+      const ext = extname(configPath);
+      
+      logger.debug(`Saving config to: ${configPath}`);
+      
+      // Write in JSONC format if the extension is .jsonc, otherwise use JSON
+      if (ext === '.jsonc') {
+        await writeJsoncFile(configPath, this.config);
+      } else {
+        await writeJsonFile(configPath, this.config);
+      }
     } catch (error) {
       logger.error('Failed to save configuration', { error, configPath: this.configPath });
       throw new ConfigError(`Failed to save configuration: ${error}`);
@@ -134,9 +184,10 @@ class ConfigManager {
 
   /**
    * Get the configuration file path
+   * Returns the path that will be used for the config file
    */
-  getConfigPath(): string {
-    return this.configPath;
+  async getConfigFilePath(): Promise<string> {
+    return await this.getConfigPath();
   }
 
   /**
@@ -144,6 +195,15 @@ class ConfigManager {
    */
   getDirectories(): OpenPackageDirectories {
     return this.openPackageDirs;
+  }
+
+  /**
+   * Get telemetry disabled setting
+   * Returns undefined if not set in config
+   */
+  async getTelemetryDisabled(): Promise<boolean | undefined> {
+    const config = await this.load();
+    return config.telemetry?.disabled;
   }
 
 }

@@ -5,6 +5,8 @@
  * directory resolution for commands with --global support.
  */
 
+import type { TelemetryCollector } from '../utils/telemetry.js';
+
 /**
  * ExecutionContext - Single source of truth for directory resolution
  * 
@@ -32,6 +34,12 @@ export interface ExecutionContext {
    * Convenience flag for conditional logic and display.
    */
   isGlobal: boolean;
+  
+  /**
+   * Optional telemetry collector for tracking install events.
+   * When present, successful installations will report telemetry.
+   */
+  telemetryCollector?: TelemetryCollector;
 }
 
 /**

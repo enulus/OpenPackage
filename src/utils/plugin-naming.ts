@@ -183,6 +183,65 @@ export function parseScopedPluginName(name: string): {
 }
 
 /**
+ * Split a package name into base package name and resource path for telemetry.
+ * Handles GitHub-scoped names that may include resource paths.
+ * 
+ * Examples:
+ * - "gh@user/repo/agents/designer" → { baseName: "gh@user/repo", resourcePath: "agents/designer" }
+ * - "gh@user/repo" → { baseName: "gh@user/repo", resourcePath: undefined }
+ * - "@scope/package/path" → { baseName: "@scope/package", resourcePath: "path" }
+ * - "simple-package" → { baseName: "simple-package", resourcePath: undefined }
+ * 
+ * @param packageName - Full package name (may include resource path)
+ * @returns Object with base package name and optional resource path
+ */
+export function splitPackageNameForTelemetry(packageName: string): {
+  baseName: string;
+  resourcePath?: string;
+} {
+  // Handle GitHub format: gh@username/repo[/path]
+  const ghMatch = packageName.match(/^gh@([^\/]+)\/([^\/]+)(?:\/(.+))?$/);
+  if (ghMatch) {
+    const [, username, repo, path] = ghMatch;
+    return {
+      baseName: `gh@${username}/${repo}`,
+      resourcePath: path
+    };
+  }
+  
+  // Handle scoped format: @scope/name[/path]
+  const scopedMatch = packageName.match(/^@([^\/]+)\/([^\/]+)(?:\/(.+))?$/);
+  if (scopedMatch) {
+    const [, scope, name, path] = scopedMatch;
+    return {
+      baseName: `@${scope}/${name}`,
+      resourcePath: path
+    };
+  }
+  
+  // Handle unscoped format with path: name/path
+  // Need to be careful not to split "owner/repo" GitHub shorthand
+  // If it doesn't match gh@ or @ format, treat first segment as package name
+  const segments = packageName.split('/');
+  if (segments.length > 1) {
+    // Ambiguous case: could be "name/path" or just "owner/repo"
+    // For telemetry safety, only split if we have 2+ slashes (clear path indicator)
+    if (segments.length > 2) {
+      return {
+        baseName: segments[0],
+        resourcePath: segments.slice(1).join('/')
+      };
+    }
+  }
+  
+  // No path detected, return as-is
+  return {
+    baseName: packageName,
+    resourcePath: undefined
+  };
+}
+
+/**
  * Check if a name is a scoped plugin name (either new gh@ format or old @ format).
  */
 export function isScopedPluginName(name: string): boolean {

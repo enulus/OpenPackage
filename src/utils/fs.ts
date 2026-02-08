@@ -1,5 +1,6 @@
 import { promises as fs, constants as fsConstants, Stats } from 'fs';
 import { join, dirname, relative } from 'path';
+import { parse as parseJsonc } from 'jsonc-parser';
 import { logger } from './logger.js';
 import { FileSystemError } from './errors.js';
 import { isJunk } from 'junk';
@@ -247,6 +248,63 @@ export async function writeJsonFile(path: string, data: any, indent: number = 2)
     await writeTextFile(path, content);
   } catch (error) {
     throw new FileSystemError(`Failed to write JSON file: ${path}`, { path, error });
+  }
+}
+
+/**
+ * Read a JSONC file (JSON with Comments) and parse it
+ * JSONC parser also handles standard JSON files
+ */
+export async function readJsoncFile<T = any>(path: string): Promise<T> {
+  try {
+    const content = await readTextFile(path);
+    const result = parseJsonc(content);
+    if (result === undefined) {
+      throw new Error('Failed to parse JSONC content');
+    }
+    return result as T;
+  } catch (error) {
+    if (error instanceof FileSystemError) {
+      throw error;
+    }
+    throw new FileSystemError(`Failed to parse JSONC file: ${path}`, { path, error });
+  }
+}
+
+/**
+ * Write object to a JSONC-compatible file
+ * Note: Writes standard JSON format (JSONC is a superset that can read JSON)
+ * To add comments, they would need to be manually added to the file
+ */
+export async function writeJsoncFile(path: string, data: any, indent: number = 2): Promise<void> {
+  try {
+    // Write as JSON (valid JSONC format)
+    // Users can add comments manually if needed
+    const content = JSON.stringify(data, null, indent);
+    await writeTextFile(path, content + '\n');
+  } catch (error) {
+    throw new FileSystemError(`Failed to write JSONC file: ${path}`, { path, error });
+  }
+}
+
+/**
+ * Read a JSON or JSONC file (auto-detect format) and parse it
+ * Works with both standard JSON and JSONC (JSON with comments)
+ */
+export async function readJsonOrJsoncFile<T = any>(path: string): Promise<T> {
+  try {
+    const content = await readTextFile(path);
+    // Use JSONC parser which handles both JSON and JSONC
+    const result = parseJsonc(content);
+    if (result === undefined) {
+      throw new Error('Failed to parse JSON/JSONC content');
+    }
+    return result as T;
+  } catch (error) {
+    if (error instanceof FileSystemError) {
+      throw error;
+    }
+    throw new FileSystemError(`Failed to parse JSON/JSONC file: ${path}`, { path, error });
   }
 }
 

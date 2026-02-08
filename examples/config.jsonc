@@ -1,0 +1,53 @@
+{
+  // OpenPackage CLI Configuration Example
+  // This file demonstrates the available configuration options
+  // Location: ~/.openpackage/config.jsonc (or config.json)
+  
+  // Telemetry settings
+  // OpenPackage collects anonymous usage data to improve the package ecosystem
+  // Set to true to opt out of telemetry
+  "telemetry": {
+    "disabled": false
+  },
+  
+  // Default settings applied to all packages
+  "defaults": {
+    // Default license for new packages
+    // Common values: "MIT", "Apache-2.0", "GPL-3.0", "ISC", "BSD-3-Clause"
+    "license": "MIT",
+    
+    // Default author name (optional)
+    // Used when creating new packages
+    // "author": "Your Name",
+    
+    // Default scope for packages (optional)
+    // Example: "mycompany" would create packages like @mycompany/package-name
+    // "scope": "mycompany"
+  },
+  
+  // Profile configurations for different contexts
+  // Profiles allow you to have different credentials and defaults for different scenarios
+  "profiles": {
+    // Example: Personal profile
+    "personal": {
+      "description": "Personal projects",
+      "defaults": {
+        "author": "Your Name",
+        "license": "MIT"
+      }
+    },
+    
+    // Example: Work profile
+    "work": {
+      "description": "Work-related packages",
+      "defaults": {
+        "author": "Company Name",
+        "scope": "company",
+        "license": "Apache-2.0"
+      }
+    }
+    
+    // Note: Credentials (API keys) are stored separately in ~/.openpackage/credentials
+    // Use 'opkg configure --profile <name>' to set up credentials
+  }
+}
