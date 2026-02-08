@@ -28,6 +28,7 @@ import { runMultiContextPipeline } from '../unified/multi-context-pipeline.js';
 import { createAllStrategies } from './strategies/index.js';
 import { DependencyResolutionExecutor } from '../resolution/executor.js';
 import { getManifestPathAtContentRoot } from '../resolution/manifest-reader.js';
+import { handleListSelection } from '../list-handler.js';
 import { logger } from '../../../utils/logger.js';
 
 /**
@@ -125,6 +126,11 @@ export class InstallOrchestrator {
         return this.handleMultiResource(result, options, execContext);
       
       default: {
+        // Handle --list option (interactive resource selection)
+        if (options.list) {
+          return this.handleList(context, options, execContext);
+        }
+        
         // Normal pipeline flow: resolve platforms once if not set
         if (context.platforms.length === 0) {
           const interactive = canPrompt();
@@ -218,6 +224,11 @@ export class InstallOrchestrator {
     execContext: ExecutionContext
   ): Promise<CommandResult> {
     const { context } = result;
+    
+    // Note: --list is ignored for marketplaces as they already have plugin selection
+    if (options.list) {
+      logger.debug('--list ignored for marketplace (already has plugin selection)');
+    }
     
     if (!context.source.pluginMetadata?.manifestPath) {
       throw new Error('Marketplace manifest not found');
@@ -349,6 +360,18 @@ export class InstallOrchestrator {
       context.platforms = await resolvePlatforms(context.targetDir, options.platforms, { interactive });
     }
     return runUnifiedInstallPipeline(context);
+  }
+  
+  /**
+   * Handle interactive resource selection (--list option).
+   * Discovers all resources, prompts for selection, and installs selected items.
+   */
+  private async handleList(
+    context: InstallationContext,
+    options: NormalizedInstallOptions,
+    execContext: ExecutionContext
+  ): Promise<CommandResult> {
+    return handleListSelection(context, options, execContext);
   }
   
   /**

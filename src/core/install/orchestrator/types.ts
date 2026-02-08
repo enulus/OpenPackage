@@ -13,6 +13,7 @@ export interface NormalizedInstallOptions extends InstallOptions {
   resolutionMode: InstallResolutionMode;
   agents?: string[];
   skills?: string[];
+  list?: boolean;
 }
 
 /**

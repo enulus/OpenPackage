@@ -200,6 +200,13 @@ export interface InstallOptions {
   skills?: string[];
 
   /**
+   * Interactive resource selection: display menu to select specific resources to install.
+   * Mutually exclusive with --agents and --skills.
+   * Ignored for marketplace sources (which already have plugin selection).
+   */
+  list?: boolean;
+
+  /**
    * Internal: when true, do not write to the workspace manifest during install.
    * Used by recursive dependency resolution (bulk install) to avoid bubbling transitive deps
    * into the workspace `openpackage.yml`.
