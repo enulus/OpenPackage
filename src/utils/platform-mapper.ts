@@ -108,11 +108,64 @@ export function mapUniversalToPlatform(
 }
 
 /**
+ * Extract all possible 'to' patterns from a flow, including from $switch expressions
+ */
+function extractToPatternsFromFlow(flow: Flow): string[] {
+  const toField = flow.to;
+  const patterns: string[] = [];
+  
+  // Handle $switch expressions - collect all possible patterns
+  if (typeof toField === 'object' && toField !== null && '$switch' in toField) {
+    const switchExpr = toField as any;
+    
+    // Collect all case values
+    if (switchExpr.$switch?.cases) {
+      for (const caseItem of switchExpr.$switch.cases) {
+        if (typeof caseItem.value === 'string') {
+          patterns.push(caseItem.value);
+        } else if (typeof caseItem.value === 'object' && 'pattern' in caseItem.value) {
+          patterns.push(caseItem.value.pattern);
+        }
+      }
+    }
+    
+    // Add default value
+    if (switchExpr.$switch?.default) {
+      if (typeof switchExpr.$switch.default === 'string') {
+        patterns.push(switchExpr.$switch.default);
+      } else if (typeof switchExpr.$switch.default === 'object' && 'pattern' in switchExpr.$switch.default) {
+        patterns.push(switchExpr.$switch.default.pattern);
+      }
+    }
+    
+    return patterns;
+  }
+  
+  // Handle simple string
+  if (typeof toField === 'string') {
+    return [toField];
+  }
+  
+  // Handle pattern object with 'pattern' field
+  if (typeof toField === 'object' && 'pattern' in toField && typeof toField.pattern === 'string') {
+    return [toField.pattern];
+  }
+  
+  // Handle multi-target (object)
+  if (typeof toField === 'object') {
+    return Object.keys(toField);
+  }
+  
+  return [];
+}
+
+/**
  * Map a platform-specific file path back to universal subdir and relative path
  * Uses EXPORT flows (package → workspace direction)
  * This is used during install/apply operations.
  * 
  * Supports local platform configs via cwd.
+ * Handles $switch expressions by checking all possible target patterns.
  */
 export function mapPlatformFileToUniversal(
   absPath: string,
@@ -126,54 +179,58 @@ export function mapPlatformFileToUniversal(
 
     if (definition.export && definition.export.length > 0) {
       for (const flow of definition.export) {
-        const toPattern = typeof flow.to === 'string' ? flow.to : Object.keys(flow.to)[0];
-        if (!toPattern) continue;
+        // Extract all possible 'to' patterns (handles $switch expressions)
+        const toPatterns = extractToPatternsFromFlow(flow);
         
-        // Extract directory from 'to' pattern (e.g., ".cursor/rules/{name}.mdc" -> ".cursor/rules")
-        const parts = toPattern.split('/');
-        const platformSubdirPath = parts.slice(0, -1).join('/');
-        
-        // Check if the path contains this platform subdir
-        const subdirIndex = findSubpathIndex(normalizedPath, platformSubdirPath);
-        if (subdirIndex !== -1) {
-          // Skip switch expressions
-          if (typeof flow.from === 'object' && '$switch' in flow.from) {
-            continue;
-          }
-          // Extract universal subdir from 'from' pattern
-          // For array patterns, use the first pattern
-          const fromPatternRaw = Array.isArray(flow.from) ? flow.from[0] : flow.from;
-          const fromPattern = extractPatternString(fromPatternRaw);
-          const fromParts = fromPattern.split('/');
-          const subdir = fromParts[0];
+        for (const toPattern of toPatterns) {
+          if (!toPattern) continue;
           
-          // Extract the relative path within the subdir
-          const absPattern = `/${platformSubdirPath}/`;
-          const relPattern = `${platformSubdirPath}/`;
-          const isAbsPattern = normalizedPath.indexOf(absPattern) !== -1;
-
-          const patternLength = isAbsPattern ? absPattern.length : relPattern.length;
-          const relPathStart = subdirIndex + patternLength;
-
-          let relPath = normalizedPath.substring(relPathStart);
-
-          // Handle extension transformations from flow
-          const workspaceExtMatch = relPath.match(/\.[^.]+$/);
-          const toExtMatch = toPattern.match(/\.[^./]+$/);
-          const fromExtMatch = fromPattern.match(/\.[^./]+$/);
+          // Extract directory from 'to' pattern (e.g., ".cursor/rules/{name}.mdc" -> ".cursor/rules")
+          const parts = toPattern.split('/');
+          const platformSubdirPath = parts.slice(0, -1).join('/');
           
-          if (workspaceExtMatch && toExtMatch && fromExtMatch) {
-            const workspaceExt = workspaceExtMatch[0];
-            const toExt = toExtMatch[0];
-            const fromExt = fromExtMatch[0];
-            
-            if (workspaceExt === toExt && toExt !== fromExt) {
-              // Transform back to package extension
-              relPath = relPath.slice(0, -workspaceExt.length) + fromExt;
+          // Check if the path contains this platform subdir
+          const subdirIndex = findSubpathIndex(normalizedPath, platformSubdirPath);
+          if (subdirIndex !== -1) {
+            // Skip switch expressions in 'from' field
+            if (typeof flow.from === 'object' && '$switch' in flow.from) {
+              continue;
             }
-          }
+            // Extract universal subdir from 'from' pattern
+            // For array patterns, use the first pattern
+            const fromPatternRaw = Array.isArray(flow.from) ? flow.from[0] : flow.from;
+            const fromPattern = extractPatternString(fromPatternRaw);
+            const fromParts = fromPattern.split('/');
+            const subdir = fromParts[0];
+            
+            // Extract the relative path within the subdir
+            const absPattern = `/${platformSubdirPath}/`;
+            const relPattern = `${platformSubdirPath}/`;
+            const isAbsPattern = normalizedPath.indexOf(absPattern) !== -1;
 
-          return { platform, subdir, relPath };
+            const patternLength = isAbsPattern ? absPattern.length : relPattern.length;
+            const relPathStart = subdirIndex + patternLength;
+
+            let relPath = normalizedPath.substring(relPathStart);
+
+            // Handle extension transformations from flow
+            const workspaceExtMatch = relPath.match(/\.[^.]+$/);
+            const toExtMatch = toPattern.match(/\.[^./]+$/);
+            const fromExtMatch = fromPattern.match(/\.[^./]+$/);
+            
+            if (workspaceExtMatch && toExtMatch && fromExtMatch) {
+              const workspaceExt = workspaceExtMatch[0];
+              const toExt = toExtMatch[0];
+              const fromExt = fromExtMatch[0];
+              
+              if (workspaceExt === toExt && toExt !== fromExt) {
+                // Transform back to package extension
+                relPath = relPath.slice(0, -workspaceExt.length) + fromExt;
+              }
+            }
+
+            return { platform, subdir, relPath };
+          }
         }
       }
     }

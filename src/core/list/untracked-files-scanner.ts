@@ -127,10 +127,11 @@ function extractPatternsFromPlatforms(
     
     // Process export flows (these define workspace file locations)
     for (const flow of definition.export) {
-      const patternStrings = extractToPatterns(flow);
+      const patternStrings = extractToPatterns(flow, workspaceRoot);
       
       for (const pattern of patternStrings) {
-        const category = extractCategoryFromPattern(pattern);
+        // Extract category from the 'from' field (universal format) instead of 'to'
+        const category = extractCategoryFromFlow(flow);
         patterns.push({
           pattern,
           platform,
@@ -145,31 +146,143 @@ function extractPatternsFromPlatforms(
 }
 
 /**
- * Extract 'to' patterns from a flow (handling switch expressions)
+ * Extract category from flow's 'from' pattern (universal format)
+ * The 'from' field represents the universal resource type which is consistent
+ * across all platforms, unlike the 'to' field which is platform-specific.
  */
-function extractToPatterns(flow: Flow): string[] {
+function extractCategoryFromFlow(flow: Flow): string {
+  const fromField = flow.from;
+  
+  // Handle string pattern
+  let fromPattern: string;
+  if (typeof fromField === 'string') {
+    fromPattern = fromField;
+  } else if (Array.isArray(fromField)) {
+    // Use first pattern from array
+    fromPattern = fromField[0] || '';
+  } else if (typeof fromField === 'object' && '$switch' in fromField) {
+    // For switch expressions, we can't determine the exact pattern without context
+    // Fall back to extracting from all case patterns
+    const switchExpr = fromField as SwitchExpression;
+    
+    // Try default first
+    if (switchExpr.$switch.default) {
+      if (typeof switchExpr.$switch.default === 'string') {
+        fromPattern = switchExpr.$switch.default;
+      } else if (typeof switchExpr.$switch.default === 'object' && 'pattern' in switchExpr.$switch.default) {
+        fromPattern = switchExpr.$switch.default.pattern;
+      } else {
+        return 'other';
+      }
+    } else if (switchExpr.$switch.cases && switchExpr.$switch.cases.length > 0) {
+      // Use first case as fallback
+      const firstCase = switchExpr.$switch.cases[0].value;
+      if (typeof firstCase === 'string') {
+        fromPattern = firstCase;
+      } else if (typeof firstCase === 'object' && 'pattern' in firstCase) {
+        fromPattern = firstCase.pattern;
+      } else {
+        return 'other';
+      }
+    } else {
+      return 'other';
+    }
+  } else if (typeof fromField === 'object' && 'pattern' in fromField) {
+    // Handle object with pattern field (e.g., { pattern: "agents/**/*.md", schema: "..." })
+    const patternObj = fromField as { pattern: string };
+    fromPattern = patternObj.pattern;
+  } else {
+    return 'other';
+  }
+  
+  // Extract first directory component from pattern
+  // Examples:
+  //   "skills/**/*" → "skills"
+  //   "rules/**/*.md" → "rules"
+  //   "commands/**/*.md" → "commands"
+  //   "mcp.jsonc" → "mcps"
+  //   "AGENTS.md" → "agents"
+  const parts = fromPattern.split('/');
+  const firstPart = parts[0];
+  
+  // Handle file-based resources
+  if (firstPart.includes('.')) {
+    // Special cases for known files
+    if (firstPart === 'mcp.jsonc' || firstPart === 'mcp.json') {
+      return 'mcps';
+    }
+    if (firstPart === 'AGENTS.md') {
+      return 'agents';
+    }
+    if (firstPart === 'CLAUDE.md' || firstPart === 'QWEN.md' || firstPart === 'WARP.md') {
+      return 'agents';
+    }
+    // For other files, extract base name
+    const baseName = firstPart.replace(/\.[^.]+$/, '').toLowerCase();
+    return baseName || 'other';
+  }
+  
+  // For directory-based resources, return the directory name
+  return firstPart || 'other';
+}
+
+/**
+ * Extract 'to' patterns from a flow (handling switch expressions)
+ * Resolves switch expressions based on workspaceRoot context
+ */
+function extractToPatterns(flow: Flow, workspaceRoot: string): string[] {
   const toField = flow.to;
 
-  // Handle switch expressions - extract all possible patterns
+  // Handle switch expressions - resolve based on workspaceRoot
   if (typeof toField === 'object' && '$switch' in toField) {
     const switchExpr = toField as SwitchExpression;
     const patterns: string[] = [];
     
-    // Extract from cases
+    // Check if we're in global mode
+    const normalizedRoot = workspaceRoot.replace(/\/+$/, '');
+    const isGlobal = normalizedRoot === homedir();
+    
+    // Try to match a case first
     if (switchExpr.$switch.cases) {
       for (const caseItem of switchExpr.$switch.cases) {
-        if (typeof caseItem.value === 'string') {
-          patterns.push(caseItem.value);
+        // Check if this case matches our context
+        if (caseItem.pattern === '~/' && isGlobal) {
+          // Extract the actual pattern value
+          if (typeof caseItem.value === 'string') {
+            return [caseItem.value];
+          } else if (typeof caseItem.value === 'object' && 'pattern' in caseItem.value) {
+            return [caseItem.value.pattern];
+          }
         }
       }
     }
     
-    // Extract from default
-    if (switchExpr.$switch.default && typeof switchExpr.$switch.default === 'string') {
-      patterns.push(switchExpr.$switch.default);
+    // Fall back to default
+    if (switchExpr.$switch.default) {
+      if (typeof switchExpr.$switch.default === 'string') {
+        return [switchExpr.$switch.default];
+      } else if (typeof switchExpr.$switch.default === 'object' && 'pattern' in switchExpr.$switch.default) {
+        return [switchExpr.$switch.default.pattern];
+      }
+    }
+    
+    // If no match, collect all possible patterns for safety
+    if (switchExpr.$switch.cases) {
+      for (const caseItem of switchExpr.$switch.cases) {
+        if (typeof caseItem.value === 'string') {
+          patterns.push(caseItem.value);
+        } else if (typeof caseItem.value === 'object' && 'pattern' in caseItem.value) {
+          patterns.push(caseItem.value.pattern);
+        }
+      }
     }
     
     return patterns;
+  }
+
+  // Handle object with pattern field
+  if (typeof toField === 'object' && 'pattern' in toField && typeof toField.pattern === 'string') {
+    return [toField.pattern];
   }
 
   // Handle string pattern

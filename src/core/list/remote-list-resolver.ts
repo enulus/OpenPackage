@@ -9,7 +9,9 @@ import { parsePackageYml } from '../../utils/package-yml.js';
 import { exists } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
 import { generateGitHubPackageName } from '../../utils/plugin-naming.js';
-import type { ListPackageReport, ListFileMapping } from './list-pipeline.js';
+import { getPackageVersionPath } from '../directory.js';
+import type { ListPackageReport, ListFileMapping, ListResourceGroup } from './list-pipeline.js';
+import { groupFilesIntoResources } from './list-pipeline.js';
 
 export interface RemoteListResult {
   sourceType: 'registry' | 'git';
@@ -63,7 +65,7 @@ async function resolveRegistryList(
   const response = metadataResult.response;
   const resolvedVersion = response.version?.version || version || 'latest';
   const versionLabel = version ? `@${version}` : '';
-  const sourceLabel = `registry (${packageName}${versionLabel})`;
+  const sourceLabel = `${packageName}${versionLabel}`;
 
   const dependencies: RemoteListDependency[] = [];
   const downloads = response.downloads || [];
@@ -81,6 +83,31 @@ async function resolveRegistryList(
   }
 
   const totalFiles = downloads.length;
+  
+  // Try to read file structure from local cache
+  const fileList: ListFileMapping[] = [];
+  let resourceGroups: ListResourceGroup[] | undefined;
+  
+  try {
+    const packagePath = getPackageVersionPath(packageName, resolvedVersion);
+    if (await exists(packagePath)) {
+      const files = await collectFiles(packagePath, packagePath);
+      for (const file of files) {
+        fileList.push({
+          source: file,
+          target: file,
+          exists: true
+        });
+      }
+      
+      // Generate resource groups from file list
+      if (fileList.length > 0) {
+        resourceGroups = groupFilesIntoResources(fileList);
+      }
+    }
+  } catch (error) {
+    logger.debug(`Failed to read cached package structure for ${packageName}@${resolvedVersion}: ${error}`);
+  }
 
   return {
     sourceType: 'registry',
@@ -92,6 +119,8 @@ async function resolveRegistryList(
       state: 'synced',
       totalFiles,
       existingFiles: totalFiles,
+      fileList: fileList.length > 0 ? fileList : undefined,
+      resourceGroups,
       dependencies: dependencies.map(d => d.name)
     },
     dependencies
@@ -114,7 +143,7 @@ async function resolveGitList(
   const contentRoot = result.sourcePath;
   const refLabel = gitRef ? `#${gitRef}` : '';
   const pathLabel = resourcePath ? `/${resourcePath}` : '';
-  const sourceLabel = `git (${gitUrl}${refLabel}${pathLabel})`;
+  const sourceLabel = `${gitUrl}${refLabel}${pathLabel}`;
 
   let name = generateGitHubPackageName({ gitUrl, path: resourcePath });
   let version: string | undefined;
@@ -149,6 +178,9 @@ async function resolveGitList(
       exists: true
     });
   }
+  
+  // Generate resource groups from file list
+  const resourceGroups = fileList.length > 0 ? groupFilesIntoResources(fileList) : undefined;
 
   return {
     sourceType: 'git',
@@ -161,6 +193,7 @@ async function resolveGitList(
       totalFiles: fileList.length,
       existingFiles: fileList.length,
       fileList,
+      resourceGroups,
       dependencies: dependencies.map(d => d.name)
     },
     dependencies

@@ -13,6 +13,8 @@ import { parsePackageYml } from '../../utils/package-yml.js';
 import { arePackageNamesEquivalent } from '../../utils/package-name.js';
 import { scanUntrackedFiles, type UntrackedScanResult } from './untracked-files-scanner.js';
 import { getWorkspaceIndexPath } from '../../utils/workspace-index-yml.js';
+import { isPlatformId, getAllPlatforms, getPlatformDefinition } from '../platforms.js';
+import { normalizePlatforms } from '../../utils/platform-mapper.js';
 
 export type PackageSyncState = 'synced' | 'partial' | 'missing';
 
@@ -20,6 +22,28 @@ export interface ListFileMapping {
   source: string;
   target: string;
   exists: boolean;
+}
+
+/**
+ * A single resource within a package (e.g., one rule, one agent, one skill)
+ */
+export interface ListResourceInfo {
+  /** Display name (filename sans .md for files, directory name for skills) */
+  name: string;
+  /** Resource type: agent, skill, command, rule, hook, mcp, or 'other' for unrecognized */
+  resourceType: string;
+  /** Files belonging to this resource */
+  files: ListFileMapping[];
+}
+
+/**
+ * Resources grouped by type within a package
+ */
+export interface ListResourceGroup {
+  /** Resource type label (e.g., 'rules', 'agents', 'skills') */
+  resourceType: string;
+  /** Individual resources of this type */
+  resources: ListResourceInfo[];
 }
 
 export interface ListPackageReport {
@@ -30,6 +54,7 @@ export interface ListPackageReport {
   totalFiles: number;
   existingFiles: number;
   fileList?: ListFileMapping[];
+  resourceGroups?: ListResourceGroup[];
   dependencies?: string[];
 }
 
@@ -68,6 +93,246 @@ export interface ListPipelineResult {
 }
 
 /**
+ * Known resource type directories (singular form used for display)
+ */
+const RESOURCE_TYPE_DIRS: Record<string, string> = {
+  'agents': 'agent',
+  'skills': 'skill',
+  'commands': 'command',
+  'rules': 'rule',
+  'hooks': 'hook',
+};
+
+/**
+ * Extract the root directory prefix from a `to` pattern string.
+ * e.g. ".cursor/agents/x.md" -> ".cursor", ".config/opencode/agents/x.md" -> ".config/opencode"
+ * Returns null for patterns without a dot-prefixed root dir.
+ */
+function extractRootPrefixFromToPattern(pattern: string): string | null {
+  const parts = pattern.replace(/\\/g, '/').split('/');
+  if (parts.length < 2 || !parts[0].startsWith('.')) return null;
+  const nonGlobParts = [];
+  for (const part of parts) {
+    if (part.includes('*') || part.includes('{')) break;
+    nonGlobParts.push(part);
+  }
+  if (nonGlobParts.length < 2) return nonGlobParts.length === 1 ? nonGlobParts[0] : null;
+  // For paths like ".config/opencode/agents/foo.md", the root prefix is everything
+  // up to but not including known resource type dirs or the filename.
+  const resourceDirs = new Set(Object.keys(RESOURCE_TYPE_DIRS));
+  const prefixParts = [];
+  for (const part of nonGlobParts) {
+    if (resourceDirs.has(part)) break;
+    if (part.includes('.') && part !== nonGlobParts[0]) break;
+    prefixParts.push(part);
+  }
+  return prefixParts.length > 0 ? prefixParts.join('/') : null;
+}
+
+/**
+ * Collect all `to` pattern strings from a flow, including $switch cases.
+ */
+function collectToPatternsFromFlow(toField: unknown): string[] {
+  if (typeof toField === 'string') return [toField];
+
+  if (typeof toField === 'object' && toField !== null) {
+    if ('$switch' in toField) {
+      const sw = (toField as any).$switch;
+      const patterns: string[] = [];
+      for (const c of sw?.cases ?? []) {
+        const v = c.value;
+        if (typeof v === 'string') patterns.push(v);
+        else if (typeof v === 'object' && v && 'pattern' in v) patterns.push(v.pattern);
+      }
+      const d = sw?.default;
+      if (typeof d === 'string') patterns.push(d);
+      else if (typeof d === 'object' && d && 'pattern' in d) patterns.push(d.pattern);
+      return patterns;
+    }
+    if ('pattern' in toField && typeof (toField as any).pattern === 'string') {
+      return [(toField as any).pattern];
+    }
+  }
+  return [];
+}
+
+/**
+ * Build a mapping from root directory prefixes to platform IDs.
+ * Collects all root prefixes from every export flow `to` pattern (including $switch cases).
+ * Cached per targetDir to avoid recomputing on every file.
+ */
+const rootDirCacheMap = new Map<string, Map<string, string>>();
+
+function getRootDirToPlatformMap(targetDir: string): Map<string, string> {
+  const cached = rootDirCacheMap.get(targetDir);
+  if (cached) return cached;
+
+  const map = new Map<string, string>();
+  for (const platform of getAllPlatforms({ includeDisabled: true }, targetDir)) {
+    const definition = getPlatformDefinition(platform, targetDir);
+    if (!definition.export) continue;
+    for (const flow of definition.export) {
+      for (const pattern of collectToPatternsFromFlow(flow.to)) {
+        const prefix = extractRootPrefixFromToPattern(pattern);
+        if (prefix && !map.has(prefix)) {
+          map.set(prefix, platform);
+        }
+      }
+    }
+  }
+  rootDirCacheMap.set(targetDir, map);
+  return map;
+}
+
+/**
+ * Extract platform from a target path by matching its root directory against
+ * known platform root directories derived from export flows.
+ * Returns null if the file is universal (no platform).
+ *
+ * @param targetPath - Target path relative to workspace (e.g., ".cursor/agents/foo.md")
+ * @param targetDir - Target directory for context and flow resolution
+ * @returns Platform ID or null if universal
+ */
+function extractPlatformFromPath(targetPath: string, targetDir: string): string | null {
+  const normalized = targetPath.replace(/\\/g, '/');
+
+  // Check if the path starts with a known platform root directory
+  // Sort by longest prefix first so more-specific prefixes match before shorter ones
+  const rootDirMap = getRootDirToPlatformMap(targetDir);
+  const sortedEntries = [...rootDirMap.entries()].sort((a, b) => b[0].length - a[0].length);
+  for (const [rootDir, platform] of sortedEntries) {
+    if (normalized === rootDir || normalized.startsWith(rootDir + '/')) {
+      return platform;
+    }
+  }
+
+  // Fallback: Check for platform suffix in filename (e.g., mcp.cursor.jsonc, rule.claude.md)
+  const parts = normalized.split('/');
+  const filename = parts[parts.length - 1];
+  const nameParts = filename.split('.');
+
+  // Need at least 3 parts: name.platform.ext
+  if (nameParts.length >= 3) {
+    const possiblePlatform = nameParts[nameParts.length - 2];
+    if (isPlatformId(possiblePlatform, targetDir)) {
+      return possiblePlatform;
+    }
+  }
+
+  // No platform detected - this is a universal file
+  return null;
+}
+
+/**
+ * Classify a source key from the workspace index into a resource type and name.
+ *
+ * Source keys follow the pattern: `<type-dir>/<name>.md` or `<type-dir>/<name>/...`
+ * For skills, multiple source keys share a `skills/<name>/` prefix and are grouped.
+ * For MCP, source keys are `mcp.json` or `mcp.jsonc`.
+ */
+export function classifySourceKey(sourceKey: string): { resourceType: string; resourceName: string } {
+  const normalized = sourceKey.replace(/\\/g, '/').replace(/\/$/, '');
+  const parts = normalized.split('/');
+
+  // Check for MCP files at root level
+  if (parts.length === 1 && (sourceKey === 'mcp.json' || sourceKey === 'mcp.jsonc')) {
+    return { resourceType: 'mcp', resourceName: 'MCP Server Configuration' };
+  }
+
+  const firstDir = parts[0];
+  const singularType = RESOURCE_TYPE_DIRS[firstDir];
+
+  if (!singularType) {
+    // Not a known resource type directory - classify as 'other'
+    const name = parts[parts.length - 1].replace(/\.[^.]+$/, '') || sourceKey;
+    return { resourceType: 'other', resourceName: name };
+  }
+
+  if (singularType === 'skill') {
+    // Skills: the resource name is the directory after 'skills/'
+    // e.g., skills/my-skill/SKILL.md -> name is 'my-skill'
+    // e.g., skills/my-skill/helper.py -> name is 'my-skill'
+    const skillName = parts.length > 1 ? parts[1] : 'unnamed';
+    return { resourceType: 'skill', resourceName: skillName };
+  }
+
+  // File-based resources (agents, commands, rules, hooks)
+  // e.g., rules/my-rule.md -> name is 'my-rule'
+  // e.g., agents/sub/deep.md -> name is 'deep'
+  const fileName = parts[parts.length - 1];
+  const name = fileName.replace(/\.[^.]+$/, '') || fileName;
+  return { resourceType: singularType, resourceName: name };
+}
+
+/**
+ * Group file mappings into resource groups by analyzing source keys.
+ *
+ * For skills, all files sharing the same skills/<name>/ prefix are grouped into one resource.
+ * For other types, each source key maps to one resource.
+ */
+export function groupFilesIntoResources(fileList: ListFileMapping[]): ListResourceGroup[] {
+  // First pass: classify each file and group by resource identity
+  const resourceMap = new Map<string, ListResourceInfo>();
+
+  for (const file of fileList) {
+    const { resourceType, resourceName } = classifySourceKey(file.source);
+    const key = `${resourceType}::${resourceName}`;
+
+    if (!resourceMap.has(key)) {
+      resourceMap.set(key, {
+        name: resourceName,
+        resourceType,
+        files: []
+      });
+    }
+    resourceMap.get(key)!.files.push(file);
+  }
+
+  // Second pass: group resources by type
+  const typeGroupMap = new Map<string, ListResourceInfo[]>();
+
+  for (const resource of resourceMap.values()) {
+    if (!typeGroupMap.has(resource.resourceType)) {
+      typeGroupMap.set(resource.resourceType, []);
+    }
+    typeGroupMap.get(resource.resourceType)!.push(resource);
+  }
+
+  // Build final groups, sorted by type then by resource name
+  const typeOrder = ['rule', 'agent', 'command', 'skill', 'hook', 'mcp', 'other'];
+  const groups: ListResourceGroup[] = [];
+
+  for (const type of typeOrder) {
+    const resources = typeGroupMap.get(type);
+    if (!resources || resources.length === 0) continue;
+
+    // Sort resources by name
+    resources.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Sort files within each resource by target path
+    for (const resource of resources) {
+      resource.files.sort((a, b) => a.target.localeCompare(b.target));
+    }
+
+    // Use plural form for group label
+    const pluralLabel = type === 'other' ? 'other' : `${type}s`;
+    groups.push({ resourceType: pluralLabel, resources });
+  }
+
+  // Handle any types not in typeOrder
+  for (const [type, resources] of typeGroupMap) {
+    if (typeOrder.includes(type)) continue;
+    resources.sort((a, b) => a.name.localeCompare(b.name));
+    for (const resource of resources) {
+      resource.files.sort((a, b) => a.target.localeCompare(b.target));
+    }
+    groups.push({ resourceType: `${type}s`, resources });
+  }
+
+  return groups;
+}
+
+/**
  * Check package list status by verifying file existence
  * Does not compare content - only checks if expected files exist
  */
@@ -75,7 +340,8 @@ async function checkPackageStatus(
   targetDir: string,
   pkgName: string,
   entry: WorkspaceIndexPackage,
-  includeFileList: boolean = false
+  includeFileList: boolean = false,
+  platformsFilter?: string[]
 ): Promise<ListPackageReport> {
   const totalTargets = entry.files
     ? Object.values(entry.files).reduce((s, arr) => s + (Array.isArray(arr) ? arr.length : 0), 0)
@@ -107,12 +373,29 @@ async function checkPackageStatus(
   const fileList: ListFileMapping[] = [];
   
   const filesMapping = entry.files || {};
+  
+  // Normalize platform filter
+  const normalizedPlatforms = platformsFilter ? normalizePlatforms(platformsFilter) : null;
 
   for (const [sourceKey, targets] of Object.entries(filesMapping)) {
     if (!Array.isArray(targets) || targets.length === 0) continue;
 
     for (const mapping of targets) {
       const targetPath = getTargetPath(mapping);
+      
+      // Apply platform filter if specified
+      if (normalizedPlatforms && normalizedPlatforms.length > 0) {
+        const filePlatform = extractPlatformFromPath(targetPath, targetDir);
+        
+        // If the file has a platform, check if it matches the filter
+        if (filePlatform) {
+          if (!normalizedPlatforms.includes(filePlatform.toLowerCase())) {
+            continue; // Skip this file - it doesn't match the platform filter
+          }
+        }
+        // If the file has no platform (universal), include it in all platform filters
+      }
+      
       const absPath = path.join(targetDir, targetPath);
       totalFiles++;
       
@@ -151,6 +434,42 @@ async function checkPackageStatus(
     }
   }
 
+  // Always compute resource groups from the file data we collected
+  const allFilesForGrouping: ListFileMapping[] = includeFileList ? fileList : [];
+
+  // If we didn't collect file details for the list, we still need them for resource grouping
+  if (!includeFileList) {
+    for (const [sourceKey, targets] of Object.entries(filesMapping)) {
+      if (!Array.isArray(targets) || targets.length === 0) continue;
+      for (const mapping of targets) {
+        const targetPath = getTargetPath(mapping);
+        
+        // Apply platform filter if specified
+        if (normalizedPlatforms && normalizedPlatforms.length > 0) {
+          const filePlatform = extractPlatformFromPath(targetPath, targetDir);
+          
+          // If the file has a platform, check if it matches the filter
+          if (filePlatform) {
+            if (!normalizedPlatforms.includes(filePlatform.toLowerCase())) {
+              continue; // Skip this file - it doesn't match the platform filter
+            }
+          }
+          // If the file has no platform (universal), include it in all platform filters
+        }
+        
+        allFilesForGrouping.push({
+          source: sourceKey,
+          target: targetPath,
+          exists: true
+        });
+      }
+    }
+  }
+
+  const resourceGroups = allFilesForGrouping.length > 0
+    ? groupFilesIntoResources(allFilesForGrouping)
+    : undefined;
+
   return {
     name: pkgName,
     version: entry.version,
@@ -159,6 +478,7 @@ async function checkPackageStatus(
     totalFiles,
     existingFiles,
     fileList: includeFileList ? fileList : undefined,
+    resourceGroups,
     dependencies
   };
 }
@@ -288,7 +608,7 @@ export async function runListPipeline(
 
     let targetPackage: ListPackageReport;
     try {
-      targetPackage = await checkPackageStatus(targetDir, packageName, pkgEntry, true);
+      targetPackage = await checkPackageStatus(targetDir, packageName, pkgEntry, true, platforms);
       reports.push(targetPackage);
       reportMap.set(packageName, targetPackage);
     } catch (error) {
@@ -316,7 +636,7 @@ export async function runListPipeline(
       if (!depEntry) continue;
       
       try {
-        const depReport = await checkPackageStatus(targetDir, depName, depEntry, includeFiles);
+        const depReport = await checkPackageStatus(targetDir, depName, depEntry, includeFiles, platforms);
         reportMap.set(depName, depReport);
       } catch (error) {
         logger.debug(`Failed to load dependency ${depName}: ${error}`);
@@ -337,7 +657,7 @@ export async function runListPipeline(
             if (!nestedEntry) continue;
             
             try {
-              const nestedReport = await checkPackageStatus(targetDir, nestedDepName, nestedEntry, includeFiles);
+              const nestedReport = await checkPackageStatus(targetDir, nestedDepName, nestedEntry, includeFiles, platforms);
               reportMap.set(nestedDepName, nestedReport);
               
               if (nestedReport.dependencies && nestedReport.dependencies.length > 0) {
@@ -354,6 +674,14 @@ export async function runListPipeline(
 
     // Build tree from the target package's dependencies (not the package itself)
     const tree = buildDependencyTree(depNames, reportMap, all);
+    
+    // When listing a specific package, also create a tree node for the target package itself
+    // so its resources can be displayed
+    const targetTreeNode: ListTreeNode = {
+      report: targetPackage,
+      children: tree
+    };
+    const treeWithTarget = [targetTreeNode];
 
     // Compute tracked/missing counts from reports
     const trackedCount = reports.reduce((sum, r) => sum + r.existingFiles, 0);
@@ -369,7 +697,7 @@ export async function runListPipeline(
 
     return {
       success: true,
-      data: { packages: reports, tree, rootPackageNames: depNames, targetPackage, trackedCount, missingCount, untrackedCount, untrackedFiles }
+      data: { packages: reports, tree: treeWithTarget, rootPackageNames: depNames, targetPackage, trackedCount, missingCount, untrackedCount, untrackedFiles }
     };
   }
 
@@ -382,7 +710,7 @@ export async function runListPipeline(
     }
 
     try {
-      const report = await checkPackageStatus(targetDir, pkgName, pkgEntry, includeFiles);
+      const report = await checkPackageStatus(targetDir, pkgName, pkgEntry, includeFiles, platforms);
       reports.push(report);
       reportMap.set(pkgName, report);
     } catch (error) {

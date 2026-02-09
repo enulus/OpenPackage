@@ -2,14 +2,39 @@ import { Command } from 'commander';
 
 import { CommandResult, type ExecutionContext } from '../types/index.js';
 import { withErrorHandling, ValidationError } from '../utils/errors.js';
-import { runListPipeline, type ListPackageReport, type ListTreeNode, type ListPipelineResult } from '../core/list/list-pipeline.js';
+import { runListPipeline, type ListPackageReport, type ListTreeNode, type ListPipelineResult, type ListResourceGroup, type ListResourceInfo, type ListFileMapping } from '../core/list/list-pipeline.js';
 import { logger } from '../utils/logger.js';
 import { parsePackageYml } from '../utils/package-yml.js';
 import { getLocalPackageYmlPath } from '../utils/paths.js';
 import { createExecutionContext, getDisplayTargetDir } from '../core/execution-context.js';
-import type { UntrackedScanResult } from '../core/list/untracked-files-scanner.js';
+import type { UntrackedScanResult, UntrackedFile } from '../core/list/untracked-files-scanner.js';
 import { classifyInput } from '../core/install/preprocessing/index.js';
 import { resolveRemoteList, type RemoteListResult } from '../core/list/remote-list-resolver.js';
+import { detectEntityType, getEntityDisplayName } from '../utils/entity-detector.js';
+import { formatPathForDisplay } from '../utils/formatters.js';
+import { resolveDeclaredPath } from '../utils/path-resolution.js';
+
+type FileStatus = 'tracked' | 'untracked' | 'missing';
+type ResourceStatus = 'tracked' | 'partial' | 'untracked' | 'mixed';
+type ResourceScope = 'project' | 'global';
+
+interface EnhancedFileMapping extends ListFileMapping {
+  status: FileStatus;
+  scope: ResourceScope;
+}
+
+interface EnhancedResourceInfo {
+  name: string;
+  resourceType: string;
+  files: EnhancedFileMapping[];
+  status: ResourceStatus;
+  scopes: Set<ResourceScope>;
+}
+
+interface EnhancedResourceGroup {
+  resourceType: string;
+  resources: EnhancedResourceInfo[];
+}
 
 interface ListOptions {
   global?: boolean;
@@ -22,6 +47,16 @@ interface ListOptions {
   remote?: boolean;
   profile?: string;
   apiKey?: string;
+  deps?: boolean;
+}
+
+interface ScopeResult {
+  headerName: string;
+  headerVersion: string | undefined;
+  headerPath: string;
+  headerType: 'workspace' | 'package' | 'resource';
+  tree: ListTreeNode[];
+  data: ListPipelineResult;
 }
 
 const DIM = '\x1b[2m';
@@ -41,27 +76,42 @@ function red(text: string): string {
   return `${RED}${text}${RESET}`;
 }
 
+// ---------------------------------------------------------------------------
+// Shared formatting helpers
+// ---------------------------------------------------------------------------
+
 function formatPackageLine(pkg: ListPackageReport): string {
   const version = pkg.version && pkg.version !== '0.0.0' ? `@${pkg.version}` : '';
-
-  let fileCount = '';
-  if (pkg.totalFiles > 0) {
-    fileCount = dim(` (${pkg.totalFiles})`);
-  }
 
   let stateSuffix = '';
   if (pkg.state === 'missing') {
     stateSuffix = dim(' (missing)');
   }
 
-  return `${pkg.name}${version}${stateSuffix}${fileCount}`;
+  return `${pkg.name}${version}${stateSuffix}`;
 }
+
+function formatFilePath(file: EnhancedFileMapping): string {
+  if (file.scope === 'global' && !file.target.startsWith('~')) {
+    return `~/${file.target}`;
+  }
+  return file.target;
+}
+
+function formatScopeBadges(scopes: Set<ResourceScope>): string {
+  const sorted = Array.from(scopes).sort();
+  const badges = sorted.map(s => s === 'project' ? 'p' : 'g').join(', ');
+  return dim(`[${badges}]`);
+}
+
+// ---------------------------------------------------------------------------
+// Remote package detail helper (used when package not found locally)
+// ---------------------------------------------------------------------------
 
 function printFileList(
   files: { source: string; target: string; exists: boolean }[],
   prefix: string
 ): void {
-  // Sort files alphabetically by target path
   const sortedFiles = [...files].sort((a, b) => a.target.localeCompare(b.target));
 
   for (let i = 0; i < sortedFiles.length; i++) {
@@ -75,200 +125,70 @@ function printFileList(
   }
 }
 
-function printTreeNode(
-  node: ListTreeNode,
+function printResourceGroups(
+  groups: ListResourceGroup[],
   prefix: string,
-  isLast: boolean,
   showFiles: boolean
 ): void {
-  const hasChildren = node.children.length > 0;
-  const hasFiles = showFiles && node.report.fileList && node.report.fileList.length > 0;
-  const hasBranches = hasChildren || hasFiles;
+  for (let gi = 0; gi < groups.length; gi++) {
+    const group = groups[gi];
+    const isLastGroup = gi === groups.length - 1;
+    const hasResources = group.resources.length > 0;
+    const groupConnector = isLastGroup
+      ? (hasResources ? '└─┬ ' : '└── ')
+      : (hasResources ? '├─┬ ' : '├── ');
+    const groupPrefix = prefix + (isLastGroup ? '  ' : '│ ');
 
-  const connector = isLast
-    ? (hasBranches ? '└─┬ ' : '└── ')
-    : (hasBranches ? '├─┬ ' : '├── ');
-  const childPrefix = prefix + (isLast ? '  ' : '│ ');
+    console.log(`${prefix}${groupConnector}${group.resourceType}${dim(` (${group.resources.length})`)}`);
 
-  console.log(`${prefix}${connector}${formatPackageLine(node.report)}`);
+    for (let ri = 0; ri < group.resources.length; ri++) {
+      const resource = group.resources[ri];
+      const isLastResource = ri === group.resources.length - 1;
 
-  if (hasFiles) {
-    const files = node.report.fileList!;
-    const filePrefix = node.children.length > 0 ? '│ ' : '  ';
-    printFileList(files, childPrefix);
-  }
+      if (showFiles && resource.files.length > 0) {
+        const resConnector = isLastResource ? '└─┬ ' : '├─┬ ';
+        const resPrefix = groupPrefix + (isLastResource ? '  ' : '│ ');
+        console.log(`${groupPrefix}${resConnector}${resource.name}`);
 
-  node.children.forEach((child, index) => {
-    const isLastChild = index === node.children.length - 1;
-    printTreeNode(child, childPrefix, isLastChild, showFiles);
-  });
-}
-
-function printUntrackedSummary(result: UntrackedScanResult): void {
-  printUntrackedSummaryWithLabel(result, undefined);
-}
-
-function printUntrackedSummaryWithLabel(result: UntrackedScanResult, scopeLabel?: string): void {
-  if (result.totalFiles === 0) return;
-
-  const label = scopeLabel ? `${scopeLabel} Untracked:` : 'Untracked:';
-  console.log(label);
-
-  const sortedPlatforms = Array.from(result.platformGroups.keys()).sort();
-  
-  for (let i = 0; i < sortedPlatforms.length; i++) {
-    const platform = sortedPlatforms[i];
-    const files = result.platformGroups.get(platform)!;
-    const isLast = i === sortedPlatforms.length - 1;
-    const connector = isLast ? '└── ' : '├── ';
-    console.log(`${connector}${platform}${dim(` (${files.length})`)}`);
-  }
-}
-
-function printUntrackedExpanded(result: UntrackedScanResult): void {
-  printUntrackedExpandedWithLabel(result, 'Untracked:');
-}
-
-function printUntrackedExpandedWithLabel(result: UntrackedScanResult, label: string): void {
-  if (result.totalFiles === 0) {
-    console.log('No untracked files detected.');
-    console.log(dim('All files matching platform patterns are tracked in the index.'));
-    return;
-  }
-
-  console.log(label);
-
-  const sortedPlatforms = Array.from(result.platformGroups.keys()).sort();
-
-  for (let i = 0; i < sortedPlatforms.length; i++) {
-    const platform = sortedPlatforms[i];
-    const files = result.platformGroups.get(platform)!;
-    const isLastPlatform = i === sortedPlatforms.length - 1;
-    const platformConnector = isLastPlatform ? '└─┬ ' : '├─┬ ';
-    const platformPrefix = isLastPlatform ? '  ' : '│ ';
-    
-    console.log(`${platformConnector}${platform}${dim(` (${files.length})`)}`);
-
-    // Sort files alphabetically by workspace path
-    const sortedFiles = [...files].sort((a, b) => a.workspacePath.localeCompare(b.workspacePath));
-
-    for (let j = 0; j < sortedFiles.length; j++) {
-      const file = sortedFiles[j];
-      const isLastFile = j === sortedFiles.length - 1;
-      const fileConnector = isLastFile ? '└── ' : '├── ';
-      console.log(`${platformPrefix}${fileConnector}${dim(file.workspacePath)}`);
+        for (let fi = 0; fi < resource.files.length; fi++) {
+          const file = resource.files[fi];
+          const isLastFile = fi === resource.files.length - 1;
+          const fileConnector = isLastFile ? '└── ' : '├── ';
+          const label = file.exists
+            ? dim(file.target)
+            : `${dim(file.target)} ${red('[MISSING]')}`;
+          console.log(`${resPrefix}${fileConnector}${label}`);
+        }
+      } else {
+        const resConnector = isLastResource ? '└── ' : '├── ';
+        console.log(`${groupPrefix}${resConnector}${resource.name}`);
+      }
     }
-  }
-}
-
-function printDefaultView(
-  headerName: string,
-  headerVersion: string | undefined,
-  headerPath: string,
-  tree: ListTreeNode[],
-  data: ListPipelineResult,
-  showFiles: boolean,
-  scopeLabel?: string
-): void {
-  const version = headerVersion && headerVersion !== '0.0.0' ? `@${headerVersion}` : '';
-  const label = scopeLabel ? `${scopeLabel} ` : '';
-  console.log(`${label}${headerName}${version} ${headerPath}`);
-
-  if (tree.length === 0) {
-    console.log(dim('  No packages installed.'));
-    return;
-  }
-
-  tree.forEach((node, index) => {
-    const isLast = index === tree.length - 1;
-    printTreeNode(node, '', isLast, showFiles);
-  });
-
-  if (data.untrackedFiles && data.untrackedFiles.totalFiles > 0) {
-    if (showFiles) {
-      const untrackedLabel = scopeLabel ? `${scopeLabel} Untracked:` : 'Untracked:';
-      printUntrackedExpandedWithLabel(data.untrackedFiles, untrackedLabel);
-    } else {
-      printUntrackedSummaryWithLabel(data.untrackedFiles, scopeLabel);
-    }
-  }
-}
-
-function printTrackedView(
-  headerName: string,
-  headerVersion: string | undefined,
-  headerPath: string,
-  tree: ListTreeNode[],
-  data: ListPipelineResult,
-  showFiles: boolean,
-  scopeLabel?: string
-): void {
-  const version = headerVersion && headerVersion !== '0.0.0' ? `@${headerVersion}` : '';
-  const label = scopeLabel ? `${scopeLabel} ` : '';
-  console.log(`${label}${headerName}${version} ${headerPath}`);
-
-  if (tree.length === 0) {
-    console.log(dim('  No packages installed.'));
-    return;
-  }
-
-  tree.forEach((node, index) => {
-    const isLast = index === tree.length - 1;
-    printTreeNode(node, '', isLast, showFiles);
-  });
-}
-
-function printUntrackedView(
-  data: ListPipelineResult,
-  showFiles: boolean
-): void {
-  if (!data.untrackedFiles || data.untrackedFiles.totalFiles === 0) {
-    console.log('No untracked files detected.');
-    console.log(dim('All files matching platform patterns are tracked in the index.'));
-    return;
-  }
-
-  if (showFiles) {
-    printUntrackedExpanded(data.untrackedFiles);
-  } else {
-    printUntrackedSummary(data.untrackedFiles);
-  }
-}
-
-function printPackageDetail(
-  targetPackage: ListPackageReport,
-  tree: ListTreeNode[],
-  data: ListPipelineResult,
-  showFiles: boolean
-): void {
-  console.log(formatPackageLine(targetPackage));
-
-  if (targetPackage.fileList && targetPackage.fileList.length > 0) {
-    printFileList(targetPackage.fileList, '');
-  }
-
-  if (tree.length > 0) {
-    console.log();
-    console.log('Dependencies:');
-    tree.forEach((node, index) => {
-      const isLast = index === tree.length - 1;
-      printTreeNode(node, '', isLast, showFiles);
-    });
   }
 }
 
 function printRemotePackageDetail(
   result: RemoteListResult,
-  showFiles: boolean
+  showFiles: boolean,
+  showDeps: boolean
 ): void {
   const pkg = result.package;
-  console.log(`${formatPackageLine(pkg)} ${dim(`[${result.sourceLabel}]`)}`);
+  console.log(`${formatPackageLine(pkg)} ${dim(`(${result.sourceLabel})`)} ${dim('[remote]')}`);
 
-  if (showFiles && pkg.fileList && pkg.fileList.length > 0) {
+  // Show resource groups if available (preferred view)
+  if (pkg.resourceGroups && pkg.resourceGroups.length > 0) {
+    printResourceGroups(pkg.resourceGroups, '', showFiles);
+  } 
+  // Fallback to file list if no resource groups but files exist
+  else if (pkg.fileList && pkg.fileList.length > 0) {
     printFileList(pkg.fileList, '');
   }
+  // If no content available at all, show a message
+  else if (pkg.totalFiles === 0) {
+    console.log(dim('  (no files)'));
+  }
 
-  if (result.dependencies.length > 0) {
+  if (showDeps && result.dependencies.length > 0) {
     console.log();
     console.log('Dependencies:');
     result.dependencies.forEach((dep, index) => {
@@ -280,17 +200,437 @@ function printRemotePackageDetail(
   }
 }
 
-interface ScopeResult {
-  headerName: string;
-  headerVersion: string | undefined;
-  headerPath: string;
-  tree: ListTreeNode[];
-  data: ListPipelineResult;
+// ---------------------------------------------------------------------------
+// Deps view (`opkg list --deps`)
+// ---------------------------------------------------------------------------
+
+function printDepTreeNode(
+  node: ListTreeNode,
+  prefix: string,
+  isLast: boolean,
+  showFiles: boolean
+): void {
+  const hasChildren = node.children.length > 0;
+  const hasResources = showFiles && node.report.resourceGroups && node.report.resourceGroups.length > 0;
+  const hasBranches = hasChildren || hasResources;
+
+  const connector = isLast
+    ? (hasBranches ? '└─┬ ' : '└── ')
+    : (hasBranches ? '├─┬ ' : '├── ');
+  const childPrefix = prefix + (isLast ? '  ' : '│ ');
+
+  console.log(`${prefix}${connector}${formatPackageLine(node.report)}`);
+
+  if (hasResources) {
+    const groups = node.report.resourceGroups!;
+    for (let gi = 0; gi < groups.length; gi++) {
+      const group = groups[gi];
+      const isLastGroup = gi === groups.length - 1 && !hasChildren;
+      const hasGroupResources = group.resources.length > 0;
+      const groupConnector = isLastGroup
+        ? (hasGroupResources ? '└─┬ ' : '└── ')
+        : (hasGroupResources ? '├─┬ ' : '├── ');
+      const groupPrefix = childPrefix + (isLastGroup ? '  ' : '│ ');
+
+      console.log(`${childPrefix}${groupConnector}${group.resourceType}${dim(` (${group.resources.length})`)}`);
+
+      for (let ri = 0; ri < group.resources.length; ri++) {
+        const resource = group.resources[ri];
+        const isLastResource = ri === group.resources.length - 1;
+
+        if (resource.files.length > 0) {
+          const resConnector = isLastResource ? '└─┬ ' : '├─┬ ';
+          const resPrefix = groupPrefix + (isLastResource ? '  ' : '│ ');
+          console.log(`${groupPrefix}${resConnector}${resource.name}`);
+
+          for (let fi = 0; fi < resource.files.length; fi++) {
+            const file = resource.files[fi];
+            const isLastFile = fi === resource.files.length - 1;
+            const fileConnector = isLastFile ? '└── ' : '├── ';
+            const label = file.exists
+              ? dim(file.target)
+              : `${dim(file.target)} ${red('[MISSING]')}`;
+            console.log(`${resPrefix}${fileConnector}${label}`);
+          }
+        } else {
+          const resConnector = isLastResource ? '└── ' : '├── ';
+          console.log(`${groupPrefix}${resConnector}${resource.name}`);
+        }
+      }
+    }
+  }
+
+  node.children.forEach((child, index) => {
+    const isLastChild = index === node.children.length - 1;
+    printDepTreeNode(child, childPrefix, isLastChild, showFiles);
+  });
 }
 
-/**
- * Run list pipeline for a specific scope (project or global)
- */
+interface DepsPackageEntry {
+  report: ListPackageReport;
+  children: ListTreeNode[];
+  scopes: Set<ResourceScope>;
+}
+
+function printDepsView(
+  results: Array<{ scope: ResourceScope; result: ScopeResult }>,
+  showFiles: boolean
+): void {
+  const packageMap = new Map<string, DepsPackageEntry>();
+
+  for (const { scope, result } of results) {
+    for (const node of result.tree) {
+      const key = node.report.name;
+      if (packageMap.has(key)) {
+        packageMap.get(key)!.scopes.add(scope);
+      } else {
+        packageMap.set(key, {
+          report: node.report,
+          children: node.children,
+          scopes: new Set([scope])
+        });
+      }
+    }
+  }
+
+  if (packageMap.size === 0) {
+    console.log(dim('No packages installed.'));
+    return;
+  }
+
+  // Print header showing workspace/package name and path
+  if (results.length > 0) {
+    const firstResult = results[0].result;
+    const version = firstResult.headerVersion ? `@${firstResult.headerVersion}` : '';
+    const typeTag = dim(`[${firstResult.headerType}]`);
+    console.log(`${firstResult.headerName}${version} ${dim(`(${firstResult.headerPath})`)} ${typeTag}`);
+  }
+
+  const entries = Array.from(packageMap.values())
+    .sort((a, b) => a.report.name.localeCompare(b.report.name));
+
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    const isLast = i === entries.length - 1;
+    const hasChildren = entry.children.length > 0;
+    const hasResources = showFiles && entry.report.resourceGroups && entry.report.resourceGroups.length > 0;
+    const hasBranches = hasChildren || hasResources;
+
+    const scopeBadge = formatScopeBadges(entry.scopes);
+    const connector = isLast
+      ? (hasBranches ? '└─┬ ' : '└── ')
+      : (hasBranches ? '├─┬ ' : '├── ');
+    const childPrefix = isLast ? '  ' : '│ ';
+
+    console.log(`${connector}${formatPackageLine(entry.report)} ${scopeBadge}`);
+
+    // Show resource groups for the top-level package if files are requested
+    if (hasResources) {
+      const groups = entry.report.resourceGroups!;
+      for (let gi = 0; gi < groups.length; gi++) {
+        const group = groups[gi];
+        const isLastGroup = gi === groups.length - 1 && !hasChildren;
+        const hasGroupResources = group.resources.length > 0;
+        const groupConnector = isLastGroup
+          ? (hasGroupResources ? '└─┬ ' : '└── ')
+          : (hasGroupResources ? '├─┬ ' : '├── ');
+        const groupPrefix = childPrefix + (isLastGroup ? '  ' : '│ ');
+
+        console.log(`${childPrefix}${groupConnector}${group.resourceType}${dim(` (${group.resources.length})`)}`);
+
+        for (let ri = 0; ri < group.resources.length; ri++) {
+          const resource = group.resources[ri];
+          const isLastResource = ri === group.resources.length - 1;
+
+          if (resource.files.length > 0) {
+            const resConnector = isLastResource ? '└─┬ ' : '├─┬ ';
+            const resPrefix = groupPrefix + (isLastResource ? '  ' : '│ ');
+            console.log(`${groupPrefix}${resConnector}${resource.name}`);
+
+            for (let fi = 0; fi < resource.files.length; fi++) {
+              const file = resource.files[fi];
+              const isLastFile = fi === resource.files.length - 1;
+              const fileConnector = isLastFile ? '└── ' : '├── ';
+              const label = file.exists
+                ? dim(file.target)
+                : `${dim(file.target)} ${red('[MISSING]')}`;
+              console.log(`${resPrefix}${fileConnector}${label}`);
+            }
+          } else {
+            const resConnector = isLastResource ? '└── ' : '├── ';
+            console.log(`${groupPrefix}${resConnector}${resource.name}`);
+          }
+        }
+      }
+    }
+
+    for (let ci = 0; ci < entry.children.length; ci++) {
+      const child = entry.children[ci];
+      const isLastChild = ci === entry.children.length - 1;
+      printDepTreeNode(child, childPrefix, isLastChild, showFiles);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Resources view (default: `opkg list`)
+// ---------------------------------------------------------------------------
+
+function deriveResourceNameFromUntrackedFile(file: UntrackedFile): string {
+  const parts = file.workspacePath.split('/');
+  const fileName = parts[parts.length - 1];
+
+  if (fileName === 'SKILL.md' && parts.length >= 2) {
+    return parts[parts.length - 2];
+  }
+
+  return fileName.replace(/\.[^.]+$/, '') || fileName;
+}
+
+function normalizeCategory(category: string): string {
+  const categoryMap: Record<string, string> = {
+    'rules': 'rules',
+    'rule': 'rules',
+    'agents': 'agents',
+    'agent': 'agents',
+    'commands': 'commands',
+    'command': 'commands',
+    'skills': 'skills',
+    'skill': 'skills',
+    'hooks': 'hooks',
+    'hook': 'hooks',
+    'mcp': 'mcps',
+    'mcps': 'mcps',
+  };
+
+  return categoryMap[category.toLowerCase()] || 'other';
+}
+
+function calculateResourceStatus(files: EnhancedFileMapping[]): ResourceStatus {
+  if (files.length === 0) return 'untracked';
+
+  const hasTracked = files.some(f => f.status === 'tracked');
+  const hasUntracked = files.some(f => f.status === 'untracked');
+  const hasMissing = files.some(f => f.status === 'missing');
+
+  if (hasUntracked && !hasTracked && !hasMissing) return 'untracked';
+  if (hasTracked && !hasUntracked && !hasMissing) return 'tracked';
+  if (hasTracked && hasMissing && !hasUntracked) return 'partial';
+  return 'mixed';
+}
+
+function mergeTrackedAndUntrackedResources(
+  tree: ListTreeNode[],
+  untrackedFiles: UntrackedScanResult | undefined,
+  scope: ResourceScope
+): EnhancedResourceGroup[] {
+  const typeMap = new Map<string, Map<string, EnhancedResourceInfo>>();
+
+  function collectFromNode(node: ListTreeNode): void {
+    if (node.report.resourceGroups) {
+      for (const group of node.report.resourceGroups) {
+        if (!typeMap.has(group.resourceType)) {
+          typeMap.set(group.resourceType, new Map());
+        }
+        const resourcesMap = typeMap.get(group.resourceType)!;
+
+        for (const resource of group.resources) {
+          if (!resourcesMap.has(resource.name)) {
+            const enhancedFiles: EnhancedFileMapping[] = resource.files.map(f => ({
+              ...f,
+              status: f.exists ? 'tracked' as FileStatus : 'missing' as FileStatus,
+              scope
+            }));
+
+            resourcesMap.set(resource.name, {
+              name: resource.name,
+              resourceType: resource.resourceType,
+              files: enhancedFiles,
+              status: 'tracked',
+              scopes: new Set([scope])
+            });
+          }
+        }
+      }
+    }
+    node.children.forEach(collectFromNode);
+  }
+
+  tree.forEach(collectFromNode);
+
+  if (untrackedFiles && untrackedFiles.files.length > 0) {
+    for (const file of untrackedFiles.files) {
+      const resourceName = deriveResourceNameFromUntrackedFile(file);
+      const normalizedType = normalizeCategory(file.category);
+
+      if (!typeMap.has(normalizedType)) {
+        typeMap.set(normalizedType, new Map());
+      }
+      const resourcesMap = typeMap.get(normalizedType)!;
+
+      const enhancedFile: EnhancedFileMapping = {
+        source: file.workspacePath,
+        target: file.workspacePath,
+        exists: true,
+        status: 'untracked',
+        scope
+      };
+
+      if (!resourcesMap.has(resourceName)) {
+        resourcesMap.set(resourceName, {
+          name: resourceName,
+          resourceType: normalizedType,
+          files: [enhancedFile],
+          status: 'untracked',
+          scopes: new Set([scope])
+        });
+      } else {
+        resourcesMap.get(resourceName)!.files.push(enhancedFile);
+      }
+    }
+  }
+
+  for (const resourcesMap of typeMap.values()) {
+    for (const resource of resourcesMap.values()) {
+      resource.status = calculateResourceStatus(resource.files);
+    }
+  }
+
+  const typeOrder = ['rules', 'agents', 'commands', 'skills', 'hooks', 'mcps', 'other'];
+  const groups: EnhancedResourceGroup[] = [];
+
+  for (const type of typeOrder) {
+    const resourcesMap = typeMap.get(type);
+    if (resourcesMap && resourcesMap.size > 0) {
+      const resources = Array.from(resourcesMap.values())
+        .sort((a, b) => a.name.localeCompare(b.name));
+      groups.push({ resourceType: type, resources });
+    }
+  }
+
+  for (const [type, resourcesMap] of typeMap) {
+    if (typeOrder.includes(type)) continue;
+    const resources = Array.from(resourcesMap.values())
+      .sort((a, b) => a.name.localeCompare(b.name));
+    groups.push({ resourceType: type, resources });
+  }
+
+  return groups;
+}
+
+function mergeResourcesAcrossScopes(
+  scopedResources: Array<{ scope: ResourceScope; groups: EnhancedResourceGroup[] }>
+): EnhancedResourceGroup[] {
+  const typeMap = new Map<string, Map<string, EnhancedResourceInfo>>();
+
+  for (const { scope, groups } of scopedResources) {
+    for (const group of groups) {
+      if (!typeMap.has(group.resourceType)) {
+        typeMap.set(group.resourceType, new Map());
+      }
+      const resourcesMap = typeMap.get(group.resourceType)!;
+
+      for (const resource of group.resources) {
+        if (!resourcesMap.has(resource.name)) {
+          resourcesMap.set(resource.name, {
+            ...resource,
+            scopes: new Set([scope]),
+            files: [...resource.files]
+          });
+        } else {
+          const existing = resourcesMap.get(resource.name)!;
+          existing.scopes.add(scope);
+          existing.files.push(...resource.files);
+          existing.status = calculateResourceStatus(existing.files);
+        }
+      }
+    }
+  }
+
+  const typeOrder = ['rules', 'agents', 'commands', 'skills', 'hooks', 'mcps', 'other'];
+  const groups: EnhancedResourceGroup[] = [];
+
+  for (const type of typeOrder) {
+    const resourcesMap = typeMap.get(type);
+    if (resourcesMap && resourcesMap.size > 0) {
+      const resources = Array.from(resourcesMap.values())
+        .sort((a, b) => a.name.localeCompare(b.name));
+      groups.push({ resourceType: type, resources });
+    }
+  }
+
+  for (const [type, resourcesMap] of typeMap) {
+    if (typeOrder.includes(type)) continue;
+    const resources = Array.from(resourcesMap.values())
+      .sort((a, b) => a.name.localeCompare(b.name));
+    groups.push({ resourceType: type, resources });
+  }
+
+  return groups;
+}
+
+function printResourcesView(
+  groups: EnhancedResourceGroup[],
+  showFiles: boolean,
+  headerInfo?: { name: string; version?: string; path: string; type: 'workspace' | 'package' | 'resource' }
+): void {
+  // Print header showing workspace/package name and path if provided
+  if (headerInfo) {
+    const version = headerInfo.version ? `@${headerInfo.version}` : '';
+    const typeTag = dim(`[${headerInfo.type}]`);
+    console.log(`${headerInfo.name}${version} ${dim(`(${headerInfo.path})`)} ${typeTag}`);
+  }
+
+  for (let gi = 0; gi < groups.length; gi++) {
+    const group = groups[gi];
+    const isLastGroup = gi === groups.length - 1;
+    const hasResources = group.resources.length > 0;
+    const groupConnector = isLastGroup
+      ? (hasResources ? '└─┬ ' : '└── ')
+      : (hasResources ? '├─┬ ' : '├── ');
+    const groupPrefix = isLastGroup ? '  ' : '│ ';
+
+    console.log(`${groupConnector}${group.resourceType}${dim(` (${group.resources.length})`)}`);
+
+    for (let ri = 0; ri < group.resources.length; ri++) {
+      const resource = group.resources[ri];
+      const isLastResource = ri === group.resources.length - 1;
+      const scopeBadge = formatScopeBadges(resource.scopes);
+
+      if (showFiles && resource.files.length > 0) {
+        const resConnector = isLastResource ? '└─┬ ' : '├─┬ ';
+        const resPrefix = groupPrefix + (isLastResource ? '  ' : '│ ');
+        console.log(`${groupPrefix}${resConnector}${resource.name} ${scopeBadge}`);
+
+        const sortedFiles = [...resource.files].sort((a, b) => {
+          const pathA = formatFilePath(a);
+          const pathB = formatFilePath(b);
+          return pathA.localeCompare(pathB);
+        });
+
+        for (let fi = 0; fi < sortedFiles.length; fi++) {
+          const file = sortedFiles[fi];
+          const isLastFile = fi === sortedFiles.length - 1;
+          const fileConnector = isLastFile ? '└── ' : '├── ';
+          const filePath = formatFilePath(file);
+          let fileLabel = dim(filePath);
+          if (file.status === 'missing') {
+            fileLabel = `${dim(filePath)} ${red('[MISSING]')}`;
+          }
+          console.log(`${resPrefix}${fileConnector}${fileLabel}`);
+        }
+      } else {
+        const resConnector = isLastResource ? '└── ' : '├── ';
+        console.log(`${groupPrefix}${resConnector}${resource.name} ${scopeBadge}`);
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Data collection
+// ---------------------------------------------------------------------------
+
 async function runScopeList(
   packageName: string | undefined,
   execContext: ExecutionContext,
@@ -298,13 +638,12 @@ async function runScopeList(
 ): Promise<ScopeResult | null> {
   const skipLocal = options.remote && !!packageName;
 
-  let result: CommandResult<ListPipelineResult> | undefined;
   let packages: ListPackageReport[] = [];
   let tree: ListTreeNode[] = [];
   let data: ListPipelineResult | undefined;
 
   if (!skipLocal) {
-    result = await runListPipeline(packageName, execContext, {
+    const result = await runListPipeline(packageName, execContext, {
       includeFiles: options.files || !!packageName,
       all: options.all,
       tracked: options.tracked,
@@ -317,194 +656,60 @@ async function runScopeList(
     data = result.data!;
   }
 
-  // If we didn't find anything in this scope, return null
-  if (!data || (packages.length === 0 && !packageName)) {
+  const hasUntrackedData = data?.untrackedFiles && data.untrackedFiles.totalFiles > 0;
+  // If a specific package was requested but not found, return null to trigger remote fallback
+  if (packageName && packages.length === 0) {
+    return null;
+  }
+  // For general listing (no package specified), return null only if there's no data at all
+  if (!data || (packages.length === 0 && !hasUntrackedData && !packageName)) {
     return null;
   }
 
-  const displayDir = getDisplayTargetDir(execContext);
-  const manifestPath = getLocalPackageYmlPath(execContext.targetDir);
-  
   let headerName = 'Unnamed';
   let headerVersion: string | undefined;
-  const headerPath = displayDir;
+  let headerPath: string;
+  let headerType: 'workspace' | 'package' | 'resource';
 
-  try {
-    const manifest = await parsePackageYml(manifestPath);
-    headerName = manifest.name || 'Unnamed';
-    headerVersion = manifest.version;
-  } catch (error) {
-    logger.debug(`Failed to read workspace manifest: ${error}`);
-  }
-
-  return {
-    headerName,
-    headerVersion,
-    headerPath,
-    tree,
-    data
-  };
-}
-
-async function listCommand(
-  packageName: string | undefined,
-  options: ListOptions,
-  command: Command
-): Promise<CommandResult> {
-  const programOpts = command.parent?.opts() || {};
-
-  // Validate option combinations
-  if (options.tracked && options.untracked) {
-    throw new ValidationError('Cannot use --tracked and --untracked together.');
-  }
-
-  if (packageName && options.untracked) {
-    throw new ValidationError('Cannot use --untracked with a specific package.');
-  }
-
-  if (options.all && options.untracked) {
-    throw new ValidationError('Cannot use --all with --untracked.');
-  }
-
-  if (options.global && options.project) {
-    throw new ValidationError('Cannot use --global and --project together.');
-  }
-
-  // Determine which scopes to display
-  const showBothScopes = !options.global && !options.project;
-  const showGlobal = options.global || showBothScopes;
-  const showProject = options.project || showBothScopes;
-
-  // Handle package detail view (single package lookup)
-  if (packageName) {
-    // For package detail, use the originally specified scope (or default to project)
-    const execContext = await createExecutionContext({
-      global: options.global,
-      cwd: programOpts.cwd
-    });
-
+  // When a specific package is queried, use the actual entity path and type
+  if (packageName && data.targetPackage) {
+    const targetPkg = data.targetPackage;
+    
+    // Resolve the actual filesystem path from the package path
+    const resolved = resolveDeclaredPath(targetPkg.path, execContext.targetDir);
+    const absolutePath = resolved.absolute;
+    
+    // Detect entity type based on the actual path
+    headerType = await detectEntityType(absolutePath);
+    
+    // Get display name (from openpackage.yml if available, fallback to package name)
+    headerName = await getEntityDisplayName(absolutePath, targetPkg.name);
+    
+    // Get version if available
+    headerVersion = targetPkg.version;
+    
+    // Format the path for display
+    headerPath = formatPathForDisplay(absolutePath);
+  } else {
+    // General workspace listing - use the workspace/targetDir info
     const displayDir = getDisplayTargetDir(execContext);
-    const skipLocal = options.remote && !!packageName;
-
-    let result: CommandResult<ListPipelineResult> | undefined;
-    let packages: ListPackageReport[] = [];
-    let tree: ListTreeNode[] = [];
-    let data: ListPipelineResult | undefined;
-
-    if (!skipLocal) {
-      result = await runListPipeline(packageName, execContext, {
-        includeFiles: options.files || !!packageName,
-        all: options.all,
-        tracked: options.tracked,
-        untracked: options.untracked,
-        platforms: options.platforms
-      });
-
-      packages = result.data?.packages ?? [];
-      tree = result.data?.tree ?? [];
-      data = result.data!;
-    }
-
-    if (skipLocal || packages.length === 0) {
-      const remoteResult = await resolveRemoteListForPackage(packageName, execContext, options);
-      if (remoteResult) {
-        printRemotePackageDetail(remoteResult, !!options.files);
-        return { success: true };
-      }
-      throw new ValidationError(`Package '${packageName}' not found locally or remotely`);
-    }
-
-    if (data?.targetPackage) {
-      printPackageDetail(data.targetPackage, tree, data, !!options.files);
-      return { success: true };
-    }
-
-    return { success: true };
-  }
-
-  // Handle list views (no specific package)
-  const results: { scope: 'project' | 'global'; result: ScopeResult }[] = [];
-
-  // Collect project scope
-  if (showProject) {
-    const projectContext = await createExecutionContext({
-      global: false,
-      cwd: programOpts.cwd
-    });
-
+    headerPath = displayDir;
+    
+    // Detect entity type for the target directory
+    headerType = await detectEntityType(execContext.targetDir);
+    
+    // Try to read name and version from manifest
+    const manifestPath = getLocalPackageYmlPath(execContext.targetDir);
     try {
-      const projectResult = await runScopeList(packageName, projectContext, options);
-      if (projectResult) {
-        results.push({ scope: 'project', result: projectResult });
-      }
+      const manifest = await parsePackageYml(manifestPath);
+      headerName = manifest.name || 'Unnamed';
+      headerVersion = manifest.version;
     } catch (error) {
-      logger.debug(`Failed to list project scope: ${error}`);
+      logger.debug(`Failed to read workspace manifest: ${error}`);
     }
   }
 
-  // Collect global scope
-  if (showGlobal) {
-    const globalContext = await createExecutionContext({
-      global: true,
-      cwd: programOpts.cwd
-    });
-
-    try {
-      const globalResult = await runScopeList(packageName, globalContext, options);
-      if (globalResult) {
-        results.push({ scope: 'global', result: globalResult });
-      }
-    } catch (error) {
-      logger.debug(`Failed to list global scope: ${error}`);
-    }
-  }
-
-  // Display results
-  if (results.length === 0) {
-    if (options.untracked) {
-      console.log('No untracked files detected.');
-      console.log(dim('All files matching platform patterns are tracked in the index.'));
-    } else {
-      console.log(dim('No packages found in any scope.'));
-    }
-    return { success: true };
-  }
-
-  for (let i = 0; i < results.length; i++) {
-    const { scope, result } = results[i];
-    const scopeLabel = showBothScopes ? `[${scope === 'project' ? 'Project' : 'Global'}]` : undefined;
-
-    if (options.untracked) {
-      if (scopeLabel) {
-        const label = `${scopeLabel} Untracked:`;
-        printUntrackedExpandedWithLabel(result.data.untrackedFiles!, label);
-      } else {
-        printUntrackedView(result.data, !!options.files);
-      }
-    } else if (options.tracked) {
-      printTrackedView(
-        result.headerName,
-        result.headerVersion,
-        result.headerPath,
-        result.tree,
-        result.data,
-        !!options.files,
-        scopeLabel
-      );
-    } else {
-      printDefaultView(
-        result.headerName,
-        result.headerVersion,
-        result.headerPath,
-        result.tree,
-        result.data,
-        !!options.files,
-        scopeLabel
-      );
-    }
-  }
-
-  return { success: true };
+  return { headerName, headerVersion, headerPath, headerType, tree, data };
 }
 
 async function resolveRemoteListForPackage(
@@ -527,18 +732,255 @@ async function resolveRemoteListForPackage(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Main command
+// ---------------------------------------------------------------------------
+
+async function listCommand(
+  packageName: string | undefined,
+  options: ListOptions,
+  command: Command
+): Promise<CommandResult> {
+  const programOpts = command.parent?.opts() || {};
+
+  if (options.tracked && options.untracked) {
+    throw new ValidationError('Cannot use --tracked and --untracked together.');
+  }
+
+  if (packageName && options.untracked) {
+    throw new ValidationError('Cannot use --untracked with a specific package.');
+  }
+
+  if (options.all && options.untracked) {
+    throw new ValidationError('Cannot use --all with --untracked.');
+  }
+
+  if (options.global && options.project) {
+    throw new ValidationError('Cannot use --global and --project together.');
+  }
+
+  if (options.deps && options.untracked) {
+    throw new ValidationError('Cannot use --deps with --untracked.');
+  }
+
+  // --- Package detail view ---
+  if (packageName) {
+    const showBothScopes = !options.global && !options.project;
+    const showGlobal = options.global || showBothScopes;
+    const showProject = options.project || showBothScopes;
+
+    const results: { scope: ResourceScope; result: ScopeResult }[] = [];
+
+    if (showProject) {
+      const projectContext = await createExecutionContext({
+        global: false,
+        cwd: programOpts.cwd
+      });
+      try {
+        const projectResult = await runScopeList(packageName, projectContext, options);
+        if (projectResult) {
+          results.push({ scope: 'project', result: projectResult });
+        }
+      } catch (error) {
+        logger.debug(`Failed to list project scope for package '${packageName}': ${error}`);
+      }
+    }
+
+    if (showGlobal) {
+      const globalContext = await createExecutionContext({
+        global: true,
+        cwd: programOpts.cwd
+      });
+      try {
+        const globalResult = await runScopeList(packageName, globalContext, options);
+        if (globalResult) {
+          results.push({ scope: 'global', result: globalResult });
+        }
+      } catch (error) {
+        logger.debug(`Failed to list global scope for package '${packageName}': ${error}`);
+      }
+    }
+
+    if (results.length === 0) {
+      // Try remote as fallback
+      const fallbackContext = await createExecutionContext({
+        global: options.global,
+        cwd: programOpts.cwd
+      });
+      const remoteResult = await resolveRemoteListForPackage(packageName, fallbackContext, options);
+      if (remoteResult) {
+        printRemotePackageDetail(remoteResult, !!options.files, !!options.deps);
+        return { success: true };
+      }
+      throw new ValidationError(`Package '${packageName}' not found locally or remotely`);
+    }
+
+    // --- Deps view for specific package ---
+    if (options.deps) {
+      printDepsView(results, !!options.files);
+      return { success: true };
+    }
+
+    // --- Resources view for specific package (default) ---
+    const scopedResources: Array<{ scope: ResourceScope; groups: EnhancedResourceGroup[] }> = [];
+
+    for (const { scope, result } of results) {
+      // Don't include untracked files when listing a specific package
+      const merged = mergeTrackedAndUntrackedResources(result.tree, undefined, scope);
+      if (merged.length > 0) {
+        scopedResources.push({ scope, groups: merged });
+      }
+    }
+
+    if (scopedResources.length === 0) {
+      console.log(dim(`No resources found for package '${packageName}'.`));
+      return { success: true };
+    }
+
+    const mergedResources = mergeResourcesAcrossScopes(scopedResources);
+
+    // Get header info from the target package
+    const firstResult = results[0].result;
+    const targetPkg = firstResult.data.targetPackage;
+    const headerInfo = targetPkg
+      ? {
+          name: targetPkg.name,
+          version: targetPkg.version !== '0.0.0' ? targetPkg.version : undefined,
+          path: firstResult.headerPath,
+          type: firstResult.headerType
+        }
+      : {
+          name: packageName,
+          version: undefined,
+          path: firstResult.headerPath,
+          type: firstResult.headerType
+        };
+
+    printResourcesView(mergedResources, !!options.files, headerInfo);
+
+    return { success: true };
+  }
+
+  // --- List views (no specific package) ---
+  const showBothScopes = !options.global && !options.project;
+  const showGlobal = options.global || showBothScopes;
+  const showProject = options.project || showBothScopes;
+
+  const results: { scope: ResourceScope; result: ScopeResult }[] = [];
+
+  if (showProject) {
+    const projectContext = await createExecutionContext({
+      global: false,
+      cwd: programOpts.cwd
+    });
+    try {
+      const projectResult = await runScopeList(packageName, projectContext, options);
+      if (projectResult) {
+        results.push({ scope: 'project', result: projectResult });
+      }
+    } catch (error) {
+      logger.debug(`Failed to list project scope: ${error}`);
+    }
+  }
+
+  if (showGlobal) {
+    const globalContext = await createExecutionContext({
+      global: true,
+      cwd: programOpts.cwd
+    });
+    try {
+      const globalResult = await runScopeList(packageName, globalContext, options);
+      if (globalResult) {
+        results.push({ scope: 'global', result: globalResult });
+      }
+    } catch (error) {
+      logger.debug(`Failed to list global scope: ${error}`);
+    }
+  }
+
+  if (results.length === 0) {
+    if (options.deps) {
+      console.log(dim('No packages installed.'));
+    } else {
+      console.log(dim('No resources found.'));
+    }
+    return { success: true };
+  }
+
+  // --- Deps view ---
+  if (options.deps) {
+    printDepsView(results, !!options.files);
+    return { success: true };
+  }
+
+  // --- Resources view (default) ---
+  const scopedResources: Array<{ scope: ResourceScope; groups: EnhancedResourceGroup[] }> = [];
+
+  for (const { scope, result } of results) {
+    const untrackedData = options.tracked ? undefined : result.data.untrackedFiles;
+    const merged = mergeTrackedAndUntrackedResources(result.tree, untrackedData, scope);
+    if (merged.length > 0) {
+      scopedResources.push({ scope, groups: merged });
+    }
+  }
+
+  if (scopedResources.length === 0) {
+    if (options.untracked) {
+      console.log(dim('No untracked resources found.'));
+    } else {
+      console.log(dim('No resources found.'));
+    }
+    return { success: true };
+  }
+
+  let mergedResources = mergeResourcesAcrossScopes(scopedResources);
+
+  if (options.untracked) {
+    mergedResources = mergedResources
+      .map(group => ({
+        ...group,
+        resources: group.resources.filter(r => r.status === 'untracked')
+      }))
+      .filter(group => group.resources.length > 0);
+
+    if (mergedResources.length === 0) {
+      console.log(dim('No untracked resources found.'));
+      return { success: true };
+    }
+  }
+
+  // Get header info from the first result
+  const headerInfo = results.length > 0 
+    ? { 
+        name: results[0].result.headerName, 
+        version: results[0].result.headerVersion, 
+        path: results[0].result.headerPath,
+        type: results[0].result.headerType
+      }
+    : undefined;
+
+  printResourcesView(mergedResources, !!options.files, headerInfo);
+
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Commander setup
+// ---------------------------------------------------------------------------
+
 export function setupListCommand(program: Command): void {
   program
     .command('list')
     .alias('ls')
-    .description('Show installed packages, file status, and untracked files')
+    .description('List installed resources and packages')
     .argument('[resource-spec]', 'show details for a specific resource')
-    .option('-p, --project', 'list packages in current workspace only')
-    .option('-g, --global', 'list packages in home directory (~/) only')
+    .option('-p, --project', 'list in current workspace only')
+    .option('-g, --global', 'list in home directory (~/) only')
+    .option('-d, --deps', 'show dependency tree instead of resources')
     .option('-a, --all', 'show full dependency tree including transitive dependencies')
-    .option('-f, --files', 'show individual files for each package')
-    .option('-t, --tracked', 'show only tracked file information (skip untracked scan)')
-    .option('-u, --untracked', 'show only untracked files detected by platforms')
+    .option('-f, --files', 'show individual file paths')
+    .option('-t, --tracked', 'show only tracked resources (skip untracked scan)')
+    .option('-u, --untracked', 'show only untracked resources')
     .option('--platforms <platforms...>', 'filter by specific platforms (e.g., cursor, claude)')
     .option('--remote', 'fetch package info from remote registry or git, skipping local lookup')
     .option('--profile <profile>', 'profile to use for authentication')
