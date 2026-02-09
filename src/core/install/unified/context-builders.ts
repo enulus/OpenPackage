@@ -461,7 +461,9 @@ export function buildResourceInstallContexts(
     return {
       ...baseContext,
       source,
-      resolvedPackages: [],
+      resolvedPackages: baseContext.resolvedPackages.length > 0
+        ? baseContext.resolvedPackages
+        : [],
       warnings: [],
       errors: [],
       detectedBase: effectiveBase,

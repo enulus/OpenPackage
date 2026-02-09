@@ -1,5 +1,5 @@
 /**
- * Convenience matchers for --agents and --skills filtering.
+ * Convenience matchers for --agents, --skills, --rules, and --commands filtering.
  * 
  * Matches resource names against frontmatter fields and file/directory names
  * with deepest match resolution for ambiguous cases.
@@ -45,7 +45,7 @@ export interface ResourceInstallationSpec {
   name: string;
 
   /** Resource type */
-  resourceType: 'agent' | 'skill';
+  resourceType: 'agent' | 'skill' | 'command' | 'rule';
 
   /** Path to resource relative to repo root */
   resourcePath: string;
@@ -80,6 +80,12 @@ export interface ConvenienceFilterOptions {
   
   /** Skill names to match */
   skills?: string[];
+  
+  /** Rule names to match */
+  rules?: string[];
+  
+  /** Command names to match */
+  commands?: string[];
   
   /** Plugin scope filter (marketplace context) */
   pluginScope?: string[];
@@ -122,7 +128,7 @@ export async function applyConvenienceFilters(
 
   // Match agents
   if (options.agents && options.agents.length > 0) {
-    const agentResults = await matchAgents(basePath, options.agents);
+    const agentResults = await matchMarkdownResources(basePath, 'agents', 'Agent', options.agents);
 
     for (const result of agentResults) {
       if (result.found && result.path) {
@@ -174,6 +180,60 @@ export async function applyConvenienceFilters(
     }
   }
 
+  // Match rules
+  if (options.rules && options.rules.length > 0) {
+    const ruleResults = await matchMarkdownResources(basePath, 'rules', 'Rule', options.rules);
+
+    for (const result of ruleResults) {
+      if (result.found && result.path) {
+        const absPath = resolve(result.path);
+        if (!isInScope(absPath)) {
+          errors.push(`Rule '${result.name}' not found in selected plugin scope`);
+          continue;
+        }
+        const resourcePath = toRepoRelative(absPath);
+        resources.push({
+          name: result.name,
+          resourceType: 'rule',
+          resourcePath,
+          basePath: baseRoot,
+          resourceKind: 'file',
+          matchedBy: (result.matchedBy || 'filename') as 'frontmatter' | 'filename' | 'dirname',
+          resourceVersion: result.version
+        });
+      } else if (result.error) {
+        errors.push(result.error);
+      }
+    }
+  }
+
+  // Match commands
+  if (options.commands && options.commands.length > 0) {
+    const commandResults = await matchMarkdownResources(basePath, 'commands', 'Command', options.commands);
+
+    for (const result of commandResults) {
+      if (result.found && result.path) {
+        const absPath = resolve(result.path);
+        if (!isInScope(absPath)) {
+          errors.push(`Command '${result.name}' not found in selected plugin scope`);
+          continue;
+        }
+        const resourcePath = toRepoRelative(absPath);
+        resources.push({
+          name: result.name,
+          resourceType: 'command',
+          resourcePath,
+          basePath: baseRoot,
+          resourceKind: 'file',
+          matchedBy: (result.matchedBy || 'filename') as 'frontmatter' | 'filename' | 'dirname',
+          resourceVersion: result.version
+        });
+      } else if (result.error) {
+        errors.push(result.error);
+      }
+    }
+  }
+
   logger.info('Convenience filter results', {
     resourceCount: resources.length,
     errorCount: errors.length
@@ -186,35 +246,30 @@ export async function applyConvenienceFilters(
 }
 
 /**
- * Match agents by name using frontmatter and filename matching.
- * 
- * @param basePath - Base path to search from
- * @param requestedNames - Agent names to find
- * @returns Array of match results
+ * Generic matcher for markdown file resources (agents, rules, commands).
+ * Scans all .md files under basePath/subDir and matches by frontmatter name or filename.
  */
-async function matchAgents(
+async function matchMarkdownResources(
   basePath: string,
+  subDir: string,
+  resourceLabel: string,
   requestedNames: string[]
 ): Promise<ResourceMatchResult[]> {
   const results: ResourceMatchResult[] = [];
   
-  // Find all agent files (agents/**/*.md)
-  const agentsDir = join(basePath, 'agents');
-  const agentFiles: string[] = [];
+  const dir = join(basePath, subDir);
+  const files: string[] = [];
   
-  // Check if agents directory exists
-  const agentsDirExists = await exists(agentsDir);
-  if (agentsDirExists) {
-    // Walk the agents directory and collect .md files
-    for await (const file of walkFiles(agentsDir)) {
+  if (await exists(dir)) {
+    for await (const file of walkFiles(dir)) {
       if (file.endsWith('.md')) {
-        agentFiles.push(file);
+        files.push(file);
       }
     }
   }
 
   for (const name of requestedNames) {
-    const match = await findAgentByName(agentFiles, name);
+    const match = await findMarkdownResourceByName(files, name);
     
     if (match) {
       results.push({
@@ -228,7 +283,7 @@ async function matchAgents(
       results.push({
         name,
         found: false,
-        error: `Agent '${name}' not found`
+        error: `${resourceLabel} '${name}' not found`
       });
     }
   }
@@ -237,10 +292,9 @@ async function matchAgents(
 }
 
 /**
- * Find an agent by name using frontmatter or filename.
- * Extracts version from frontmatter when available.
+ * Find a markdown resource by name using frontmatter or filename.
  */
-async function findAgentByName(
+async function findMarkdownResourceByName(
   files: string[],
   name: string
 ): Promise<{ path: string; matchedBy: 'frontmatter' | 'filename'; version?: string } | null> {

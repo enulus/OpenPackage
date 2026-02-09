@@ -301,7 +301,9 @@ export class InstallOrchestrator {
       execContext,
       {
         agents: options.agents,
-        skills: options.skills
+        skills: options.skills,
+        rules: options.rules,
+        commands: options.commands
       }
     );
   }

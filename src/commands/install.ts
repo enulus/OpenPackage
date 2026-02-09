@@ -27,6 +27,8 @@ export function setupInstallCommand(program: Command): void {
     .option('-g, --global', 'install to home directory (~/) instead of current workspace')
     .option('-a, --agents <names...>', 'install specific agents by name (matches frontmatter name or filename)')
     .option('-s, --skills <names...>', 'install specific skills by name (matches SKILL.md frontmatter name or directory name)')
+    .option('-r, --rules <names...>', 'install specific rules by name (matches frontmatter name or filename)')
+    .option('-c, --commands <names...>', 'install specific commands by name (matches frontmatter name or filename)')
     .option('--plugins <names...>', 'install specific plugins from marketplace (bypasses interactive selection)')
     .option('--platforms <platforms...>', 'install to specific platforms (e.g., cursor claudecode opencode)')
     .option('--dry-run', 'preview changes without applying them')
@@ -37,23 +39,22 @@ export function setupInstallCommand(program: Command): void {
     .option('--local', 'resolve and install using only local registry versions, skipping remote metadata and pulls')
     .option('--profile <profile>', 'profile to use for authentication')
     .option('--api-key <key>', 'API key for authentication (overrides profile)')
-    .option('--plugins <names...>', 'install specific plugins from marketplace (bypasses interactive selection)')
-    .option('--agents <names...>', 'install specific agents by name (matches frontmatter name or filename)')
-    .option('--skills <names...>', 'install specific skills by name (matches SKILL.md frontmatter name or directory name)')
     .option('--list', 'interactively select resources to install (agents, skills, commands, etc.)')
     .action(withErrorHandling(async (
       packageName: string | undefined, 
       options: InstallOptions & { 
         agents?: string[]; 
         skills?: string[];
+        rules?: string[];
+        commands?: string[];
         conflicts?: string;
         list?: boolean;
       },
       command: Command
     ) => {
       // Validate mutually exclusive options
-      if (options.list && (options.agents || options.skills)) {
-        throw new Error('--list cannot be used with --agents or --skills. Use --list for interactive selection or specify filters directly.');
+      if (options.list && (options.agents || options.skills || options.rules || options.commands)) {
+        throw new Error('--list cannot be used with --agents, --skills, --rules, or --commands. Use --list for interactive selection or specify filters directly.');
       }
       
       // Get program-level options (for --cwd)

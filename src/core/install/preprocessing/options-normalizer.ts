@@ -24,6 +24,8 @@ export function normalizeInstallOptions(
     conflicts?: string;
     agents?: string[];
     skills?: string[];
+    rules?: string[];
+    commands?: string[];
     list?: boolean;
   }
 ): NormalizedInstallOptions {
@@ -48,6 +50,8 @@ export function normalizeInstallOptions(
     resolutionMode,
     agents: options.agents,
     skills: options.skills,
+    rules: options.rules,
+    commands: options.commands,
     list: options.list,
   };
 }

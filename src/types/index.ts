@@ -200,6 +200,16 @@ export interface InstallOptions {
   skills?: string[];
 
   /**
+   * Rule filter: install only matching rules from source.
+   */
+  rules?: string[];
+
+  /**
+   * Command filter: install only matching commands from source.
+   */
+  commands?: string[];
+
+  /**
    * Interactive resource selection: display menu to select specific resources to install.
    * Mutually exclusive with --agents and --skills.
    * Ignored for marketplace sources (which already have plugin selection).

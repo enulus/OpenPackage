@@ -110,7 +110,7 @@ export async function handleListSelection(
   // Convert selected resources to ResourceInstallationSpec format
   const resourceSpecs: ResourceInstallationSpec[] = selected.map(s => ({
     name: s.displayName,
-    resourceType: s.resourceType as 'agent' | 'skill',
+    resourceType: s.resourceType as 'agent' | 'skill' | 'command' | 'rule',
     resourcePath: s.resourcePath,
     basePath: resolve(basePath),
     resourceKind: s.installKind,

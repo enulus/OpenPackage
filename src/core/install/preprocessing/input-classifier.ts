@@ -17,7 +17,7 @@ import { classifyPackageInput } from '../../../utils/package-input.js';
  */
 export async function classifyInput(
   input: string | undefined,
-  options: InstallOptions & { agents?: string[]; skills?: string[] },
+  options: InstallOptions & { agents?: string[]; skills?: string[]; rules?: string[]; commands?: string[] },
   execContext: ExecutionContext
 ): Promise<InputClassification> {
   // No input = bulk install
@@ -31,7 +31,7 @@ export async function classifyInput(
     };
   }
 
-  const hasConvenienceFilters = !!(options.agents?.length || options.skills?.length);
+  const hasConvenienceFilters = !!(options.agents?.length || options.skills?.length || options.rules?.length || options.commands?.length);
 
   // Determine if we should try resource parsing first
   // Resource parsing handles: gh@ shorthand, GitHub URLs, paths with sub-resources

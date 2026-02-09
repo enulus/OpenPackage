@@ -212,7 +212,7 @@ export async function installMarketplacePlugins(
   marketplaceCommitSha: string,
   options: InstallOptions,
   execContext: ExecutionContext,
-  convenienceOptions?: { agents?: string[]; skills?: string[] }
+  convenienceOptions?: { agents?: string[]; skills?: string[]; rules?: string[]; commands?: string[] }
 ): Promise<CommandResult> {
   logger.info('Installing marketplace plugins', { 
     marketplace: marketplace.name,
@@ -340,7 +340,7 @@ async function installRelativePathPlugin(
   marketplaceCommitSha: string,
   options: InstallOptions,
   execContext: ExecutionContext,
-  convenienceOptions?: { agents?: string[]; skills?: string[] }
+  convenienceOptions?: { agents?: string[]; skills?: string[]; rules?: string[]; commands?: string[] }
 ): Promise<CommandResult> {
   const pluginSubdir = normalizedSource.relativePath!;
   const pluginDir = join(marketplaceDir, pluginSubdir);
@@ -361,6 +361,58 @@ async function installRelativePathPlugin(
     return { success: false, error };
   }
   
+  const hasConvenienceOptions = Boolean(convenienceOptions?.agents?.length || convenienceOptions?.skills?.length || convenienceOptions?.rules?.length || convenienceOptions?.commands?.length);
+
+  if (hasConvenienceOptions) {
+    spinner.stop();
+    logger.info('Convenience filters active, bypassing full plugin validation', {
+      plugin: pluginEntry.name,
+      path: pluginSubdir
+    });
+
+    const ctx = await buildPathInstallContext(
+      execContext,
+      pluginDir,
+      {
+        ...options,
+        sourceType: 'directory' as const
+      }
+    );
+
+    ctx.source.gitSourceOverride = {
+      gitUrl: marketplaceGitUrl,
+      gitRef: marketplaceGitRef,
+      gitPath: pluginSubdir
+    };
+
+    ctx.source.pluginMetadata = {
+      isPlugin: true,
+      marketplaceEntry: pluginEntry,
+      marketplaceSource: {
+        url: marketplaceGitUrl,
+        commitSha: marketplaceCommitSha,
+        pluginName: pluginEntry.name
+      }
+    };
+
+    ctx.detectedBase = pluginDir;
+    ctx.baseRelative = relative(marketplaceDir, pluginDir) || '.';
+
+    const resources = await resolveConvenienceResources(pluginDir, marketplaceDir, convenienceOptions ?? {});
+
+    const resourceContexts = buildResourceInstallContexts(ctx, resources, marketplaceDir).map(rc => {
+      if (rc.source.type === 'path') {
+        rc.source.localPath = marketplaceDir;
+      }
+      return rc;
+    });
+    const multiResult = await runMultiContextPipeline(resourceContexts);
+    return {
+      success: multiResult.success,
+      error: multiResult.error
+    };
+  }
+
   // Validate plugin structure with marketplace context
   const detection = await detectPluginWithMarketplace(pluginDir, pluginEntry);
   
@@ -408,8 +460,6 @@ async function installRelativePathPlugin(
   );
   
   // Add git source override for manifest recording
-  // This ensures the plugin is recorded in openpackage.yml with git/subdirectory fields
-  // even though we're loading from a path (already-cloned repo)
   ctx.source.gitSourceOverride = {
     gitUrl: marketplaceGitUrl,
     gitRef: marketplaceGitRef,
@@ -417,8 +467,6 @@ async function installRelativePathPlugin(
   };
   
   // Add marketplace metadata to context for passing to loader and workspace index
-  // This will be used by the path source loader to pass marketplace entry
-  // to plugin transformer for proper scoped naming
   ctx.source.pluginMetadata = {
     isPlugin: true,
     pluginType: detection.type as any,
@@ -430,33 +478,6 @@ async function installRelativePathPlugin(
       pluginName: pluginEntry.name
     }
   };
-  
-  // Stop spinner before pipeline (which has its own output)
-  spinner.stop();
-
-  const hasConvenienceOptions = Boolean(convenienceOptions?.agents?.length || convenienceOptions?.skills?.length);
-  if (hasConvenienceOptions) {
-    ctx.detectedBase = pluginDir;
-    ctx.baseRelative = relative(marketplaceDir, pluginDir) || '.';
-
-    // Convenience matching should return a full repo-relative resourcePath for naming consistency:
-    // e.g. plugins/javascript-typescript/agents/typescript-pro.md
-    const resources = await resolveConvenienceResources(pluginDir, marketplaceDir, convenienceOptions ?? {});
-
-    const resourceContexts = buildResourceInstallContexts(ctx, resources, marketplaceDir).map(rc => {
-      // Ensure path-based loader can resolve repo-relative resourcePath by pointing localPath at repo root.
-      // Base detection will still land on pluginDir due to deepest pattern match.
-      if (rc.source.type === 'path') {
-        rc.source.localPath = marketplaceDir;
-      }
-      return rc;
-    });
-    const multiResult = await runMultiContextPipeline(resourceContexts);
-    return {
-      success: multiResult.success,
-      error: multiResult.error
-    };
-  }
   
   const pipelineResult = await runUnifiedInstallPipeline(ctx);
   
@@ -484,7 +505,7 @@ async function installGitPlugin(
   normalizedSource: NormalizedPluginSource,
   options: InstallOptions,
   execContext: ExecutionContext,
-  convenienceOptions?: { agents?: string[]; skills?: string[] }
+  convenienceOptions?: { agents?: string[]; skills?: string[]; rules?: string[]; commands?: string[] }
 ): Promise<CommandResult> {
   const gitUrl = normalizedSource.gitUrl!;
   const gitRef = normalizedSource.gitRef;
@@ -520,7 +541,7 @@ async function installGitPlugin(
   // Stop spinner before pipeline (which has its own output)
   spinner.stop();
 
-  const hasConvenienceOptions = Boolean(convenienceOptions?.agents?.length || convenienceOptions?.skills?.length);
+  const hasConvenienceOptions = Boolean(convenienceOptions?.agents?.length || convenienceOptions?.skills?.length || convenienceOptions?.rules?.length || convenienceOptions?.commands?.length);
   if (hasConvenienceOptions) {
     const loader = getLoaderForSource(ctx.source);
     const loaded = await loader.load(ctx.source, options, execContext);

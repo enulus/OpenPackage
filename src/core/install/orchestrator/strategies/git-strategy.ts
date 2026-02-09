@@ -108,7 +108,7 @@ export class GitInstallStrategy extends BaseInstallStrategy {
     ];
     
     // Apply convenience filters (--agents, --skills)
-    if (options.agents?.length || options.skills?.length) {
+    if (options.agents?.length || options.skills?.length || options.rules?.length || options.commands?.length) {
       return this.handleConvenienceFilters(context, loaded, options, execContext);
     }
     
@@ -134,7 +134,9 @@ export class GitInstallStrategy extends BaseInstallStrategy {
 
     const resources = await resolveConvenienceResources(basePath, repoRoot, {
       agents: options.agents,
-      skills: options.skills
+      skills: options.skills,
+      rules: options.rules,
+      commands: options.commands
     });
 
     const resourceContexts = buildResourceInstallContexts(context, resources, repoRoot);

@@ -13,6 +13,8 @@ export interface NormalizedInstallOptions extends InstallOptions {
   resolutionMode: InstallResolutionMode;
   agents?: string[];
   skills?: string[];
+  rules?: string[];
+  commands?: string[];
   list?: boolean;
 }
 
@@ -70,7 +72,7 @@ export interface InstallStrategy {
 export interface InputFeatures {
   /** Source has sub-resource path (e.g., gh@user/repo/agents/foo) */
   hasResourcePath: boolean;
-  /** User specified --agents or --skills convenience filters */
+  /** User specified --agents, --skills, --rules, or --commands convenience filters */
   hasConvenienceFilters: boolean;
 }
 
