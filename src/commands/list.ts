@@ -14,28 +14,10 @@ import { detectEntityType, getEntityDisplayName } from '../utils/entity-detector
 import { formatPathForDisplay } from '../utils/formatters.js';
 import { resolveDeclaredPath } from '../utils/path-resolution.js';
 import { RESOURCE_TYPE_ORDER_PLURAL, normalizeType, toPluralKey } from '../core/resources/resource-registry.js';
+import { renderResourceGroup, type TreeRenderConfig, type EnhancedFileMapping, type EnhancedResourceInfo, type EnhancedResourceGroup, type ResourceScope } from '../core/list/list-tree-renderer.js';
 
 type FileStatus = 'tracked' | 'untracked' | 'missing';
 type ResourceStatus = 'tracked' | 'partial' | 'untracked' | 'mixed';
-type ResourceScope = 'project' | 'global';
-
-interface EnhancedFileMapping extends ListFileMapping {
-  status: FileStatus;
-  scope: ResourceScope;
-}
-
-interface EnhancedResourceInfo {
-  name: string;
-  resourceType: string;
-  files: EnhancedFileMapping[];
-  status: ResourceStatus;
-  scopes: Set<ResourceScope>;
-}
-
-interface EnhancedResourceGroup {
-  resourceType: string;
-  resources: EnhancedResourceInfo[];
-}
 
 interface ListOptions {
   global?: boolean;
@@ -131,77 +113,16 @@ function printResourceGroups(
   prefix: string,
   showFiles: boolean
 ): void {
+  const config: TreeRenderConfig<ListFileMapping> = {
+    formatPath: (file) => file.target,
+    isMissing: (file) => !file.exists,
+    sortFiles: (a, b) => a.target.localeCompare(b.target)
+  };
+  
   for (let gi = 0; gi < groups.length; gi++) {
     const group = groups[gi];
     const isLastGroup = gi === groups.length - 1;
-    const isOtherGroup = group.resourceType === 'other';
-    
-    // For 'other' group, show files directly without subcategories
-    if (isOtherGroup) {
-      // Collect all files from all resources in the group
-      const allFiles: ListFileMapping[] = [];
-      for (const resource of group.resources) {
-        allFiles.push(...resource.files);
-      }
-      
-      // Sort files alphabetically by target path
-      const sortedFiles = [...allFiles].sort((a, b) => a.target.localeCompare(b.target));
-      const totalFileCount = sortedFiles.length;
-      
-      if (showFiles && sortedFiles.length > 0) {
-        // With files: show as branch with files directly underneath
-        const groupConnector = isLastGroup ? '└─┬ ' : '├─┬ ';
-        const groupPrefix = prefix + (isLastGroup ? '  ' : '│ ');
-        console.log(`${prefix}${groupConnector}${group.resourceType}${dim(` (${totalFileCount})`)}`);
-        
-        for (let fi = 0; fi < sortedFiles.length; fi++) {
-          const file = sortedFiles[fi];
-          const isLastFile = fi === sortedFiles.length - 1;
-          const fileConnector = isLastFile ? '└── ' : '├── ';
-          const label = file.exists
-            ? dim(file.target)
-            : `${dim(file.target)} ${red('[MISSING]')}`;
-          console.log(`${groupPrefix}${fileConnector}${label}`);
-        }
-      } else {
-        // Without files: just show the count
-        const groupConnector = isLastGroup ? '└── ' : '├── ';
-        console.log(`${prefix}${groupConnector}${group.resourceType}${dim(` (${totalFileCount})`)}`);
-      }
-    } else {
-      // Normal handling for non-'other' groups
-      const hasResources = group.resources.length > 0;
-      const groupConnector = isLastGroup
-        ? (hasResources ? '└─┬ ' : '└── ')
-        : (hasResources ? '├─┬ ' : '├── ');
-      const groupPrefix = prefix + (isLastGroup ? '  ' : '│ ');
-
-      console.log(`${prefix}${groupConnector}${group.resourceType}${dim(` (${group.resources.length})`)}`);
-
-      for (let ri = 0; ri < group.resources.length; ri++) {
-        const resource = group.resources[ri];
-        const isLastResource = ri === group.resources.length - 1;
-
-        if (showFiles && resource.files.length > 0) {
-          const resConnector = isLastResource ? '└─┬ ' : '├─┬ ';
-          const resPrefix = groupPrefix + (isLastResource ? '  ' : '│ ');
-          console.log(`${groupPrefix}${resConnector}${resource.name}`);
-
-          for (let fi = 0; fi < resource.files.length; fi++) {
-            const file = resource.files[fi];
-            const isLastFile = fi === resource.files.length - 1;
-            const fileConnector = isLastFile ? '└── ' : '├── ';
-            const label = file.exists
-              ? dim(file.target)
-              : `${dim(file.target)} ${red('[MISSING]')}`;
-            console.log(`${resPrefix}${fileConnector}${label}`);
-          }
-        } else {
-          const resConnector = isLastResource ? '└── ' : '├── ';
-          console.log(`${groupPrefix}${resConnector}${resource.name}`);
-        }
-      }
-    }
+    renderResourceGroup(group, prefix, isLastGroup, showFiles, config);
   }
 }
 
@@ -261,77 +182,16 @@ function printDepTreeNode(
 
   if (hasResources) {
     const groups = node.report.resourceGroups!;
+    const config: TreeRenderConfig<ListFileMapping> = {
+      formatPath: (file) => file.target,
+      isMissing: (file) => !file.exists,
+      sortFiles: (a, b) => a.target.localeCompare(b.target)
+    };
+    
     for (let gi = 0; gi < groups.length; gi++) {
       const group = groups[gi];
       const isLastGroup = gi === groups.length - 1 && !hasChildren;
-      const isOtherGroup = group.resourceType === 'other';
-      
-      // For 'other' group, show files directly without subcategories
-      if (isOtherGroup) {
-        // Collect all files from all resources in the group
-        const allFiles: ListFileMapping[] = [];
-        for (const resource of group.resources) {
-          allFiles.push(...resource.files);
-        }
-        
-        // Sort files alphabetically by target path
-        const sortedFiles = [...allFiles].sort((a, b) => a.target.localeCompare(b.target));
-        const totalFileCount = sortedFiles.length;
-        
-        if (sortedFiles.length > 0) {
-          // With files: show as branch with files directly underneath
-          const groupConnector = isLastGroup ? '└─┬ ' : '├─┬ ';
-          const groupPrefix = childPrefix + (isLastGroup ? '  ' : '│ ');
-          console.log(`${childPrefix}${groupConnector}${group.resourceType}${dim(` (${totalFileCount})`)}`);
-          
-          for (let fi = 0; fi < sortedFiles.length; fi++) {
-            const file = sortedFiles[fi];
-            const isLastFile = fi === sortedFiles.length - 1;
-            const fileConnector = isLastFile ? '└── ' : '├── ';
-            const label = file.exists
-              ? dim(file.target)
-              : `${dim(file.target)} ${red('[MISSING]')}`;
-            console.log(`${groupPrefix}${fileConnector}${label}`);
-          }
-        } else {
-          // No files: just show the count
-          const groupConnector = isLastGroup ? '└── ' : '├── ';
-          console.log(`${childPrefix}${groupConnector}${group.resourceType}${dim(` (${totalFileCount})`)}`);
-        }
-      } else {
-        // Normal handling for non-'other' groups
-        const hasGroupResources = group.resources.length > 0;
-        const groupConnector = isLastGroup
-          ? (hasGroupResources ? '└─┬ ' : '└── ')
-          : (hasGroupResources ? '├─┬ ' : '├── ');
-        const groupPrefix = childPrefix + (isLastGroup ? '  ' : '│ ');
-
-        console.log(`${childPrefix}${groupConnector}${group.resourceType}${dim(` (${group.resources.length})`)}`);
-
-        for (let ri = 0; ri < group.resources.length; ri++) {
-          const resource = group.resources[ri];
-          const isLastResource = ri === group.resources.length - 1;
-
-          if (resource.files.length > 0) {
-            const resConnector = isLastResource ? '└─┬ ' : '├─┬ ';
-            const resPrefix = groupPrefix + (isLastResource ? '  ' : '│ ');
-            console.log(`${groupPrefix}${resConnector}${resource.name}`);
-
-            for (let fi = 0; fi < resource.files.length; fi++) {
-              const file = resource.files[fi];
-              const isLastFile = fi === resource.files.length - 1;
-              const fileConnector = isLastFile ? '└── ' : '├── ';
-              const label = file.exists
-                ? dim(file.target)
-                : `${dim(file.target)} ${red('[MISSING]')}`;
-              console.log(`${resPrefix}${fileConnector}${label}`);
-            }
-          } else {
-            const resConnector = isLastResource ? '└── ' : '├── ';
-            console.log(`${groupPrefix}${resConnector}${resource.name}`);
-          }
-        }
-      }
+      renderResourceGroup(group, childPrefix, isLastGroup, true, config);
     }
   }
 
@@ -402,77 +262,16 @@ function printDepsView(
     // Show resource groups for the top-level package if files are requested
     if (hasResources) {
       const groups = entry.report.resourceGroups!;
+      const config: TreeRenderConfig<ListFileMapping> = {
+        formatPath: (file) => file.target,
+        isMissing: (file) => !file.exists,
+        sortFiles: (a, b) => a.target.localeCompare(b.target)
+      };
+      
       for (let gi = 0; gi < groups.length; gi++) {
         const group = groups[gi];
         const isLastGroup = gi === groups.length - 1 && !hasChildren;
-        const isOtherGroup = group.resourceType === 'other';
-        
-        // For 'other' group, show files directly without subcategories
-        if (isOtherGroup) {
-          // Collect all files from all resources in the group
-          const allFiles: ListFileMapping[] = [];
-          for (const resource of group.resources) {
-            allFiles.push(...resource.files);
-          }
-          
-          // Sort files alphabetically by target path
-          const sortedFiles = [...allFiles].sort((a, b) => a.target.localeCompare(b.target));
-          const totalFileCount = sortedFiles.length;
-          
-          if (sortedFiles.length > 0) {
-            // With files: show as branch with files directly underneath
-            const groupConnector = isLastGroup ? '└─┬ ' : '├─┬ ';
-            const groupPrefix = childPrefix + (isLastGroup ? '  ' : '│ ');
-            console.log(`${childPrefix}${groupConnector}${group.resourceType}${dim(` (${totalFileCount})`)}`);
-            
-            for (let fi = 0; fi < sortedFiles.length; fi++) {
-              const file = sortedFiles[fi];
-              const isLastFile = fi === sortedFiles.length - 1;
-              const fileConnector = isLastFile ? '└── ' : '├── ';
-              const label = file.exists
-                ? dim(file.target)
-                : `${dim(file.target)} ${red('[MISSING]')}`;
-              console.log(`${groupPrefix}${fileConnector}${label}`);
-            }
-          } else {
-            // No files: just show the count
-            const groupConnector = isLastGroup ? '└── ' : '├── ';
-            console.log(`${childPrefix}${groupConnector}${group.resourceType}${dim(` (${totalFileCount})`)}`);
-          }
-        } else {
-          // Normal handling for non-'other' groups
-          const hasGroupResources = group.resources.length > 0;
-          const groupConnector = isLastGroup
-            ? (hasGroupResources ? '└─┬ ' : '└── ')
-            : (hasGroupResources ? '├─┬ ' : '├── ');
-          const groupPrefix = childPrefix + (isLastGroup ? '  ' : '│ ');
-
-          console.log(`${childPrefix}${groupConnector}${group.resourceType}${dim(` (${group.resources.length})`)}`);
-
-          for (let ri = 0; ri < group.resources.length; ri++) {
-            const resource = group.resources[ri];
-            const isLastResource = ri === group.resources.length - 1;
-
-            if (resource.files.length > 0) {
-              const resConnector = isLastResource ? '└─┬ ' : '├─┬ ';
-              const resPrefix = groupPrefix + (isLastResource ? '  ' : '│ ');
-              console.log(`${groupPrefix}${resConnector}${resource.name}`);
-
-              for (let fi = 0; fi < resource.files.length; fi++) {
-                const file = resource.files[fi];
-                const isLastFile = fi === resource.files.length - 1;
-                const fileConnector = isLastFile ? '└── ' : '├── ';
-                const label = file.exists
-                  ? dim(file.target)
-                  : `${dim(file.target)} ${red('[MISSING]')}`;
-                console.log(`${resPrefix}${fileConnector}${label}`);
-              }
-            } else {
-              const resConnector = isLastResource ? '└── ' : '├── ';
-              console.log(`${groupPrefix}${resConnector}${resource.name}`);
-            }
-          }
-        }
+        renderResourceGroup(group, childPrefix, isLastGroup, true, config);
       }
     }
 
@@ -680,93 +479,22 @@ function printResourcesView(
     console.log(`${headerInfo.name}${version} ${dim(`(${headerInfo.path})`)} ${typeTag}`);
   }
 
+  // Configure for EnhancedFileMapping with scope badges
+  const config: TreeRenderConfig<EnhancedFileMapping> = {
+    formatPath: (file) => formatFilePath(file),
+    isMissing: (file) => file.status === 'missing',
+    sortFiles: (a, b) => {
+      const pathA = formatFilePath(a);
+      const pathB = formatFilePath(b);
+      return pathA.localeCompare(pathB);
+    },
+    getResourceBadge: (scopes) => scopes ? formatScopeBadges(scopes) : ''
+  };
+
   for (let gi = 0; gi < groups.length; gi++) {
     const group = groups[gi];
     const isLastGroup = gi === groups.length - 1;
-    const isOtherGroup = group.resourceType === 'other';
-    
-    // For 'other' group, show files directly without subcategories
-    if (isOtherGroup) {
-      // Collect all files from all resources in the group
-      const allFiles: EnhancedFileMapping[] = [];
-      for (const resource of group.resources) {
-        allFiles.push(...resource.files);
-      }
-      
-      // Sort files alphabetically by formatted path
-      const sortedFiles = [...allFiles].sort((a, b) => {
-        const pathA = formatFilePath(a);
-        const pathB = formatFilePath(b);
-        return pathA.localeCompare(pathB);
-      });
-      
-      const totalFileCount = sortedFiles.length;
-      
-      if (showFiles && sortedFiles.length > 0) {
-        // With files: show as branch with files directly underneath
-        const groupConnector = isLastGroup ? '└─┬ ' : '├─┬ ';
-        const groupPrefix = isLastGroup ? '  ' : '│ ';
-        console.log(`${groupConnector}${group.resourceType}${dim(` (${totalFileCount})`)}`);
-        
-        for (let fi = 0; fi < sortedFiles.length; fi++) {
-          const file = sortedFiles[fi];
-          const isLastFile = fi === sortedFiles.length - 1;
-          const fileConnector = isLastFile ? '└── ' : '├── ';
-          const filePath = formatFilePath(file);
-          let fileLabel = dim(filePath);
-          if (file.status === 'missing') {
-            fileLabel = `${dim(filePath)} ${red('[MISSING]')}`;
-          }
-          console.log(`${groupPrefix}${fileConnector}${fileLabel}`);
-        }
-      } else {
-        // Without files: just show the count
-        const groupConnector = isLastGroup ? '└── ' : '├── ';
-        console.log(`${groupConnector}${group.resourceType}${dim(` (${totalFileCount})`)}`);
-      }
-    } else {
-      // Normal handling for non-'other' groups
-      const hasResources = group.resources.length > 0;
-      const groupConnector = isLastGroup
-        ? (hasResources ? '└─┬ ' : '└── ')
-        : (hasResources ? '├─┬ ' : '├── ');
-      const groupPrefix = isLastGroup ? '  ' : '│ ';
-
-      console.log(`${groupConnector}${group.resourceType}${dim(` (${group.resources.length})`)}`);
-
-      for (let ri = 0; ri < group.resources.length; ri++) {
-        const resource = group.resources[ri];
-        const isLastResource = ri === group.resources.length - 1;
-        const scopeBadge = formatScopeBadges(resource.scopes);
-
-        if (showFiles && resource.files.length > 0) {
-          const resConnector = isLastResource ? '└─┬ ' : '├─┬ ';
-          const resPrefix = groupPrefix + (isLastResource ? '  ' : '│ ');
-          console.log(`${groupPrefix}${resConnector}${resource.name} ${scopeBadge}`);
-
-          const sortedFiles = [...resource.files].sort((a, b) => {
-            const pathA = formatFilePath(a);
-            const pathB = formatFilePath(b);
-            return pathA.localeCompare(pathB);
-          });
-
-          for (let fi = 0; fi < sortedFiles.length; fi++) {
-            const file = sortedFiles[fi];
-            const isLastFile = fi === sortedFiles.length - 1;
-            const fileConnector = isLastFile ? '└── ' : '├── ';
-            const filePath = formatFilePath(file);
-            let fileLabel = dim(filePath);
-            if (file.status === 'missing') {
-              fileLabel = `${dim(filePath)} ${red('[MISSING]')}`;
-            }
-            console.log(`${resPrefix}${fileConnector}${fileLabel}`);
-          }
-        } else {
-          const resConnector = isLastResource ? '└── ' : '├── ';
-          console.log(`${groupPrefix}${resConnector}${resource.name} ${scopeBadge}`);
-        }
-      }
-    }
+    renderResourceGroup(group, '', isLastGroup, showFiles, config);
   }
 }
 
