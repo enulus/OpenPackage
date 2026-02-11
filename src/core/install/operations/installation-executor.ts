@@ -16,6 +16,8 @@ import { installPackageByIndexWithFlows as installPackageByIndex, type IndexInst
 import { ensureDir, exists, writeTextFile } from '../../../utils/fs.js';
 import { dirname, join } from 'path';
 import { checkAndHandleAllPackageConflicts } from './conflict-handler.js';
+import { readWorkspaceIndex, writeWorkspaceIndex } from '../../../utils/workspace-index-yml.js';
+import { PACKAGE_ROOT_DIRS } from '../../../constants/index.js';
 
 export type ConflictSummary = Awaited<ReturnType<typeof checkAndHandleAllPackageConflicts>>;
 
@@ -107,6 +109,9 @@ export async function performIndexBasedInstallationPhases(params: InstallationPh
     skipped: new Set<string>()
   };
 
+  /** Per-package root files + root copy paths to augment workspace index */
+  const rootFileAugmentations = new Map<string, { rootFilePaths: string[]; rootCopyPaths: string[] }>();
+
   for (const resolved of packages) {
     try {
       const categorized = await discoverAndCategorizeFiles(
@@ -140,6 +145,15 @@ export async function performIndexBasedInstallationPhases(params: InstallationPh
           rootFileResults.installed.add(file.path);
         }
       }
+
+      // Collect root files + root copy for index augmentation
+      if (!options.dryRun) {
+        const rootFilePaths = [...installResult.created, ...installResult.updated];
+        const rootCopyPaths = categorized.rootCopyFiles.map(f => f.path);
+        if (rootFilePaths.length > 0 || rootCopyPaths.length > 0) {
+          rootFileAugmentations.set(resolved.name, { rootFilePaths, rootCopyPaths });
+        }
+      }
     } catch (error) {
       if (error instanceof UserCancellationError) {
         throw error;
@@ -148,6 +162,38 @@ export async function performIndexBasedInstallationPhases(params: InstallationPh
       logger.error(errorMsg);
       errors.push(errorMsg);
       totalErrors++;
+    }
+  }
+
+  // Augment workspace index with root files and root copy files (flow-installer writes index before root phase)
+  if (!options.dryRun && rootFileAugmentations.size > 0) {
+    try {
+      const wsRecord = await readWorkspaceIndex(cwd);
+      wsRecord.index.packages = wsRecord.index.packages ?? {};
+      for (const [packageName, { rootFilePaths, rootCopyPaths }] of rootFileAugmentations) {
+        const entry = wsRecord.index.packages[packageName];
+        if (!entry) continue;
+        const files = { ...(entry.files ?? {}) };
+        for (const path of rootFilePaths) {
+          const existing = files[path] ?? [];
+          if (!existing.includes(path)) {
+            files[path] = [...existing, path];
+          }
+        }
+        const rootPrefix = `${PACKAGE_ROOT_DIRS.ROOT_COPY}/`;
+        for (const path of rootCopyPaths) {
+          const registryKey = `${rootPrefix}${path}`;
+          const existing = files[registryKey] ?? [];
+          if (!existing.includes(path)) {
+            files[registryKey] = [...existing, path];
+          }
+        }
+        wsRecord.index.packages[packageName] = { ...entry, files };
+      }
+      await writeWorkspaceIndex(wsRecord);
+      logger.debug(`Augmented workspace index with root files for ${rootFileAugmentations.size} package(s)`);
+    } catch (error) {
+      logger.warn(`Failed to augment workspace index with root files: ${error}`);
     }
   }
 
