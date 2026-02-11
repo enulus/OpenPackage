@@ -54,7 +54,7 @@ export class FlowBasedInstallStrategy extends BaseStrategy {
     
     // Discover sources
     const flowSources = await discoverFlowSources(flows, packageRoot, flowContext);
-    
+
     // Phase 4: Apply resource filtering if specified
     const resourceFilteredSources = this.applyResourceFiltering(
       flowSources,
@@ -64,7 +64,7 @@ export class FlowBasedInstallStrategy extends BaseStrategy {
     
     // Filter by platform
     const filteredSources = filterSourcesByPlatform(resourceFilteredSources, platform);
-    
+
     // Execute flows
     const executionResult = await executeFlowsForSources(filteredSources, flowContext);
     

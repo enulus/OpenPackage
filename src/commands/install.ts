@@ -39,7 +39,7 @@ export function setupInstallCommand(program: Command): void {
     .option('--local', 'resolve and install using only local registry versions, skipping remote metadata and pulls')
     .option('--profile <profile>', 'profile to use for authentication')
     .option('--api-key <key>', 'API key for authentication (overrides profile)')
-    .option('--list', 'interactively select resources to install (agents, skills, commands, etc.)')
+    // .option('--list', 'interactively select resources to install (agents, skills, commands, etc.)')
     .action(withErrorHandling(async (
       packageName: string | undefined, 
       options: InstallOptions & { 

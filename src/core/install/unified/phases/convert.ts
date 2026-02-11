@@ -112,18 +112,32 @@ export async function convertPhase(ctx: InstallationContext): Promise<void> {
         const gitCacheMatch = originalContentRoot.match(/(.+\.openpackage\/cache\/git\/[^\/]+\/[^\/]+)/);
         const gitCacheRoot = gitCacheMatch ? gitCacheMatch[1] : originalContentRoot;
         
-        // Check if conversion cache already exists
-        if (await hasConversionCache(gitCacheRoot)) {
-          // Conversion cache exists, use it directly
+        // When matchedPattern is set (resource-scoped install), patch the conversion cache
+        // with our scoped conversion output. Source files come from the git cache (no repull).
+        // This incrementally builds the cache: existing content is preserved, we add what's missing.
+        const isResourceScoped = Boolean(ctx.matchedPattern);
+        
+        if (isResourceScoped) {
+          // Resource-scoped: use .opkg-converted, patching in our scoped files
+          conversionRoot = await createConversionCacheDirectory(gitCacheRoot);
+          await writeTempPackageFiles(conversionResult.files, conversionRoot);
+          shouldCleanup = false;
+          logger.info('Patched conversion cache with resource-scoped files', {
+            conversionRoot,
+            fileCount: conversionResult.files.length
+          });
+        } else if (await hasConversionCache(gitCacheRoot)) {
+          // Full install: use existing conversion cache if available
           conversionRoot = getConversionCacheDirectory(gitCacheRoot);
           logger.info('Using existing conversion cache', { conversionRoot });
+          shouldCleanup = false;
         } else {
-          // Create new conversion cache
+          // Full install: create new conversion cache
           conversionRoot = await createConversionCacheDirectory(gitCacheRoot);
           await writeTempPackageFiles(conversionResult.files, conversionRoot);
           logger.info('Created conversion cache in git cache directory', { conversionRoot });
+          shouldCleanup = false;
         }
-        shouldCleanup = false; // Don't cleanup, keep in cache
       } else {
         // Local path or other source: Use temporary directory
         conversionRoot = await createTempPackageDirectory('opkg-preconverted-');
