@@ -134,35 +134,72 @@ function printResourceGroups(
   for (let gi = 0; gi < groups.length; gi++) {
     const group = groups[gi];
     const isLastGroup = gi === groups.length - 1;
-    const hasResources = group.resources.length > 0;
-    const groupConnector = isLastGroup
-      ? (hasResources ? '└─┬ ' : '└── ')
-      : (hasResources ? '├─┬ ' : '├── ');
-    const groupPrefix = prefix + (isLastGroup ? '  ' : '│ ');
-
-    console.log(`${prefix}${groupConnector}${group.resourceType}${dim(` (${group.resources.length})`)}`);
-
-    for (let ri = 0; ri < group.resources.length; ri++) {
-      const resource = group.resources[ri];
-      const isLastResource = ri === group.resources.length - 1;
-
-      if (showFiles && resource.files.length > 0) {
-        const resConnector = isLastResource ? '└─┬ ' : '├─┬ ';
-        const resPrefix = groupPrefix + (isLastResource ? '  ' : '│ ');
-        console.log(`${groupPrefix}${resConnector}${resource.name}`);
-
-        for (let fi = 0; fi < resource.files.length; fi++) {
-          const file = resource.files[fi];
-          const isLastFile = fi === resource.files.length - 1;
+    const isOtherGroup = group.resourceType === 'other';
+    
+    // For 'other' group, show files directly without subcategories
+    if (isOtherGroup) {
+      // Collect all files from all resources in the group
+      const allFiles: ListFileMapping[] = [];
+      for (const resource of group.resources) {
+        allFiles.push(...resource.files);
+      }
+      
+      // Sort files alphabetically by target path
+      const sortedFiles = [...allFiles].sort((a, b) => a.target.localeCompare(b.target));
+      const totalFileCount = sortedFiles.length;
+      
+      if (showFiles && sortedFiles.length > 0) {
+        // With files: show as branch with files directly underneath
+        const groupConnector = isLastGroup ? '└─┬ ' : '├─┬ ';
+        const groupPrefix = prefix + (isLastGroup ? '  ' : '│ ');
+        console.log(`${prefix}${groupConnector}${group.resourceType}${dim(` (${totalFileCount})`)}`);
+        
+        for (let fi = 0; fi < sortedFiles.length; fi++) {
+          const file = sortedFiles[fi];
+          const isLastFile = fi === sortedFiles.length - 1;
           const fileConnector = isLastFile ? '└── ' : '├── ';
           const label = file.exists
             ? dim(file.target)
             : `${dim(file.target)} ${red('[MISSING]')}`;
-          console.log(`${resPrefix}${fileConnector}${label}`);
+          console.log(`${groupPrefix}${fileConnector}${label}`);
         }
       } else {
-        const resConnector = isLastResource ? '└── ' : '├── ';
-        console.log(`${groupPrefix}${resConnector}${resource.name}`);
+        // Without files: just show the count
+        const groupConnector = isLastGroup ? '└── ' : '├── ';
+        console.log(`${prefix}${groupConnector}${group.resourceType}${dim(` (${totalFileCount})`)}`);
+      }
+    } else {
+      // Normal handling for non-'other' groups
+      const hasResources = group.resources.length > 0;
+      const groupConnector = isLastGroup
+        ? (hasResources ? '└─┬ ' : '└── ')
+        : (hasResources ? '├─┬ ' : '├── ');
+      const groupPrefix = prefix + (isLastGroup ? '  ' : '│ ');
+
+      console.log(`${prefix}${groupConnector}${group.resourceType}${dim(` (${group.resources.length})`)}`);
+
+      for (let ri = 0; ri < group.resources.length; ri++) {
+        const resource = group.resources[ri];
+        const isLastResource = ri === group.resources.length - 1;
+
+        if (showFiles && resource.files.length > 0) {
+          const resConnector = isLastResource ? '└─┬ ' : '├─┬ ';
+          const resPrefix = groupPrefix + (isLastResource ? '  ' : '│ ');
+          console.log(`${groupPrefix}${resConnector}${resource.name}`);
+
+          for (let fi = 0; fi < resource.files.length; fi++) {
+            const file = resource.files[fi];
+            const isLastFile = fi === resource.files.length - 1;
+            const fileConnector = isLastFile ? '└── ' : '├── ';
+            const label = file.exists
+              ? dim(file.target)
+              : `${dim(file.target)} ${red('[MISSING]')}`;
+            console.log(`${resPrefix}${fileConnector}${label}`);
+          }
+        } else {
+          const resConnector = isLastResource ? '└── ' : '├── ';
+          console.log(`${groupPrefix}${resConnector}${resource.name}`);
+        }
       }
     }
   }
@@ -227,35 +264,72 @@ function printDepTreeNode(
     for (let gi = 0; gi < groups.length; gi++) {
       const group = groups[gi];
       const isLastGroup = gi === groups.length - 1 && !hasChildren;
-      const hasGroupResources = group.resources.length > 0;
-      const groupConnector = isLastGroup
-        ? (hasGroupResources ? '└─┬ ' : '└── ')
-        : (hasGroupResources ? '├─┬ ' : '├── ');
-      const groupPrefix = childPrefix + (isLastGroup ? '  ' : '│ ');
-
-      console.log(`${childPrefix}${groupConnector}${group.resourceType}${dim(` (${group.resources.length})`)}`);
-
-      for (let ri = 0; ri < group.resources.length; ri++) {
-        const resource = group.resources[ri];
-        const isLastResource = ri === group.resources.length - 1;
-
-        if (resource.files.length > 0) {
-          const resConnector = isLastResource ? '└─┬ ' : '├─┬ ';
-          const resPrefix = groupPrefix + (isLastResource ? '  ' : '│ ');
-          console.log(`${groupPrefix}${resConnector}${resource.name}`);
-
-          for (let fi = 0; fi < resource.files.length; fi++) {
-            const file = resource.files[fi];
-            const isLastFile = fi === resource.files.length - 1;
+      const isOtherGroup = group.resourceType === 'other';
+      
+      // For 'other' group, show files directly without subcategories
+      if (isOtherGroup) {
+        // Collect all files from all resources in the group
+        const allFiles: ListFileMapping[] = [];
+        for (const resource of group.resources) {
+          allFiles.push(...resource.files);
+        }
+        
+        // Sort files alphabetically by target path
+        const sortedFiles = [...allFiles].sort((a, b) => a.target.localeCompare(b.target));
+        const totalFileCount = sortedFiles.length;
+        
+        if (sortedFiles.length > 0) {
+          // With files: show as branch with files directly underneath
+          const groupConnector = isLastGroup ? '└─┬ ' : '├─┬ ';
+          const groupPrefix = childPrefix + (isLastGroup ? '  ' : '│ ');
+          console.log(`${childPrefix}${groupConnector}${group.resourceType}${dim(` (${totalFileCount})`)}`);
+          
+          for (let fi = 0; fi < sortedFiles.length; fi++) {
+            const file = sortedFiles[fi];
+            const isLastFile = fi === sortedFiles.length - 1;
             const fileConnector = isLastFile ? '└── ' : '├── ';
             const label = file.exists
               ? dim(file.target)
               : `${dim(file.target)} ${red('[MISSING]')}`;
-            console.log(`${resPrefix}${fileConnector}${label}`);
+            console.log(`${groupPrefix}${fileConnector}${label}`);
           }
         } else {
-          const resConnector = isLastResource ? '└── ' : '├── ';
-          console.log(`${groupPrefix}${resConnector}${resource.name}`);
+          // No files: just show the count
+          const groupConnector = isLastGroup ? '└── ' : '├── ';
+          console.log(`${childPrefix}${groupConnector}${group.resourceType}${dim(` (${totalFileCount})`)}`);
+        }
+      } else {
+        // Normal handling for non-'other' groups
+        const hasGroupResources = group.resources.length > 0;
+        const groupConnector = isLastGroup
+          ? (hasGroupResources ? '└─┬ ' : '└── ')
+          : (hasGroupResources ? '├─┬ ' : '├── ');
+        const groupPrefix = childPrefix + (isLastGroup ? '  ' : '│ ');
+
+        console.log(`${childPrefix}${groupConnector}${group.resourceType}${dim(` (${group.resources.length})`)}`);
+
+        for (let ri = 0; ri < group.resources.length; ri++) {
+          const resource = group.resources[ri];
+          const isLastResource = ri === group.resources.length - 1;
+
+          if (resource.files.length > 0) {
+            const resConnector = isLastResource ? '└─┬ ' : '├─┬ ';
+            const resPrefix = groupPrefix + (isLastResource ? '  ' : '│ ');
+            console.log(`${groupPrefix}${resConnector}${resource.name}`);
+
+            for (let fi = 0; fi < resource.files.length; fi++) {
+              const file = resource.files[fi];
+              const isLastFile = fi === resource.files.length - 1;
+              const fileConnector = isLastFile ? '└── ' : '├── ';
+              const label = file.exists
+                ? dim(file.target)
+                : `${dim(file.target)} ${red('[MISSING]')}`;
+              console.log(`${resPrefix}${fileConnector}${label}`);
+            }
+          } else {
+            const resConnector = isLastResource ? '└── ' : '├── ';
+            console.log(`${groupPrefix}${resConnector}${resource.name}`);
+          }
         }
       }
     }
@@ -331,35 +405,72 @@ function printDepsView(
       for (let gi = 0; gi < groups.length; gi++) {
         const group = groups[gi];
         const isLastGroup = gi === groups.length - 1 && !hasChildren;
-        const hasGroupResources = group.resources.length > 0;
-        const groupConnector = isLastGroup
-          ? (hasGroupResources ? '└─┬ ' : '└── ')
-          : (hasGroupResources ? '├─┬ ' : '├── ');
-        const groupPrefix = childPrefix + (isLastGroup ? '  ' : '│ ');
-
-        console.log(`${childPrefix}${groupConnector}${group.resourceType}${dim(` (${group.resources.length})`)}`);
-
-        for (let ri = 0; ri < group.resources.length; ri++) {
-          const resource = group.resources[ri];
-          const isLastResource = ri === group.resources.length - 1;
-
-          if (resource.files.length > 0) {
-            const resConnector = isLastResource ? '└─┬ ' : '├─┬ ';
-            const resPrefix = groupPrefix + (isLastResource ? '  ' : '│ ');
-            console.log(`${groupPrefix}${resConnector}${resource.name}`);
-
-            for (let fi = 0; fi < resource.files.length; fi++) {
-              const file = resource.files[fi];
-              const isLastFile = fi === resource.files.length - 1;
+        const isOtherGroup = group.resourceType === 'other';
+        
+        // For 'other' group, show files directly without subcategories
+        if (isOtherGroup) {
+          // Collect all files from all resources in the group
+          const allFiles: ListFileMapping[] = [];
+          for (const resource of group.resources) {
+            allFiles.push(...resource.files);
+          }
+          
+          // Sort files alphabetically by target path
+          const sortedFiles = [...allFiles].sort((a, b) => a.target.localeCompare(b.target));
+          const totalFileCount = sortedFiles.length;
+          
+          if (sortedFiles.length > 0) {
+            // With files: show as branch with files directly underneath
+            const groupConnector = isLastGroup ? '└─┬ ' : '├─┬ ';
+            const groupPrefix = childPrefix + (isLastGroup ? '  ' : '│ ');
+            console.log(`${childPrefix}${groupConnector}${group.resourceType}${dim(` (${totalFileCount})`)}`);
+            
+            for (let fi = 0; fi < sortedFiles.length; fi++) {
+              const file = sortedFiles[fi];
+              const isLastFile = fi === sortedFiles.length - 1;
               const fileConnector = isLastFile ? '└── ' : '├── ';
               const label = file.exists
                 ? dim(file.target)
                 : `${dim(file.target)} ${red('[MISSING]')}`;
-              console.log(`${resPrefix}${fileConnector}${label}`);
+              console.log(`${groupPrefix}${fileConnector}${label}`);
             }
           } else {
-            const resConnector = isLastResource ? '└── ' : '├── ';
-            console.log(`${groupPrefix}${resConnector}${resource.name}`);
+            // No files: just show the count
+            const groupConnector = isLastGroup ? '└── ' : '├── ';
+            console.log(`${childPrefix}${groupConnector}${group.resourceType}${dim(` (${totalFileCount})`)}`);
+          }
+        } else {
+          // Normal handling for non-'other' groups
+          const hasGroupResources = group.resources.length > 0;
+          const groupConnector = isLastGroup
+            ? (hasGroupResources ? '└─┬ ' : '└── ')
+            : (hasGroupResources ? '├─┬ ' : '├── ');
+          const groupPrefix = childPrefix + (isLastGroup ? '  ' : '│ ');
+
+          console.log(`${childPrefix}${groupConnector}${group.resourceType}${dim(` (${group.resources.length})`)}`);
+
+          for (let ri = 0; ri < group.resources.length; ri++) {
+            const resource = group.resources[ri];
+            const isLastResource = ri === group.resources.length - 1;
+
+            if (resource.files.length > 0) {
+              const resConnector = isLastResource ? '└─┬ ' : '├─┬ ';
+              const resPrefix = groupPrefix + (isLastResource ? '  ' : '│ ');
+              console.log(`${groupPrefix}${resConnector}${resource.name}`);
+
+              for (let fi = 0; fi < resource.files.length; fi++) {
+                const file = resource.files[fi];
+                const isLastFile = fi === resource.files.length - 1;
+                const fileConnector = isLastFile ? '└── ' : '├── ';
+                const label = file.exists
+                  ? dim(file.target)
+                  : `${dim(file.target)} ${red('[MISSING]')}`;
+                console.log(`${resPrefix}${fileConnector}${label}`);
+              }
+            } else {
+              const resConnector = isLastResource ? '└── ' : '├── ';
+              console.log(`${groupPrefix}${resConnector}${resource.name}`);
+            }
           }
         }
       }
@@ -454,6 +565,10 @@ function mergeTrackedAndUntrackedResources(
       }
       const resourcesMap = typeMap.get(normalizedType)!;
 
+      // For 'other' type, use a fixed resource name to consolidate all files
+      const finalResourceName = normalizedType === 'other' ? 'uncategorized' : resourceName;
+      const resourceKey = normalizedType === 'other' ? 'uncategorized' : resourceName;
+
       const enhancedFile: EnhancedFileMapping = {
         source: file.workspacePath,
         target: file.workspacePath,
@@ -462,16 +577,16 @@ function mergeTrackedAndUntrackedResources(
         scope
       };
 
-      if (!resourcesMap.has(resourceName)) {
-        resourcesMap.set(resourceName, {
-          name: resourceName,
+      if (!resourcesMap.has(resourceKey)) {
+        resourcesMap.set(resourceKey, {
+          name: finalResourceName,
           resourceType: normalizedType,
           files: [enhancedFile],
           status: 'untracked',
           scopes: new Set([scope])
         });
       } else {
-        resourcesMap.get(resourceName)!.files.push(enhancedFile);
+        resourcesMap.get(resourceKey)!.files.push(enhancedFile);
       }
     }
   }
@@ -568,30 +683,31 @@ function printResourcesView(
   for (let gi = 0; gi < groups.length; gi++) {
     const group = groups[gi];
     const isLastGroup = gi === groups.length - 1;
-    const hasResources = group.resources.length > 0;
-    const groupConnector = isLastGroup
-      ? (hasResources ? '└─┬ ' : '└── ')
-      : (hasResources ? '├─┬ ' : '├── ');
-    const groupPrefix = isLastGroup ? '  ' : '│ ';
-
-    console.log(`${groupConnector}${group.resourceType}${dim(` (${group.resources.length})`)}`);
-
-    for (let ri = 0; ri < group.resources.length; ri++) {
-      const resource = group.resources[ri];
-      const isLastResource = ri === group.resources.length - 1;
-      const scopeBadge = formatScopeBadges(resource.scopes);
-
-      if (showFiles && resource.files.length > 0) {
-        const resConnector = isLastResource ? '└─┬ ' : '├─┬ ';
-        const resPrefix = groupPrefix + (isLastResource ? '  ' : '│ ');
-        console.log(`${groupPrefix}${resConnector}${resource.name} ${scopeBadge}`);
-
-        const sortedFiles = [...resource.files].sort((a, b) => {
-          const pathA = formatFilePath(a);
-          const pathB = formatFilePath(b);
-          return pathA.localeCompare(pathB);
-        });
-
+    const isOtherGroup = group.resourceType === 'other';
+    
+    // For 'other' group, show files directly without subcategories
+    if (isOtherGroup) {
+      // Collect all files from all resources in the group
+      const allFiles: EnhancedFileMapping[] = [];
+      for (const resource of group.resources) {
+        allFiles.push(...resource.files);
+      }
+      
+      // Sort files alphabetically by formatted path
+      const sortedFiles = [...allFiles].sort((a, b) => {
+        const pathA = formatFilePath(a);
+        const pathB = formatFilePath(b);
+        return pathA.localeCompare(pathB);
+      });
+      
+      const totalFileCount = sortedFiles.length;
+      
+      if (showFiles && sortedFiles.length > 0) {
+        // With files: show as branch with files directly underneath
+        const groupConnector = isLastGroup ? '└─┬ ' : '├─┬ ';
+        const groupPrefix = isLastGroup ? '  ' : '│ ';
+        console.log(`${groupConnector}${group.resourceType}${dim(` (${totalFileCount})`)}`);
+        
         for (let fi = 0; fi < sortedFiles.length; fi++) {
           const file = sortedFiles[fi];
           const isLastFile = fi === sortedFiles.length - 1;
@@ -601,11 +717,54 @@ function printResourcesView(
           if (file.status === 'missing') {
             fileLabel = `${dim(filePath)} ${red('[MISSING]')}`;
           }
-          console.log(`${resPrefix}${fileConnector}${fileLabel}`);
+          console.log(`${groupPrefix}${fileConnector}${fileLabel}`);
         }
       } else {
-        const resConnector = isLastResource ? '└── ' : '├── ';
-        console.log(`${groupPrefix}${resConnector}${resource.name} ${scopeBadge}`);
+        // Without files: just show the count
+        const groupConnector = isLastGroup ? '└── ' : '├── ';
+        console.log(`${groupConnector}${group.resourceType}${dim(` (${totalFileCount})`)}`);
+      }
+    } else {
+      // Normal handling for non-'other' groups
+      const hasResources = group.resources.length > 0;
+      const groupConnector = isLastGroup
+        ? (hasResources ? '└─┬ ' : '└── ')
+        : (hasResources ? '├─┬ ' : '├── ');
+      const groupPrefix = isLastGroup ? '  ' : '│ ';
+
+      console.log(`${groupConnector}${group.resourceType}${dim(` (${group.resources.length})`)}`);
+
+      for (let ri = 0; ri < group.resources.length; ri++) {
+        const resource = group.resources[ri];
+        const isLastResource = ri === group.resources.length - 1;
+        const scopeBadge = formatScopeBadges(resource.scopes);
+
+        if (showFiles && resource.files.length > 0) {
+          const resConnector = isLastResource ? '└─┬ ' : '├─┬ ';
+          const resPrefix = groupPrefix + (isLastResource ? '  ' : '│ ');
+          console.log(`${groupPrefix}${resConnector}${resource.name} ${scopeBadge}`);
+
+          const sortedFiles = [...resource.files].sort((a, b) => {
+            const pathA = formatFilePath(a);
+            const pathB = formatFilePath(b);
+            return pathA.localeCompare(pathB);
+          });
+
+          for (let fi = 0; fi < sortedFiles.length; fi++) {
+            const file = sortedFiles[fi];
+            const isLastFile = fi === sortedFiles.length - 1;
+            const fileConnector = isLastFile ? '└── ' : '├── ';
+            const filePath = formatFilePath(file);
+            let fileLabel = dim(filePath);
+            if (file.status === 'missing') {
+              fileLabel = `${dim(filePath)} ${red('[MISSING]')}`;
+            }
+            console.log(`${resPrefix}${fileConnector}${fileLabel}`);
+          }
+        } else {
+          const resConnector = isLastResource ? '└── ' : '├── ';
+          console.log(`${groupPrefix}${resConnector}${resource.name} ${scopeBadge}`);
+        }
       }
     }
   }

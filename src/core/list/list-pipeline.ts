@@ -267,11 +267,15 @@ export function groupFilesIntoResources(fileList: ListFileMapping[]): ListResour
 
   for (const file of fileList) {
     const { resourceType, resourceName } = classifySourceKey(file.source);
-    const key = `${resourceType}::${resourceName}`;
+    
+    // For 'other' type, consolidate all files into one resource instead of creating subcategories
+    const key = resourceType === 'other' 
+      ? 'other::uncategorized'
+      : `${resourceType}::${resourceName}`;
 
     if (!resourceMap.has(key)) {
       resourceMap.set(key, {
-        name: resourceName,
+        name: resourceType === 'other' ? 'uncategorized' : resourceName,
         resourceType,
         files: []
       });
