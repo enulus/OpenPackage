@@ -48,12 +48,13 @@ async function displayAddResults(data: AddToSourceResult): Promise<void> {
 export function setupAddCommand(program: Command): void {
   program
     .command('add')
-    .argument('[package-name]', 'package name (optional - defaults to workspace package)')
-    .argument('[path]', 'file or directory to add')
+    .argument('<path>', 'file or directory to add')
     .description('Add files to a mutable package source or workspace package')
+    .option('--to <package-name>', 'target package name (defaults to workspace package)')
     .option('--platform-specific', 'Save platform-specific variants for platform subdir inputs')
     .action(
-      withErrorHandling(async (packageName: string | undefined, pathArg: string | undefined, options) => {
+      withErrorHandling(async (pathArg: string, options) => {
+        const packageName = options.to;
         const result = await runAddToSourcePipeline(packageName, pathArg, options);
         if (!result.success) {
           throw new Error(result.error || 'Add operation failed');

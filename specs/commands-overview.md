@@ -30,8 +30,8 @@ Add new files from anywhere to mutable source (workspace or global packages).
 - Flow: Resolve mutable source → Collect input → Map (platform→universal, root→root, other→root/<rel>) → Copy to source.
 - **No index updates**: `add` only modifies package source. To sync to workspace, use `install`.
 - Example: 
-  - `opkg add my-pkg ./new-files/` (source-only)
-  - `opkg add my-pkg ./file.md` (adds to source)
+  - `opkg add ./new-files/ --to my-pkg` (source-only)
+  - `opkg add ./file.md --to my-pkg` (adds to source)
   - `opkg install my-pkg` (to sync to workspace)
 - Works from any directory with any mutable package.
 - See [Add](add/).
@@ -43,14 +43,14 @@ Remove files from mutable source or workspace root.
 - Preconditions: Mutable source or workspace root; fails on registry.
 - Flow: Resolve arguments → Resolve source → Collect files → Confirm → Delete → Clean up empty dirs.
 - **Argument modes**: 
-  - Two-arg: `opkg remove <pkg> <path>` (named package)
-  - One-arg: `opkg remove <path>` (workspace root)
+  - With option: `opkg remove <path> --from <pkg>` (named package)
+  - Path only: `opkg remove <path>` (workspace root)
 - **No index updates**: `remove` only modifies package source. To sync deletions to workspace, use `install`.
 - Options: `--force` (skip confirmation), `--dry-run` (preview).
 - Example:
   - `opkg remove commands/deprecated.md` (workspace root, path-only)
-  - `opkg remove my-pkg commands/deprecated.md` (named package, source-only)
-  - `opkg remove my-pkg rules/old/` (removes from source)
+  - `opkg remove commands/deprecated.md --from my-pkg` (named package, source-only)
+  - `opkg remove rules/old/ --from my-pkg` (removes from source)
   - `opkg remove commands/ --dry-run` (preview workspace root)
   - `opkg install my-pkg` (to sync deletions to workspace)
 - Works from any directory with any mutable package.

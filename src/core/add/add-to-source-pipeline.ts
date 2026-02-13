@@ -33,7 +33,7 @@ export async function runAddToSourcePipeline(
 ): Promise<CommandResult<AddToSourceResult>> {
   const cwd = process.cwd();
 
-  // Resolve arguments: support both two-arg and one-arg (path-only) modes
+  // Resolve arguments: packageName from --to option, pathArg is required
   const { resolvedPackageName, resolvedPath } = await resolveAddArguments(cwd, packageName, pathArg);
 
   const absInputPath = resolvePath(cwd, resolvedPath);
@@ -112,7 +112,8 @@ export async function runAddToSourcePipeline(
 
 /**
  * Resolve add command arguments to determine package name and input path.
- * Supports both two-arg mode (package + path) and one-arg mode (path only → workspace root).
+ * packageName comes from --to option (undefined if not provided → workspace root).
+ * pathArg is the required <path> argument.
  */
 async function resolveAddArguments(
   cwd: string,
@@ -140,7 +141,7 @@ async function resolveAddArguments(
   // Not a filesystem path → treat as package name (error will be thrown later)
   throw new Error(
     `Path '${singleArg}' not found.\n\n` +
-    `If you meant to specify a package name, use: opkg add ${singleArg} <path>`
+    `If you meant to specify a package name, use: opkg add <path> --to ${singleArg}`
   );
 }
 

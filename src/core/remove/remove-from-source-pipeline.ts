@@ -34,7 +34,7 @@ export async function runRemoveFromSourcePipeline(
 ): Promise<CommandResult<RemoveFromSourceResult>> {
   const cwd = process.cwd();
 
-  // Resolve arguments: support both two-arg and one-arg (path-only) modes
+  // Resolve arguments: packageName from --from option, pathArg is required
   let resolvedPackageName: string | null;
   let resolvedPath: string;
   try {
@@ -203,7 +203,8 @@ async function cleanupEmptyDirectories(directories: string[]): Promise<void> {
 
 /**
  * Resolve remove command arguments to determine package name and removal path.
- * Supports both two-arg mode (package + path) and one-arg mode (path only → workspace root).
+ * packageName comes from --from option (undefined if not provided → workspace root).
+ * pathArg is the required <path> argument.
  */
 async function resolveRemoveArguments(
   cwd: string,
@@ -235,7 +236,7 @@ async function resolveRemoveArguments(
   // Not a valid path → treat as package name (error will be thrown later)
   throw new Error(
     `Path '${singleArg}' not found.\n\n` +
-    `If you meant to specify a package name, use: opkg remove ${singleArg} <path>`
+    `If you meant to specify a package name, use: opkg remove <path> --from ${singleArg}`
   );
 }
 

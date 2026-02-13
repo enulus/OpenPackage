@@ -18,8 +18,8 @@
 
 ## Flow
 1. **Resolve arguments**:
-   - **Two arguments** (`opkg remove <pkg> <path>`): Remove from named package source
-   - **One argument** (`opkg remove <path>`): Remove from workspace root (`.openpackage/`)
+   - **Path with --from** (`opkg remove <path> --from <pkg>`): Remove from named package source
+   - **Path only** (`opkg remove <path>`): Remove from workspace root (`.openpackage/`)
    - Path validation: Check if path exists in filesystem or workspace root
    - For named packages: search workspace packages, then global packages
    - Error if not found or resolves to immutable registry path
@@ -45,9 +45,10 @@
    - Index updates happen via `install` (if package is installed).
 
 ## Options
+- `--from <package-name>`: Source package name (defaults to workspace package if not specified).
 - `--force`: Skip confirmation prompts.
 - `--dry-run`: Preview what would be removed without actually deleting.
-- Input: `opkg remove [pkg] [path]` - both arguments optional, at least path required.
+- Input: `opkg remove <path> [--from <package-name>]`.
 - Global flags: [CLI Options](../cli-options.md).
 
 ## Examples
@@ -66,19 +67,19 @@ opkg remove rules/old/
 opkg remove root/config/legacy.yml
 ```
 
-### Named Package Removal (Two-Arg Mode)
+### Named Package Removal
 ```bash
 # Remove single file from workspace package (no workspace sync)
-opkg remove my-pkg commands/deprecated.md
+opkg remove commands/deprecated.md --from my-pkg
 # Or use the alias
-opkg rm my-pkg commands/deprecated.md
+opkg rm commands/deprecated.md --from my-pkg
 
 # Remove directory from global package
-opkg remove shared-utils rules/old/
+opkg remove rules/old/ --from shared-utils
 
 # Remove from any directory (works with global packages)
 cd ~/projects/other-repo
-opkg remove global-pkg agents/legacy.md
+opkg remove agents/legacy.md --from global-pkg
 ```
 
 
@@ -89,7 +90,7 @@ opkg remove global-pkg agents/legacy.md
 opkg remove commands/ --dry-run
 
 # Preview removal from named package
-opkg remove my-pkg commands/ --dry-run
+opkg remove commands/ --from my-pkg --dry-run
 
 # Force removal without confirmation
 opkg remove agents/deprecated.md --force
@@ -109,7 +110,7 @@ opkg install <workspace-package>
 #### Named Package: Remove → Install
 ```bash
 # 1. Remove files from package source
-opkg remove my-pkg commands/deprecated/
+opkg remove commands/deprecated/ --from my-pkg
 
 # 2. If package is installed, re-install to sync deletions
 opkg install my-pkg
@@ -121,14 +122,14 @@ opkg install my-pkg
 
 The `remove` command supports two modes of operation:
 
-#### Two-Argument Mode: `opkg remove <pkg> <path>`
+#### With --from Option: `opkg remove <path> --from <pkg>`
 Explicit package targeting:
 ```bash
-opkg remove my-pkg commands/test.md     # Remove from workspace/global package
-opkg remove global-utils config.yml     # Works with global packages
+opkg remove commands/test.md --from my-pkg     # Remove from workspace/global package
+opkg remove config.yml --from global-utils     # Works with global packages
 ```
 
-#### One-Argument Mode: `opkg remove <path>`
+#### Path Only: `opkg remove <path>`
 Workspace root targeting (path-only):
 ```bash
 opkg remove commands/test.md    # Remove from .openpackage/
@@ -136,11 +137,11 @@ opkg remove rules/              # Remove directory from workspace root
 ```
 
 **Resolution Logic**:
-1. If two arguments provided → always treat as `<pkg> <path>`
-2. If one argument provided:
-   - Check if it's a valid path (filesystem or workspace root)
+1. If --from option provided → remove from specified package
+2. If no --from option:
+   - Check if path is valid (filesystem or workspace root)
    - If path exists → remove from workspace root
-   - If path doesn't exist → error with suggestion to use two-arg syntax
+   - If path doesn't exist → error with suggestion to use --from syntax
 
 **Path Validation**:
 - Checks both current directory and `.openpackage/` directory
@@ -279,27 +280,27 @@ Operation cancelled by user.
 
 2. **Removing deprecated content from package**:
    ```bash
-   opkg remove pkg commands/deprecated/  # Remove from package source
-   opkg install pkg                      # Re-install to sync to workspace
+   opkg remove commands/deprecated/ --from pkg  # Remove from package source
+   opkg install pkg                             # Re-install to sync to workspace
    ```
 
 3. **Cleaning up after uninstall**:
    ```bash
-   opkg uninstall pkg    # Remove from workspace
-   opkg remove pkg root/ # Clean up source files
+   opkg uninstall pkg            # Remove from workspace
+   opkg remove root/ --from pkg  # Clean up source files
    ```
 
 4. **Preview before removing**:
    ```bash
-   opkg remove commands/ --dry-run       # Preview workspace root removal
-   opkg remove pkg commands/ --dry-run   # Preview package removal
-   opkg remove commands/ --force         # Execute without prompt
+   opkg remove commands/ --dry-run              # Preview workspace root removal
+   opkg remove commands/ --from pkg --dry-run   # Preview package removal
+   opkg remove commands/ --force                # Execute without prompt
    ```
 
 ## Behavior Changes
 
 ### Current behavior (v2)
-- Supports both two-arg (`pkg + path`) and one-arg (`path` only) modes.
+- Supports --from option for targeting named packages and path-only mode for workspace root.
 - **Path-only mode**: Targets workspace root (`.openpackage/`) directly.
 - Works with any mutable package (workspace or global).
 - Does **not** update workspace index (separation of concerns).

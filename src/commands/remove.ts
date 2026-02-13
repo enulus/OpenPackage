@@ -9,13 +9,14 @@ export function setupRemoveCommand(program: Command): void {
   program
     .command('remove')
     .alias('rm')
-    .argument('[package-name]', 'package name (optional - defaults to workspace package)')
-    .argument('[path]', 'file or directory to remove')
+    .argument('<path>', 'file or directory to remove')
     .description('Remove files from a mutable package source or workspace package')
+    .option('--from <package-name>', 'source package name (defaults to workspace package)')
     .option('--force', 'Skip confirmation prompts')
     .option('--dry-run', 'Preview what would be removed without actually deleting')
     .action(
-      withErrorHandling(async (packageName: string | undefined, pathArg: string | undefined, options: RemoveFromSourceOptions) => {
+      withErrorHandling(async (pathArg: string, options: RemoveFromSourceOptions & { from?: string }) => {
+        const packageName = options.from;
         const result = await runRemoveFromSourcePipeline(packageName, pathArg, options);
         if (!result.success) {
           throw new Error(result.error || 'Remove operation failed');

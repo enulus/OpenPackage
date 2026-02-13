@@ -39,8 +39,9 @@
    - Index updates happen via `install`.
 
 ## Options
+- `--to <package-name>`: Target package name (defaults to workspace package if not specified).
 - `--platform-specific`: Save platform-specific variants for platform subdir inputs.
-- Input: `opkg add <pkg> <path>`.
+- Input: `opkg add <path> [--to <package-name>]`.
 - Global flags: [CLI Options](../cli-options.md).
 
 ## Examples
@@ -48,17 +49,17 @@
 ### Basic add (source-only)
 ```bash
 # Add files to workspace package (no workspace sync)
-opkg add my-pkg ./new-helpers/
+opkg add ./new-helpers/ --to my-pkg
 
 # Add files to global package from any directory
 cd ~/projects/other-repo
-opkg add shared-utils ./config.yml
+opkg add ./config.yml --to shared-utils
 ```
 
 ### Workflow: Add → Install
 ```bash
 # 1. Add files to package source
-opkg add my-pkg ./docs/guide.md
+opkg add ./docs/guide.md --to my-pkg
 
 # 2. Install package to sync changes to workspace
 opkg install my-pkg
@@ -209,8 +210,8 @@ Path: ~/.openpackage/registry/my-pkg/1.0.0/
 ### Workflows
 1. **Adding new content**:
    ```bash
-   opkg add pkg ./new-files/   # Add to source
-   opkg install pkg             # Sync to workspace
+   opkg add ./new-files/ --to pkg   # Add to source
+   opkg install pkg                  # Sync to workspace
    ```
 
 2. **Editing existing content**:

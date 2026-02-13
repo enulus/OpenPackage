@@ -176,8 +176,8 @@ Then manually add/update/remove files to and from the package following this str
 You can also use the `add` and `remove` commands to add/remove files to/from a package.
 
 ```bash title="Terminal"
-opkg add <package> .cursor/commands/clean.md    # Adds workspace file or dir to package
-opkg remove <package> commands/clean.md         # Removes file or dir from package
+opkg add .cursor/commands/clean.md --to <package>    # Adds workspace file or dir to package
+opkg remove commands/clean.md --from <package>       # Removes file or dir from package
 ```  
 
 > [!TIP]  
