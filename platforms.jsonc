@@ -23,6 +23,40 @@
   // Platform definitions for all supported AI coding platforms
   // Each platform defines export flows (package → workspace) and import flows (workspace → package)
 
+  "adal": {
+    "name": "AdaL",
+    "detection": [".adal"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".adal/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".adal/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "amp": {
+    "name": "Amp",
+    "detection": [".agents"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".agents/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".agents/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
   "antigravity": {
     "name": "Google Antigravity",
     "detection": [".agent"],
@@ -463,6 +497,40 @@
     ]
   },
 
+  "cline": {
+    "name": "Cline",
+    "detection": [".cline"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".cline/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".cline/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "codebuddy": {
+    "name": "CodeBuddy",
+    "detection": [".codebuddy"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".codebuddy/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".codebuddy/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
   "codex": {
     "name": "Codex CLI",
     "detection": [".codex", "AGENTS.md"],
@@ -609,6 +677,57 @@
     ]
   },
 
+  "commandcode": {
+    "name": "Command Code",
+    "detection": [".commandcode"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".commandcode/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".commandcode/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "continue": {
+    "name": "Continue",
+    "detection": [".continue"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".continue/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".continue/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "crush": {
+    "name": "Crush",
+    "detection": [".crush"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".crush/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".crush/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
   "cursor": {
     "name": "Cursor",
     "detection": [".cursor", "AGENTS.md"],
@@ -701,6 +820,75 @@
     ]
   },
 
+  "copilot": {
+    "name": "GitHub Copilot",
+    "detection": [".agents"],
+    "aliases": ["githubcopilot", "github-copilot"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".agents/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".agents/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "goose": {
+    "name": "Goose",
+    "detection": [".goose"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".goose/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".goose/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "iflow": {
+    "name": "iFlow CLI",
+    "detection": [".iflow"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".iflow/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".iflow/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "junie": {
+    "name": "Junie",
+    "detection": [".junie"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".junie/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".junie/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
   "kilo": {
     "name": "Kilo Code",
     "detection": [".kilocode", "AGENTS.md"],
@@ -744,13 +932,36 @@
     ]
   },
 
+  "kimi": {
+    "name": "Kimi Code CLI",
+    "detection": [".agents"],
+    "aliases": ["kimi-cli", "kimi-code"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".agents/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".agents/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
   "kiro": {
     "name": "Kiro",
     "detection": [".kiro"],
+    "aliases": ["kiro-cli"],
     "export": [
       {
         "from": "rules/**/*.md",
         "to": ".kiro/steering/**/*.md"
+      },
+      {
+        "from": "skills/**/*",
+        "to": ".kiro/skills/**/*"
       },
       {
         "from": ["mcp.jsonc", "mcp.json"],
@@ -764,8 +975,98 @@
         "to": "rules/**/*.md"
       },
       {
+        "from": ".kiro/skills/**/*",
+        "to": "skills/**/*"
+      },
+      {
         "from": [".kiro/settings/mcp.json", ".kiro/settings/mcp.jsonc"],
         "to": "mcp.jsonc"
+      }
+    ]
+  },
+
+  "kode": {
+    "name": "Kode",
+    "detection": [".kode"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".kode/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".kode/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "mcpjam": {
+    "name": "MCPJam",
+    "detection": [".mcpjam"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".mcpjam/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".mcpjam/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "mistralvibe": {
+    "name": "Mistral Vibe",
+    "detection": [".vibe"],
+    "aliases": ["mistral-vibe"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".vibe/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".vibe/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "mux": {
+    "name": "Mux",
+    "detection": [".mux"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".mux/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".mux/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "neovate": {
+    "name": "Neovate",
+    "detection": [".neovate"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".neovate/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".neovate/skills/**/*",
+        "to": "skills/**/*"
       }
     ]
   },
@@ -926,6 +1227,40 @@
     ]
   },
 
+  "openclaw": {
+    "name": "OpenClaw",
+    "detection": ["skills"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": "skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": "skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "openhands": {
+    "name": "OpenHands",
+    "detection": [".openhands"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".openhands/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".openhands/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
   // Pi-Mono AI coding assistant framework
   "pimono": {
     "name": "Pi-Mono",
@@ -948,6 +1283,40 @@
       },
       {
         "from": ".pi/agent/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "pochi": {
+    "name": "Pochi",
+    "detection": [".pochi"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".pochi/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".pochi/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "qoder": {
+    "name": "Qoder",
+    "detection": [".qoder"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".qoder/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".qoder/skills/**/*",
         "to": "skills/**/*"
       }
     ]
@@ -1032,6 +1401,58 @@
     ]
   },
 
+  "replit": {
+    "name": "Replit",
+    "detection": [".agents"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".agents/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".agents/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "trae": {
+    "name": "Trae",
+    "detection": [".trae"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".trae/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".trae/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "traecn": {
+    "name": "Trae CN",
+    "detection": [".trae"],
+    "aliases": ["trae-cn"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".trae-cn/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".trae-cn/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
   "warp": {
     "name": "Warp",
     "detection": [".warp", "WARP.md"],
@@ -1071,6 +1492,23 @@
       },
       {
         "from": ".windsurf/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "zencoder": {
+    "name": "Zencoder",
+    "detection": [".zencoder"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".zencoder/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".zencoder/skills/**/*",
         "to": "skills/**/*"
       }
     ]
