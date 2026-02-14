@@ -5,6 +5,7 @@ export interface PublishOptions {
   apiKey?: string;
   remote?: boolean;  // Flag for remote publishing
   force?: boolean;   // Force overwrite without prompting
+  output?: string;   // Custom output directory (local only)
 }
 
 export interface PublishData {

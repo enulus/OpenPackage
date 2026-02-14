@@ -14,8 +14,7 @@ This file provides high-level semantics for core commands in the path-based mode
 | `install` | Registry → Workspace | Install version (git/path too) + update index | N/A | ✅ |
 | `list` | N/A | Report sync state | ✅ | ✅ |
 | `uninstall` | Workspace | Remove package files/mappings | ✅ | ✅ |
-| `pack` | Source → Local Registry | Create versioned snapshot in local registry | ✅ | N/A |
-| `publish` | CWD → Remote Registry | Publish package to remote registry | N/A | N/A |
+| `publish` | Source → Registry | Publish to local or remote registry | ✅ | N/A |
 | `configure` | N/A | Configure settings | N/A | N/A |
 
 Other: `login`/`logout` in subdocs or future.
@@ -124,33 +123,35 @@ Remove package from workspace.
   - `opkg uninstall -g shared-rules` (global)
 - See [Uninstall](uninstall/).
 
-### `pack`
-
-Create versioned snapshot from mutable package source to local registry.
-
-- Flow: Resolve package source → Validate version → Copy entire package to `~/.openpackage/registry/<name>/<version>/` → Update workspace index.
-- Preconditions: Mutable source (workspace or global packages).
-- Versioning: Uses exact `openpackage.yml.version` as stable (no auto-bump).
-- Options: `--output <path>` (custom destination), `--dry-run`, `--force`.
-- Example:
-  - `opkg pack` (pack CWD)
-  - `opkg pack my-pkg` (pack by name)
-  - `opkg pack ./path/to/package` (pack by path)
-- See [Pack](pack/).
-
 ### `publish`
 
-Publish package from current directory to remote registry.
+Publish package to local registry (default) or remote registry (with `--remote` flag).
 
-- Flow: Verify openpackage.yml in CWD → Validate version → Authenticate → Collect files → Create tarball → Upload to remote.
-- Preconditions: Valid `openpackage.yml` in CWD with `name` and `version` fields.
-- Authentication: Required via `--profile` or `--api-key`.
-- Scoping: Auto-adds username scope to unscoped packages.
-- Version: Must be stable semver (no prereleases).
+- Flow: 
+  - **Local**: Resolve package source → Validate version → Copy to local registry or custom output → Update workspace index.
+  - **Remote**: Resolve package source → Validate version → Authenticate → Collect files → Create tarball → Upload to remote.
+- **Package Input**: 
+  - No argument: Uses CWD
+  - Package name: Resolves from CWD → Workspace → Global
+  - Directory path: Uses specified path
+- **Local publishing** (default):
+  - Destination: `~/.openpackage/registry/<name>/<version>/` or custom path via `--output`
+  - No authentication required
+  - Allows prerelease versions (with warning)
+- **Remote publishing** (`--remote`):
+  - Destination: Remote OpenPackage backend
+  - Authentication: Required via `--profile` or `--api-key`
+  - Scoping: Auto-adds username scope to unscoped packages
+  - Version: Must be stable semver (no prereleases)
+- Options: `--force`, `--output <path>` (local only), `--remote`, `--profile`, `--api-key`.
 - Example:
-  - `opkg publish` (publish CWD)
-  - `opkg publish --profile prod` (use specific profile)
-  - `opkg publish --api-key xyz` (use direct API key)
+  - `opkg publish` (publish CWD to local registry)
+  - `opkg publish my-pkg` (publish by name)
+  - `opkg publish ./path/to/package` (publish by path)
+  - `opkg publish --output ./dist` (custom output)
+  - `opkg publish --remote` (publish to remote)
+  - `opkg publish my-pkg --remote --profile prod` (remote with profile)
+- **Replaces**: `pack` command (deprecated and removed)
 - See [Publish](publish/).
 
 ### `new`
@@ -175,8 +176,7 @@ Create a new package with manifest.
 | `install` | N/A | ✅ Syncs to workspace | Workspace |
 | `list` | ✅ Shows status | ✅ Shows status | N/A |
 | `uninstall` | ✅ Removes | ✅ Removes | N/A (deletes) |
-| `pack` | ✅ Creates snapshot | N/A | Local registry |
-| `publish` | N/A (reads CWD) | N/A (reads CWD) | Remote registry |
+| `publish` | ✅ Creates snapshot (local) or uploads (remote) | N/A | Local/remote registry |
 | `configure` | ✅ Updates config | ✅ Updates config | Config files |
 
 See table above for summary; full ops rules in [Package Sources](package-sources.md).

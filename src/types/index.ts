@@ -237,13 +237,6 @@ export interface SaveOptions {
   apply?: boolean;
 }
 
-export interface PackOptions {
-  force?: boolean; // Skip overwrite confirmation prompts
-  rename?: string; // legacy flag (ignored by pack)
-  output?: string;
-  dryRun?: boolean;
-}
-
 // Registry types
 export interface RegistryEntry {
   name: string;
