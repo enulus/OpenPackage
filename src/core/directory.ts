@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as semver from 'semver';
 import { OpenPackageDirectories } from '../types/index.js';
 import { DIR_PATTERNS, OPENPACKAGE_DIRS, UNVERSIONED } from '../constants/index.js';
-import { ensureDir, exists, listDirectories } from '../utils/fs.js';
+import { ensureDir, exists, listDirectories, remove } from '../utils/fs.js';
 import { logger } from '../utils/logger.js';
 import { normalizePackageName } from '../utils/package-name.js';
 
@@ -218,5 +218,22 @@ export async function listAllPackages(): Promise<string[]> {
   // Stable order
   result.sort((a, b) => a.localeCompare(b));
   return result;
+}
+
+/**
+ * Clean up empty package directory after all versions are removed
+ * Returns true if directory was removed, false if it still has versions
+ */
+export async function cleanupEmptyPackageDirectory(packageName: string): Promise<boolean> {
+  const packagePath = getPackagePath(packageName);
+  const versions = await listPackageVersions(packageName);
+  
+  if (versions.length === 0 && await exists(packagePath)) {
+    await remove(packagePath);
+    logger.info('Removed empty package directory', { packagePath });
+    return true;
+  }
+  
+  return false;
 }
 

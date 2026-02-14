@@ -96,6 +96,20 @@ export async function promptPackageDelete(packageName: string): Promise<boolean>
 }
 
 /**
+ * Prompt for unpublishing all versions of a package
+ * More explicit than generic promptPackageDelete for multi-version context
+ */
+export async function promptUnpublishConfirmation(
+  packageName: string, 
+  versions: string[]
+): Promise<boolean> {
+  return await promptConfirmation(
+    `Unpublish ALL ${versions.length} versions of '${packageName}'? This action cannot be undone.`,
+    false
+  );
+}
+
+/**
  * Prompt for creating a new package
  */
 export async function promptCreatePackage(): Promise<boolean> {
