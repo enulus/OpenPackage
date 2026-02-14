@@ -107,7 +107,7 @@ async function unpublishSpecificVersion(
   // Confirmation (unless --force)
   if (!options.force) {
     console.log('');
-    console.log(`⚠️  About to unpublish ${packageName}@${version} from local registry`);
+    console.log(`⚠️ About to unpublish (delete) ${packageName}@${version} from local registry`);
     console.log(`   Location: ${displayPath}`);
     console.log(`   Files: ${formatFileCount(fileCount)}`);
     console.log('');
@@ -182,8 +182,7 @@ async function unpublishAllVersions(
   // Confirmation (unless --force)
   if (!options.force) {
     console.log('');
-    console.log(`⚠️  About to unpublish ALL ${versions.length} versions of ${packageName}`);
-    console.log(`   Versions: ${versions.join(', ')}`);
+    console.log(`⚠️ About to unpublish (delete) ALL ${versions.length} versions of ${packageName}`);
     console.log(`   Location: ${displayPath}`);
     console.log(`   Total files: ${formatFileCount(totalFileCount)}`);
     console.log('');
