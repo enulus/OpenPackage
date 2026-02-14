@@ -4,16 +4,14 @@ import { validateAndReadPackageFiles } from '../../utils/validation/package-file
 import { writePackageToRegistry } from '../registry-writer.js';
 import { logger } from '../../utils/logger.js';
 import { parsePackageYml } from '../../utils/package-yml.js';
-import { exists, remove, countFilesInDirectory } from '../../utils/fs.js';
+import { exists } from '../../utils/fs.js';
 import { resolvePackageByName } from '../../utils/package-name-resolution.js';
 import { classifyPackageInput } from '../../utils/package-input.js';
 import { ValidationError } from '../../utils/errors.js';
-import { writePackageFilesToDirectory } from '../../utils/package-copy.js';
 import { formatPathForDisplay } from '../../utils/formatters.js';
 import { formatVersionLabel } from '../../utils/package-versioning.js';
 import { createPublishResultInfo, displayPublishSuccess } from './publish-output.js';
 import { FILE_PATTERNS } from '../../constants/index.js';
-import { promptPackOverwrite } from '../../utils/prompts.js';
 import type { PublishOptions, PublishResult } from './publish-types.js';
 import type { PackageYml } from '../../types/index.js';
 
@@ -63,15 +61,15 @@ async function resolveSource(
     packageRoot = classification.resolvedPath!;
     logger.info('Resolved package input as directory path', { path: packageRoot });
   } else if (classification.type === 'tarball') {
-    // Tarball input is not supported for publish
+    // Tarball input is not supported for local publish
     throw new ValidationError(
-      `Publish command does not support tarball inputs.\n` +
+      `Local publish does not support tarball inputs.\n` +
       `To publish from a tarball, first extract it to a directory.`
     );
   } else if (classification.type === 'git') {
-    // Git input is not supported for publish
+    // Git input is not supported for local publish
     throw new ValidationError(
-      `Publish command does not support git inputs.\n` +
+      `Local publish does not support git inputs.\n` +
       `To publish from a git repository, first clone it to a directory.`
     );
   } else {
@@ -133,56 +131,8 @@ async function resolveSource(
 }
 
 /**
- * Handle overwrite confirmation for publish operation with custom output
- * Returns true if operation should proceed, false if cancelled
- * Throws error if confirmation is needed but environment is non-interactive
- */
-async function handlePublishOverwrite(
-  packageName: string,
-  version: string,
-  destination: string,
-  existingFileCount: number,
-  force: boolean
-): Promise<boolean> {
-  // Force mode - auto-approve with logging
-  if (force) {
-    logger.info(
-      `Force mode: Overwriting existing output directory`,
-      { packageName, version, destination, existingFileCount }
-    );
-    console.log(
-      `⚠️  Force mode: Overwriting ${packageName}@${version} ` +
-      `(${existingFileCount} existing file${existingFileCount !== 1 ? 's' : ''})`
-    );
-    return true;
-  }
-
-  // Check if we can prompt (TTY required for interactive prompts)
-  const canPrompt = Boolean(process.stdin.isTTY && process.stdout.isTTY);
-  
-  if (!canPrompt) {
-    // Non-interactive environment - fail with clear error message
-    const displayPath = formatPathForDisplay(destination, process.cwd());
-    throw new Error(
-      `Publish destination already exists (output directory: ${displayPath}).\n` +
-      `Use --force to overwrite, or specify a different output path.`
-    );
-  }
-
-  // Interactive mode - prompt user (use pack prompt with custom output flag)
-  return await promptPackOverwrite(
-    packageName,
-    version,
-    destination,
-    existingFileCount,
-    true // isCustomOutput
-  );
-}
-
-
-/**
- * Publish package from CWD or specified source to local registry or custom output
- * This is the default publish behavior
+ * Publish package from CWD or specified source to local registry
+ * This is the local publish behavior (requires --local flag after refactor)
  */
 export async function runLocalPublishPipeline(
   packageInput: string | undefined,
@@ -203,11 +153,7 @@ export async function runLocalPublishPipeline(
       context: 'publish'
     });
     
-    const targetDescription = options.output 
-      ? `custom output (${options.output})`
-      : 'local registry';
-    
-    logger.info(`Publishing package '${packageName}' to ${targetDescription}`, {
+    logger.info(`Publishing package '${packageName}' to local registry`, {
       source: source.packageRoot,
       version
     });
@@ -217,96 +163,28 @@ export async function runLocalPublishPipeline(
       context: 'publish'
     });
     
-    const isCustomOutput = !!options.output;
-    
-    // For registry output, use shared registry writer
-    if (!isCustomOutput) {
-      // Write to local registry (handles overwrite logic)
-      const result = await writePackageToRegistry(
-        packageName,
-        version,
-        files,
-        {
-          force: options.force,
-          context: 'publish'
-        }
-      );
-      
-      // Create result info for output display
-      const resultInfo = createPublishResultInfo(
-        packageName,
-        version,
-        source.packageRoot,
-        result.destination,
-        result.fileCount,
-        source.manifest,
-        false, // isCustomOutput
-        result.overwritten,
-        result.overwritten ? result.fileCount : 0
-      );
-      
-      // Display success with rich formatting
-      displayPublishSuccess(resultInfo, cwd);
-      
-      return {
-        success: true,
-        data: {
-          packageName,
-          version,
-          sourcePath: source.packageRoot,
-          destination: result.destination,
-          fileCount: result.fileCount,
-          overwritten: result.overwritten
-        }
-      };
-    }
-    
-    // Custom output path - handle separately
-    const destination = path.resolve(cwd, options.output!);
-    const destinationExists = await exists(destination);
-    const existingFileCount = destinationExists 
-      ? await countFilesInDirectory(destination)
-      : 0;
-    
-    // Handle overwrite confirmation (unless force)
-    if (destinationExists) {
-      const shouldOverwrite = await handlePublishOverwrite(
-        packageName,
-        version,
-        destination,
-        existingFileCount,
-        options.force ?? false
-      );
-      
-      if (!shouldOverwrite) {
-        return {
-          success: false,
-          error: 'Publish operation cancelled by user'
-        };
+    // Write to local registry (handles overwrite logic)
+    const result = await writePackageToRegistry(
+      packageName,
+      version,
+      files,
+      {
+        force: options.force,
+        context: 'publish'
       }
-    }
-    
-    // Remove existing destination if present
-    if (destinationExists) {
-      await remove(destination);
-    }
-    
-    // Write package files to custom output directory
-    await writePackageFilesToDirectory(destination, files);
-    
-    logger.info(`Published ${packageName}@${version} to ${destination}`);
+    );
     
     // Create result info for output display
     const resultInfo = createPublishResultInfo(
       packageName,
       version,
       source.packageRoot,
-      destination,
-      files.length,
+      result.destination,
+      result.fileCount,
       source.manifest,
-      true, // isCustomOutput
-      destinationExists,
-      existingFileCount
+      false, // isCustomOutput
+      result.overwritten,
+      result.overwritten ? result.fileCount : 0
     );
     
     // Display success with rich formatting
@@ -318,9 +196,9 @@ export async function runLocalPublishPipeline(
         packageName,
         version,
         sourcePath: source.packageRoot,
-        destination,
-        fileCount: files.length,
-        overwritten: destinationExists
+        destination: result.destination,
+        fileCount: result.fileCount,
+        overwritten: result.overwritten
       }
     };
   } catch (error) {

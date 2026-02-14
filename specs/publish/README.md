@@ -1,38 +1,37 @@
 # Publish Command
 
-`opkg publish` publishes packages to either the local registry (default) or remote OpenPackage registry (with `--remote` flag). It supports flexible package input (package names, paths, or current directory) and provides comprehensive output formatting.
+`opkg publish` publishes packages to either the remote OpenPackage registry (default) or local registry (with `--local` flag). It supports flexible package input (package names, paths, or current directory) and provides comprehensive output formatting.
 
 ## Purpose & Direction
-- **Default (Local)**: Publishes package to local registry (`~/.openpackage/registry/`)
-- **Remote Mode**: Publishes package to remote OpenPackage registry (requires authentication)
+- **Default (Remote)**: Publishes package to remote OpenPackage registry (requires authentication)
+- **Local Mode**: Publishes package to local registry (`~/.openpackage/registry/`)
 - **Flexible Input**: Accepts package names, directory paths, or defaults to current directory
-- **Custom Output**: Supports writing to custom directories (local mode only)
 
 ## Publishing Modes
 
-### Local Publishing (Default)
+### Remote Publishing (Default)
 ```bash
-opkg publish                    # Publish CWD to local registry
-opkg publish my-package         # Publish named package to local registry
-opkg publish ./path/to/package  # Publish from path to local registry
-opkg publish --output ./dist    # Publish to custom directory
-```
-
-- **Destination**: Local registry (`~/.openpackage/registry/`) or custom path
-- **Authentication**: Not required
-- **Network**: Local filesystem only
-- **Use Case**: Local development, testing, sharing packages across projects
-
-### Remote Publishing
-```bash
-opkg publish --remote           # Publish CWD to remote registry
-opkg publish my-package --remote  # Publish named package to remote
+opkg publish                    # Publish CWD to remote registry
+opkg publish my-package         # Publish named package to remote registry
+opkg publish ./path/to/package  # Publish from path to remote registry
 ```
 
 - **Destination**: Remote OpenPackage registry
 - **Authentication**: Required (via profile or API key)
 - **Network**: HTTPS upload to backend
 - **Use Case**: Distribution to community, public sharing
+
+### Local Publishing
+```bash
+opkg publish --local            # Publish CWD to local registry
+opkg publish my-package --local # Publish named package to local
+opkg publish ./path/to/package --local  # Publish from path to local
+```
+
+- **Destination**: Local registry (`~/.openpackage/registry/`)
+- **Authentication**: Not required
+- **Network**: Local filesystem only
+- **Use Case**: Local development, testing, sharing packages across projects
 
 ## Package Input Resolution
 
@@ -68,17 +67,7 @@ When resolving by package name, publish shows where the package was found:
 
 ## Flow
 
-### Local Publishing Flow
-1. Resolve package source (CWD, name, or path)
-2. Load and validate `openpackage.yml` manifest
-3. Validate version (stable semver, allows prerelease warnings)
-4. Collect package files from resolved source
-5. Determine destination (registry or custom output)
-6. Handle overwrite confirmation if destination exists
-7. Write package files to destination
-8. Display success with source/destination details
-
-### Remote Publishing Flow
+### Remote Publishing Flow (Default)
 1. Resolve package source (CWD, name, or path)
 2. Load and validate `openpackage.yml` manifest
 3. Validate version (stable semver only, no prereleases)
@@ -89,25 +78,29 @@ When resolving by package name, publish shows where the package was found:
 8. Upload tarball to remote registry via `/packages/push` API endpoint
 9. Display success with package details
 
+### Local Publishing Flow
+1. Resolve package source (CWD, name, or path)
+2. Load and validate `openpackage.yml` manifest
+3. Validate version (stable semver, allows prerelease warnings)
+4. Collect package files from resolved source
+5. Write files to local registry
+6. Handle overwrite confirmation if version exists
+7. Display success with source/destination details
+
 ## Options
 
 ### Common Options
 - `[package]`: Package name or path (optional, defaults to CWD)
 - `--force`: Overwrite existing version without confirmation
-- `--remote`: Publish to remote registry instead of local (default: local)
+- `--local`: Publish to local registry instead of remote (default: remote)
 
-### Local-Only Options
-- `--output <path>`: Write to custom directory instead of registry
-  - Cannot be used with `--remote`
-  - Useful for creating snapshots or custom distributions
-
-### Remote-Only Options
+### Remote-Only Options (Default Mode)
 - `--profile <profile>`: Specify authentication profile (default: `default`)
 - `--api-key <key>`: Override with direct API key (skips profile lookup)
 
 ## Authentication (Remote Only)
 
-Remote publishing requires authentication via one of:
+Remote publishing (default mode) requires authentication via one of:
 - **Profile**: `--profile <name>` - Uses saved credentials from `opkg login`
 - **API Key**: `--api-key <key>` - Direct API key override
 
@@ -115,7 +108,7 @@ See [Auth](../auth/) for authentication details.
 
 ## Package Scoping (Remote Only)
 
-If package name in `openpackage.yml` is unscoped (no `@username/` prefix), remote publish automatically adds your username scope:
+If package name in `openpackage.yml` is unscoped (no `@username/` prefix), remote publish (default mode) automatically adds your username scope:
 - Manifest: `name: my-package`
 - Published as: `@username/my-package`
 
@@ -123,22 +116,22 @@ If already scoped, uses the exact name from manifest:
 - Manifest: `name: @myorg/my-package`
 - Published as: `@myorg/my-package`
 
-Local publishing preserves the exact name from manifest (no auto-scoping).
+Local publishing (with `--local`) preserves the exact name from manifest (no auto-scoping).
 
 See [Scope Management](../scope-management.md) for details.
 
 ## Version Requirements
 
-### Local Publishing
-- **Required**: `openpackage.yml` must contain a `version` field
-- **Valid semver**: Must be valid semantic version
-- **Prereleases allowed**: Warnings shown but publishing proceeds
-
-### Remote Publishing
+### Remote Publishing (Default)
 - **Required**: `openpackage.yml` must contain a `version` field
 - **Valid semver**: Must be valid semantic version (e.g., `1.0.0`, `2.1.3`)
 - **No prereleases**: Prerelease versions (e.g., `1.0.0-beta.1`) are rejected
 - **No bumping**: Uses exact version from manifest (no auto-increment)
+
+### Local Publishing
+- **Required**: `openpackage.yml` must contain a `version` field
+- **Valid semver**: Must be valid semantic version
+- **Prereleases allowed**: Warnings shown but publishing proceeds
 
 ## File Collection
 
@@ -152,17 +145,17 @@ See [Registry Payload](../package/registry-payload-and-copy.md) for exclusion ru
 
 ## Examples
 
-### Local Publishing (Default)
+### Remote Publishing (Default)
 
-#### Basic Local Publish
+#### Basic Remote Publish
 ```bash
 cd ~/projects/my-package
-opkg publish                     # Publishes CWD to local registry
+opkg publish                     # Publishes CWD to remote registry
 ```
 
-#### Publish Named Package
+#### Publish Named Package Remotely
 ```bash
-opkg publish my-package          # Resolves and publishes by name
+opkg publish my-package          # Resolves and publishes to remote
 ```
 
 #### Publish from Path
@@ -171,10 +164,10 @@ opkg publish ./packages/my-lib   # Publishes from relative path
 opkg publish ~/dev/other-package # Publishes from absolute path
 ```
 
-#### Custom Output Directory
+#### With Authentication Options
 ```bash
-opkg publish --output ./snapshots/v1.0.0  # Write to custom location
-opkg publish my-package --output ./dist   # Named package to custom dir
+opkg publish --profile production  # Use specific profile
+opkg publish --api-key xyz123      # Use API key directly
 ```
 
 #### Force Overwrite
@@ -183,66 +176,53 @@ opkg publish --force             # Skip confirmation prompts
 opkg publish my-package --force  # Force overwrite existing version
 ```
 
-### Remote Publishing
+### Local Publishing
 
-#### Basic Remote Publish
+#### Basic Local Publish
 ```bash
 cd ~/projects/my-package
-opkg publish --remote            # Publishes CWD to remote registry
+opkg publish --local             # Publishes CWD to local registry
 ```
 
-#### Publish Named Package Remotely
+#### Publish Named Package Locally
 ```bash
-opkg publish my-package --remote # Resolves and publishes to remote
+opkg publish my-package --local  # Resolves and publishes by name
 ```
 
-#### With Authentication Options
+#### Publish from Path Locally
 ```bash
-opkg publish --remote --profile production  # Use specific profile
-opkg publish --remote --api-key xyz123      # Use API key directly
+opkg publish ./packages/my-lib --local   # Publishes from relative path
+opkg publish ~/dev/other-package --local # Publishes from absolute path
+```
+
+#### Force Overwrite Local
+```bash
+opkg publish --local --force     # Skip confirmation prompts
 ```
 
 ### Typical Workflows
-
-#### Local Development Workflow
-```bash
-cd ~/projects/my-package
-# Edit package files...
-opkg set --ver 1.2.0              # Update version
-opkg publish                      # Publish to local registry
-opkg install my-package           # Install from local registry in another project
-```
 
 #### Public Release Workflow
 ```bash
 cd ~/projects/my-package
 # Edit package files...
 opkg set --ver 1.2.0              # Update version
-opkg publish                      # Test locally first
-opkg publish --remote             # Then publish to remote
+opkg publish --local              # Test locally first
+opkg publish                      # Then publish to remote (default)
+```
+
+#### Local Development Workflow
+```bash
+cd ~/projects/my-package
+# Edit package files...
+opkg set --ver 1.2.0              # Update version
+opkg publish --local              # Publish to local registry
+opkg install my-package           # Install from local registry in another project
 ```
 
 ## Output
 
-### Local Publishing Output
-Shows:
-- Package name and version
-- Description (if available in manifest)
-- Source path (where package was found)
-- Destination (registry path or custom output)
-- File count
-
-Example:
-```
-✓ Found my-package in workspace packages
-✓ Published my-package@1.2.0
-✓ Description: A helpful utility package
-✓ Source: ~/.openpackage/packages/my-package
-✓ Registry: ~/.openpackage/registry/my-package/1.2.0
-✓ Files: 25
-```
-
-### Remote Publishing Output
+### Remote Publishing Output (Default)
 Shows:
 - Package name (with scope)
 - Description (if available)
@@ -278,6 +258,24 @@ Uploading to registry...
 ✓ Checksum: a3f5d8e9c1b2...
 ```
 
+### Local Publishing Output
+Shows:
+- Package name and version
+- Description (if available in manifest)
+- Source path (where package was found)
+- Destination (registry path)
+- File count
+
+Example:
+```
+✓ Found my-package in workspace packages
+✓ Published my-package@1.2.0
+✓ Description: A helpful utility package
+✓ Source: ~/.openpackage/packages/my-package
+✓ Registry: ~/.openpackage/registry/my-package/1.2.0
+✓ Files: 25
+```
+
 ## Errors
 
 ### No openpackage.yml
@@ -297,14 +295,14 @@ Uploading to registry...
 
 ### Tarball Input Rejected
 ```
-❌ Publish command does not support tarball inputs.
+❌ Local publish does not support tarball inputs.
    To publish from a tarball, first extract it to a directory.
 ```
 **Solution**: Extract tarball first, then publish from directory
 
 ### Git Input Rejected
 ```
-❌ Publish command does not support git inputs.
+❌ Local publish does not support git inputs.
    To publish from a git repository, first clone it to a directory.
 ```
 **Solution**: Clone repository first, then publish from directory
@@ -340,12 +338,6 @@ Uploading to registry...
 ```
 **Solution**: Use `--force` flag or increment version
 
-### Invalid Option Combination
-```
-❌ --output option is only supported for local publishing (cannot be used with --remote)
-```
-**Solution**: Remove `--remote` flag when using `--output`
-
 ### Authentication Failed (Remote Only)
 ```
 ❌ Authentication failed. Run "opkg login" to configure credentials.
@@ -358,17 +350,16 @@ Uploading to registry...
 ```
 **Solution**: Check internet connection and registry availability
 
-## Comparison: Local vs Remote
+## Comparison: Remote vs Local
 
-| Aspect | Local Publishing | Remote Publishing |
-|--------|------------------|-------------------|
-| **Destination** | Local registry or custom dir | Remote OpenPackage backend |
-| **Authentication** | Not required | Required |
-| **Network** | Local filesystem only | HTTPS upload |
-| **Prerelease versions** | Allowed (with warning) | Rejected |
-| **Custom output** | Supported (`--output`) | Not supported |
-| **Auto-scoping** | No | Yes (if unscoped) |
-| **Use Case** | Development, testing, local sharing | Public distribution |
+| Aspect | Remote Publishing (Default) | Local Publishing |
+|--------|-------------------|------------------|
+| **Destination** | Remote OpenPackage backend | Local registry or custom dir |
+| **Authentication** | Required | Not required |
+| **Network** | HTTPS upload | Local filesystem only |
+| **Prerelease versions** | Rejected | Allowed (with warning) |
+| **Auto-scoping** | Yes (if unscoped) | No |
+| **Use Case** | Public distribution | Development, testing, local sharing |
 
 ## Integration
 - **Replaces**: `pack` command (deprecated, removed)
@@ -384,5 +375,23 @@ For implementation details, see:
 - Upload (remote): `src/core/publish/publish-upload.ts`
 - Errors: `src/core/publish/publish-errors.ts`
 - Types: `src/core/publish/publish-types.ts`
+
+## Related Commands
+
+### Unpublish Command
+The `opkg unpublish` command removes packages from registries. Key behaviors:
+- **Default**: Attempts remote unpublish (currently not implemented)
+- **Local mode**: `opkg unpublish <package[@version]> --local` removes from local registry
+- **Interactive mode**: `opkg unpublish --list` auto-implies `--local` and provides interactive selection
+
+Examples:
+```bash
+opkg unpublish my-package@1.0.0 --local      # Remove specific version from local
+opkg unpublish my-package --local            # Remove all versions from local
+opkg unpublish --list                        # Interactive selection (auto-implies --local)
+opkg unpublish --list --force                # Interactive selection, skip confirmation
+```
+
+Note: Remote unpublish is not yet implemented. Use `--local` flag for local registry operations.
 
 Related: [Registry](../registry.md), [Auth](../auth/), [Commands Overview](../commands-overview.md)

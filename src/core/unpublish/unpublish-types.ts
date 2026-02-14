@@ -1,7 +1,7 @@
 import type { CommandResult } from '../../types/index.js';
 
 export interface UnpublishOptions {
-  remote?: boolean;      // Flag for remote unpublishing
+  local?: boolean;       // Flag for local unpublishing
   force?: boolean;       // Force without prompting
   profile?: string;      // Profile for remote auth
   apiKey?: string;       // API key for remote auth

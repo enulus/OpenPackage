@@ -10,11 +10,11 @@ export async function runUnpublishPipeline(
   options: UnpublishOptions
 ): Promise<UnpublishResult> {
   // Route to appropriate pipeline
-  if (options.remote) {
-    // Future implementation
+  if (!options.local) {
+    // Remote unpublish - not yet implemented
     throw new Error(
-      '--remote option is not yet supported for unpublish.\n' +
-      'This version only supports unpublishing from local registry.'
+      'Remote unpublish is not yet supported.\n' +
+      'Use --local flag to unpublish from local registry (~/.openpackage/registry).'
     );
   } else {
     return await runLocalUnpublishPipeline(packageSpec, options);

@@ -29,10 +29,10 @@ export async function runPublishPipeline(
   options: PublishOptions
 ): Promise<PublishResult<any>> {
   // Route to appropriate pipeline
-  if (options.remote) {
-    return await runRemotePublishPipeline(packageInput, options);
-  } else {
+  if (options.local) {
     return await runLocalPublishPipeline(packageInput, options);
+  } else {
+    return await runRemotePublishPipeline(packageInput, options);
   }
 }
 

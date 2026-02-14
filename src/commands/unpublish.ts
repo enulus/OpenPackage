@@ -124,15 +124,14 @@ async function selectVersionsFromPackage(
 
 /**
  * Handle interactive unpublish with --list option
+ * Note: --list automatically implies --local mode
  */
 async function handleListUnpublish(
   packageSpec: string | undefined,
   options: UnpublishCommandOptions
 ): Promise<void> {
-  // Validate incompatible options
-  if (options.remote) {
-    throw new ValidationError('--list is not supported with --remote');
-  }
+  // --list always operates on local registry (no validation needed)
+  // The --local flag is auto-implied by the action handler
   
   let selectedPackage: string | null = null;
   
@@ -209,15 +208,17 @@ export function setupUnpublishCommand(program: Command): void {
   program
     .command('unpublish')
     .argument('[package-spec]', 'package[@version] to unpublish (e.g., my-package@1.0.0)')
-    .description('Remove package from local registry (use --remote for remote unpublishing)')
-    .option('--remote', 'unpublish from remote registry instead of local')
+    .description('Remove package from remote registry (use --local for local unpublishing)')
+    .option('--local', 'unpublish from local registry (~/.openpackage/registry)')
     .option('--force', 'skip confirmation prompts')
-    .option('-l, --list', 'interactively select packages/versions to unpublish')
+    .option('-l, --list', 'interactively select packages/versions to unpublish (implies --local)')
     .option('--profile <profile>', 'profile to use for authentication (remote only)')
     .option('--api-key <key>', 'API key for authentication (remote only, overrides profile)')
     .action(withErrorHandling(async (packageSpec: string | undefined, options: UnpublishCommandOptions) => {
       // Handle interactive list mode
       if (options.list) {
+        // Auto-imply --local when --list is used (list only works with local registry)
+        options.local = true;
         await handleListUnpublish(packageSpec, options);
         return;
       }
