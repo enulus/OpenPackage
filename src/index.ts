@@ -16,6 +16,7 @@ import { setupSaveCommand } from './commands/save.js';
 import { setupInstallCommand } from './commands/install.js';
 import { setupUninstallCommand } from './commands/uninstall.js';
 import { setupListCommand } from './commands/list.js';
+import { setupSearchCommand } from './commands/search.js';
 
 import { setupPublishCommand } from './commands/publish.js';
 import { setupUnpublishCommand } from './commands/unpublish.js';
@@ -108,7 +109,7 @@ program
       output += 'All commands:\n\n';
       output += '    install, uninstall, list,\n';
       output += '    new, add, remove, save, set,\n';
-      output += '    publish, unpublish,\n';
+      output += '    publish, unpublish, search,\n';
       output += '    login, logout\n\n';
       
       // Version
@@ -130,6 +131,7 @@ setupSetCommand(program);
 setupInstallCommand(program);
 setupUninstallCommand(program);
 setupListCommand(program);
+setupSearchCommand(program);
 setupPublishCommand(program);
 setupUnpublishCommand(program);
 
