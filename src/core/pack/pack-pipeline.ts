@@ -18,6 +18,9 @@ import {
   displayPackSuccess, 
   displayPackDryRun 
 } from './pack-output.js';
+import { assertValidVersion } from '../../utils/validation/version.js';
+import { validateAndReadPackageFiles } from '../../utils/validation/package-files.js';
+import { writePackageToRegistry } from '../registry-writer.js';
 
 interface ResolvedSource {
   name: string;
@@ -189,17 +192,20 @@ export async function runPackPipeline(
   try {
     const source = await resolveSource(cwd, packageInput);
 
-    if (!source.version || !semver.valid(source.version)) {
+    // Validate version using shared utility
+    try {
+      assertValidVersion(source.version, { context: 'pack' });
+    } catch (error) {
       return {
         success: false,
-        error: `openpackage.yml must contain a valid semver version to pack (found "${source.version || 'undefined'}").`
+        error: error instanceof Error ? error.message : String(error)
       };
     }
 
-    const files = await readPackageFilesForRegistry(source.packageRoot);
-    if (files.length === 0) {
-      return { success: false, error: 'No package files found to pack.' };
-    }
+    // Read and validate package files using shared utility
+    const files = await validateAndReadPackageFiles(source.packageRoot, {
+      context: 'pack'
+    });
 
     const destination = options.output
       ? path.resolve(cwd, options.output)
@@ -207,7 +213,45 @@ export async function runPackPipeline(
 
     const isCustomOutput = !!options.output;
 
-    // Check if destination exists and count existing files
+    // For registry output, use shared registry writer
+    if (!isCustomOutput) {
+      const result = await writePackageToRegistry(
+        source.name,
+        source.version,
+        files,
+        {
+          force: options.force,
+          dryRun: options.dryRun,
+          context: 'pack'
+        }
+      );
+      
+      // Create result info for output display
+      const resultInfo = createPackResultInfo(
+        source.name,
+        source.version,
+        source.packageRoot,
+        result.destination,
+        result.fileCount,
+        source.manifest,
+        false, // isCustomOutput
+        result.overwritten,
+        result.overwritten ? result.fileCount : 0
+      );
+      
+      if (options.dryRun) {
+        displayPackDryRun(resultInfo, cwd);
+      } else {
+        displayPackSuccess(resultInfo, cwd);
+      }
+      
+      return {
+        success: true,
+        data: { destination: result.destination, files: result.fileCount }
+      };
+    }
+
+    // Custom output path - handle separately with existing logic
     const destinationExists = await exists(destination);
     const existingFileCount = destinationExists 
       ? await countFilesInDirectory(destination)
@@ -251,10 +295,6 @@ export async function runPackPipeline(
           error: 'Pack operation cancelled by user'
         };
       }
-    }
-
-    if (!options.output) {
-      await ensureRegistryDirectories();
     }
 
     // Remove existing destination if present

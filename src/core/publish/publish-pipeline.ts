@@ -15,6 +15,21 @@ import { handlePublishError, PublishError } from './publish-errors.js';
 import { logPublishSummary, printPublishSuccess } from './publish-output.js';
 import { preparePackageForUpload, createPublishTarball, uploadPackage } from './publish-upload.js';
 import type { PublishOptions, PublishResult } from './publish-types.js';
+import { runLocalPublishPipeline } from './local-publish-pipeline.js';
+
+/**
+ * Main publish pipeline - routes to local or remote based on options
+ */
+export async function runPublishPipeline(
+  options: PublishOptions
+): Promise<PublishResult<any>> {
+  // Route to appropriate pipeline
+  if (options.remote) {
+    return await runRemotePublishPipeline(options);
+  } else {
+    return await runLocalPublishPipeline(options);
+  }
+}
 
 async function resolveUploadName(
   packageName: string,
@@ -51,7 +66,7 @@ function validateVersion(version?: string): void {
   }
 }
 
-export async function runPublishPipeline(
+async function runRemotePublishPipeline(
   options: PublishOptions
 ): Promise<PublishResult> {
   const cwd = process.cwd();
