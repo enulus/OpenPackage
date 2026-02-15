@@ -23,6 +23,96 @@
   // Platform definitions for all supported AI coding platforms
   // Each platform defines export flows (package → workspace) and import flows (workspace → package)
 
+  "adal": {
+    "name": "AdaL",
+    "detection": [".adal"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".adal/skills/**/*"
+      },
+      {
+        "from": ["mcp.jsonc", "mcp.json"],
+        "to": ".adal/settings.json",
+        "merge": "deep"
+      }
+    ],
+    "import": [
+      {
+        "from": ".adal/skills/**/*",
+        "to": "skills/**/*"
+      },
+      {
+        "from": ".adal/settings.json",
+        "to": "mcp.jsonc"
+      }
+    ]
+  },
+
+  // Amp
+  "amp": {
+    "name": "Amp",
+    "detection": [".agents", "AGENTS.md"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".agents/skills/**/*"
+      },
+      {
+        "from": "rules/**/*.md",
+        "to": ".agents/checks/**/*.md",
+        "comment": "Amp uses 'checks' terminology for rules"
+      },
+      {
+        "from": ["mcp.jsonc", "mcp.json"],
+        "to": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/amp/settings.json" }
+            ],
+            "default": ".amp/settings.json"
+          }
+        },
+        "map": [
+          {
+            "$comment": "Nest under amp.mcpServers key",
+            "$rename": { "mcpServers": "amp.mcpServers" }
+          }
+        ],
+        "merge": "deep"
+      }
+    ],
+    "import": [
+      {
+        "from": ".agents/skills/**/*",
+        "to": "skills/**/*"
+      },
+      {
+        "from": ".agents/checks/**/*.md",
+        "to": "rules/**/*.md"
+      },
+      {
+        "from": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/amp/settings.json" }
+            ],
+            "default": ".amp/settings.json"
+          }
+        },
+        "to": "mcp.jsonc",
+        "map": [
+          {
+            "$comment": "Extract from amp.mcpServers key",
+            "$rename": { "amp.mcpServers": "mcpServers" }
+          }
+        ]
+      }
+    ]
+  },
+
   "antigravity": {
     "name": "Google Antigravity",
     "detection": [".agent"],
@@ -463,6 +553,60 @@
     ]
   },
 
+  "cline": {
+    "name": "Cline",
+    "detection": [".cline"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".cline/skills/**/*"
+      },
+      {
+        "from": ["mcp.jsonc", "mcp.json"],
+        "to": "cline_mcp_settings.json",
+        "merge": "deep"
+      }
+    ],
+    "import": [
+      {
+        "from": ".cline/skills/**/*",
+        "to": "skills/**/*"
+      },
+      {
+        "from": "cline_mcp_settings.json",
+        "to": "mcp.jsonc"
+      }
+    ]
+  },
+
+  // CodeBuddy
+  "codebuddy": {
+    "name": "CodeBuddy",
+    "detection": [".codebuddy", "CODEBUDDY.md"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".codebuddy/skills/**/*"
+      },
+      {
+        "from": "rules/**/*.md",
+        "to": ".codebuddy/rules/**/*.mdc",
+        "comment": "CodeBuddy uses .mdc extension for rules"
+      }
+    ],
+    // MCP: Settings UI-based, file path unclear - needs verification before adding
+    "import": [
+      {
+        "from": ".codebuddy/skills/**/*",
+        "to": "skills/**/*"
+      },
+      {
+        "from": ".codebuddy/rules/**/*.mdc",
+        "to": "rules/**/*.md"
+      }
+    ]
+  },
+
   "codex": {
     "name": "Codex CLI",
     "detection": [".codex", "AGENTS.md"],
@@ -609,6 +753,134 @@
     ]
   },
 
+  // Command Code
+  // Note: No MCP support in this platform
+  "commandcode": {
+    "name": "Command Code",
+    "detection": [".commandcode"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".commandcode/skills/**/*"
+      },
+      {
+        "from": "commands/**/*.md",
+        "to": ".commandcode/commands/**/*.md"
+      },
+      {
+        "from": "agents/**/*.md",
+        "to": ".commandcode/agents/**/*.md"
+      }
+    ],
+    "import": [
+      {
+        "from": ".commandcode/skills/**/*",
+        "to": "skills/**/*"
+      },
+      {
+        "from": ".commandcode/commands/**/*.md",
+        "to": "commands/**/*.md"
+      },
+      {
+        "from": ".commandcode/agents/**/*.md",
+        "to": "agents/**/*.md"
+      }
+    ]
+  },
+
+  // Continue
+  "continue": {
+    "name": "Continue",
+    "detection": [".continue"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".continue/skills/**/*"
+      },
+      {
+        "from": "rules/**/*.md",
+        "to": ".continue/rules/**/*.md"
+      },
+      {
+        "from": "commands/**/*.md",
+        "to": ".continue/prompts/**/*.md",
+        "comment": "Continue uses 'prompts' terminology"
+      },
+      {
+        "from": "agents/**/*.md",
+        "to": ".continue/agents/**/*.md"
+      },
+      {
+        "from": ["mcp.jsonc", "mcp.json"],
+        "to": ".continue/mcpServers/*.yaml",
+        "comment": "Continue prefers YAML format",
+        "merge": "deep"
+      }
+    ],
+    "import": [
+      {
+        "from": ".continue/skills/**/*",
+        "to": "skills/**/*"
+      },
+      {
+        "from": ".continue/rules/**/*.md",
+        "to": "rules/**/*.md"
+      },
+      {
+        "from": ".continue/prompts/**/*.md",
+        "to": "commands/**/*.md"
+      },
+      {
+        "from": ".continue/agents/**/*.md",
+        "to": "agents/**/*.md"
+      },
+      {
+        "from": [".continue/mcpServers/*.yaml", ".continue/mcpServers/*.json"],
+        "to": "mcp.jsonc"
+      }
+    ]
+  },
+
+  // Crush
+  "crush": {
+    "name": "Crush",
+    "detection": [".crush", "crush.json"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".config/crush/skills/**/*",
+        "comment": "Crush uses configurable skills_paths array"
+      },
+      {
+        "from": ["mcp.jsonc", "mcp.json"],
+        "to": "crush.json",
+        "map": [
+          {
+            "$comment": "Embed under 'mcp' key",
+            "$rename": { "mcpServers": "mcp" }
+          }
+        ],
+        "merge": "deep"
+      }
+    ],
+    "import": [
+      {
+        "from": ".config/crush/skills/**/*",
+        "to": "skills/**/*"
+      },
+      {
+        "from": "crush.json",
+        "to": "mcp.jsonc",
+        "map": [
+          {
+            "$comment": "Extract from 'mcp' key",
+            "$rename": { "mcp": "mcpServers" }
+          }
+        ]
+      }
+    ]
+  },
+
   "cursor": {
     "name": "Cursor",
     "detection": [".cursor", "AGENTS.md"],
@@ -701,6 +973,180 @@
     ]
   },
 
+  // GitHub Copilot
+  // Note: Uses .github/agents/, NOT .agents/
+  "copilot": {
+    "name": "GitHub Copilot",
+    "detection": [".github/agents"],
+    "aliases": ["githubcopilot", "github-copilot"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".github/skills/**/*"
+      },
+      {
+        "from": "agents/**/*.md",
+        "to": ".github/agents/**/*.md",
+        "comment": "Custom agents with YAML frontmatter"
+      }
+    ],
+    // MCP: Stored in repository settings UI, no file-based export
+    "import": [
+      {
+        "from": ".github/skills/**/*",
+        "to": "skills/**/*"
+      },
+      {
+        "from": ".github/agents/**/*.md",
+        "to": "agents/**/*.md"
+      }
+    ]
+  },
+
+  "goose": {
+    "name": "Goose",
+    "detection": [".goose", ".goosehints"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/goose/skills/**/*" }
+            ],
+            "default": ".goose/skills/**/*"
+          }
+        }
+      },
+      {
+        "from": ["mcp.jsonc", "mcp.json"],
+        "to": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/goose/config.yaml" }
+            ],
+            "default": ".goose/config.yaml"
+          }
+        },
+        "map": [
+          {
+            "$comment": "Goose uses 'extensions' key instead of 'mcpServers'",
+            "$rename": { "mcpServers": "extensions" }
+          },
+          { "$pipe": ["json-to-yaml"] }
+        ],
+        "merge": "deep"
+      }
+    ],
+    "import": [
+      {
+        "from": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/goose/skills/**/*" }
+            ],
+            "default": ".goose/skills/**/*"
+          }
+        },
+        "to": "skills/**/*"
+      },
+      {
+        "from": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/goose/config.yaml" }
+            ],
+            "default": ".goose/config.yaml"
+          }
+        },
+        "to": "mcp.jsonc",
+        "map": [
+          { "$pipe": ["yaml-to-json"] },
+          {
+            "$comment": "Extract from 'extensions' key",
+            "$rename": { "extensions": "mcpServers" }
+          }
+        ]
+      }
+    ]
+  },
+
+  "iflow": {
+    "name": "iFlow CLI",
+    "detection": [".iflow"],
+    "aliases": ["iflow-cli"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".iflow/skills/**/*"
+      },
+      {
+        "from": "AGENTS.md",
+        "to": "IFLOW.md",
+        "merge": "composite"
+      },
+      {
+        "from": "agents/**/*.md",
+        "to": ".iflow/agents/**/*.md",
+        "comment": "iFlow calls them SubAgents"
+      },
+      {
+        "from": "commands/**/*.md",
+        "to": ".iflow/commands/**/*.md",
+        "comment": "iFlow calls them SubCommands"
+      },
+      {
+        "from": ["mcp.jsonc", "mcp.json"],
+        "to": ".iflow/settings.json",
+        "merge": "deep"
+      }
+    ],
+    "import": [
+      {
+        "from": ".iflow/skills/**/*",
+        "to": "skills/**/*"
+      },
+      {
+        "from": "IFLOW.md",
+        "to": "AGENTS.md",
+        "merge": "composite"
+      },
+      {
+        "from": ".iflow/agents/**/*.md",
+        "to": "agents/**/*.md"
+      },
+      {
+        "from": ".iflow/commands/**/*.md",
+        "to": "commands/**/*.md"
+      },
+      {
+        "from": ".iflow/settings.json",
+        "to": "mcp.jsonc"
+      }
+    ]
+  },
+
+  "junie": {
+    "name": "Junie",
+    "detection": [".junie"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".junie/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".junie/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
   "kilo": {
     "name": "Kilo Code",
     "detection": [".kilocode", "AGENTS.md"],
@@ -744,13 +1190,48 @@
     ]
   },
 
+  // Kimi Code CLI
+  "kimi": {
+    "name": "Kimi Code CLI",
+    "detection": [".agents"],
+    "aliases": ["kimi-cli", "kimi-code"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".agents/skills/**/*"
+      },
+      {
+        "from": ["mcp.jsonc", "mcp.json"],
+        "to": ".kimi/mcp.json",
+        "comment": "Kimi only supports global MCP config",
+        "merge": "deep"
+      }
+    ],
+    "import": [
+      {
+        "from": ".agents/skills/**/*",
+        "to": "skills/**/*"
+      },
+      {
+        "from": ".kimi/mcp.json",
+        "to": "mcp.jsonc"
+      }
+    ]
+  },
+
   "kiro": {
     "name": "Kiro",
     "detection": [".kiro"],
+    "aliases": ["kiro-cli"],
     "export": [
       {
         "from": "rules/**/*.md",
-        "to": ".kiro/steering/**/*.md"
+        "to": ".kiro/steering/**/*.md",
+        "comment": "Kiro uses 'steering' terminology for rules"
+      },
+      {
+        "from": "skills/**/*",
+        "to": ".kiro/skills/**/*"
       },
       {
         "from": ["mcp.jsonc", "mcp.json"],
@@ -764,7 +1245,106 @@
         "to": "rules/**/*.md"
       },
       {
+        "from": ".kiro/skills/**/*",
+        "to": "skills/**/*"
+      },
+      {
         "from": [".kiro/settings/mcp.json", ".kiro/settings/mcp.jsonc"],
+        "to": "mcp.jsonc"
+      }
+    ]
+  },
+
+  "kode": {
+    "name": "Kode",
+    "detection": [".kode"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".kode/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".kode/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "mcpjam": {
+    "name": "MCPJam",
+    "detection": [".mcpjam"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".mcpjam/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".mcpjam/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "mistralvibe": {
+    "name": "Mistral Vibe",
+    "detection": [".vibe"],
+    "aliases": ["mistral-vibe"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".vibe/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".vibe/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "mux": {
+    "name": "Mux",
+    "detection": [".mux"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".mux/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".mux/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "neovate": {
+    "name": "Neovate",
+    "detection": [".neovate"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".neovate/skills/**/*"
+      },
+      {
+        "from": ["mcp.jsonc", "mcp.json"],
+        "to": ".neovate/mcp.json",
+        "merge": "deep"
+      }
+    ],
+    "import": [
+      {
+        "from": ".neovate/skills/**/*",
+        "to": "skills/**/*"
+      },
+      {
+        "from": ".neovate/mcp.json",
         "to": "mcp.jsonc"
       }
     ]
@@ -926,6 +1506,56 @@
     ]
   },
 
+  "openclaw": {
+    "name": "OpenClaw",
+    "detection": ["skills"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": "skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": "skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "openhands": {
+    "name": "OpenHands",
+    "detection": [".openhands"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".openhands/skills/**/*"
+      },
+      {
+        "from": ["mcp.jsonc", "mcp.json"],
+        "to": ".openhands/mcp.json",
+        "when": {
+          "$eq": ["$$targetRoot", "~/"]
+        },
+        "comment": "OpenHands only supports user-level MCP config",
+        "merge": "deep"
+      }
+    ],
+    "import": [
+      {
+        "from": ".openhands/skills/**/*",
+        "to": "skills/**/*"
+      },
+      {
+        "from": ".openhands/mcp.json",
+        "to": "mcp.jsonc",
+        "when": {
+          "$eq": ["$$targetRoot", "~/"]
+        }
+      }
+    ]
+  },
+
   // Pi-Mono AI coding assistant framework
   "pimono": {
     "name": "Pi-Mono",
@@ -949,6 +1579,66 @@
       {
         "from": ".pi/agent/skills/**/*",
         "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "pochi": {
+    "name": "Pochi",
+    "detection": [".pochi"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".pochi/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".pochi/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "qoder": {
+    "name": "Qoder",
+    "detection": [".qoder"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".qoder/skills/**/*"
+      },
+      {
+        "from": "rules/**/*.md",
+        "to": ".qoder/rules/**/*.md"
+      },
+      {
+        "from": "commands/**/*.md",
+        "to": ".qoder/commands/**/*.md"
+      },
+      {
+        "from": "agents/**/*.md",
+        "to": ".qoder/agents/**/*.md",
+        "comment": "Qoder calls them SubAgents with required frontmatter: name, description, tools"
+      }
+    ],
+    // MCP: UI-managed only (Settings > MCP), no file-based project configuration
+    "import": [
+      {
+        "from": ".qoder/skills/**/*",
+        "to": "skills/**/*"
+      },
+      {
+        "from": ".qoder/rules/**/*.md",
+        "to": "rules/**/*.md"
+      },
+      {
+        "from": ".qoder/commands/**/*.md",
+        "to": "commands/**/*.md"
+      },
+      {
+        "from": ".qoder/agents/**/*.md",
+        "to": "agents/**/*.md"
       }
     ]
   },
@@ -1032,6 +1722,91 @@
     ]
   },
 
+  // Replit
+  "replit": {
+    "name": "Replit",
+    "detection": [".agents", ".replit"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".agents/skills/**/*"
+      },
+      {
+        "from": "AGENTS.md",
+        "to": "replit.md",
+        "comment": "Replit uses replit.md for agent guidance",
+        "merge": "composite"
+      }
+    ],
+    // MCP: User account level only, no project-level config
+    "import": [
+      {
+        "from": ".agents/skills/**/*",
+        "to": "skills/**/*"
+      },
+      {
+        "from": "replit.md",
+        "to": "AGENTS.md",
+        "merge": "composite"
+      }
+    ]
+  },
+
+  "trae": {
+    "name": "Trae",
+    "detection": [".trae"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".trae/skills/**/*"
+      },
+      {
+        "from": "rules/**/*.md",
+        "to": ".trae/rules/**/*.md"
+      }
+    ],
+    // MCP: Officially supported but configuration path unclear (likely UI-based)
+    // Agents: Custom agent feature promoted but configuration method unclear
+    "import": [
+      {
+        "from": ".trae/skills/**/*",
+        "to": "skills/**/*"
+      },
+      {
+        "from": ".trae/rules/**/*.md",
+        "to": "rules/**/*.md"
+      }
+    ]
+  },
+
+  "traecn": {
+    "name": "Trae CN",
+    "detection": [".trae-cn"],
+    "aliases": ["trae-cn"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".trae-cn/skills/**/*"
+      },
+      {
+        "from": "rules/**/*.md",
+        "to": ".trae-cn/rules/**/*.md"
+      }
+    ],
+    // MCP: Officially supported but configuration path unclear (likely UI-based)
+    // Agents: Custom agent feature promoted but configuration method unclear
+    "import": [
+      {
+        "from": ".trae-cn/skills/**/*",
+        "to": "skills/**/*"
+      },
+      {
+        "from": ".trae-cn/rules/**/*.md",
+        "to": "rules/**/*.md"
+      }
+    ]
+  },
+
   "warp": {
     "name": "Warp",
     "detection": [".warp", "WARP.md"],
@@ -1071,6 +1846,23 @@
       },
       {
         "from": ".windsurf/skills/**/*",
+        "to": "skills/**/*"
+      }
+    ]
+  },
+
+  "zencoder": {
+    "name": "Zencoder",
+    "detection": [".zencoder"],
+    "export": [
+      {
+        "from": "skills/**/*",
+        "to": ".zencoder/skills/**/*"
+      }
+    ],
+    "import": [
+      {
+        "from": ".zencoder/skills/**/*",
         "to": "skills/**/*"
       }
     ]
