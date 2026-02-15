@@ -8,7 +8,6 @@ import { readWorkspaceIndex } from '../utils/workspace-index-yml.js';
 import { formatPathForDisplay } from '../utils/formatters.js';
 import { canPrompt } from '../utils/file-scanner.js';
 import { interactiveFileSelect } from '../utils/interactive-file-selector.js';
-import { cancel } from '@clack/prompts';
 import { join } from 'path';
 
 /**
@@ -162,7 +161,6 @@ export function setupAddCommand(program: Command): void {
           
           // Handle cancellation or empty selection
           if (!selectedFiles || selectedFiles.length === 0) {
-            cancel('Operation cancelled');
             return;
           }
           

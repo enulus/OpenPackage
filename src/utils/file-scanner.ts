@@ -40,6 +40,9 @@ export interface FileScanOptions {
   /** Base directory to scan from (default: process.cwd()) */
   cwd?: string;
   
+  /** Specific directory path to scan (overrides cwd if provided) */
+  basePath?: string;
+  
   /** Additional directory names to exclude (merged with defaults) */
   excludeDirs?: string[];
   
@@ -70,21 +73,33 @@ function isExcludedDir(fullPath: string, excludeDirs: Set<string>): boolean {
  * Scan workspace for all non-junk files
  * 
  * @param options - Scanning options
- * @returns Array of relative file paths from cwd
+ * @returns Array of relative file paths from cwd (or basePath if specified)
  * 
  * @example
  * const files = await scanWorkspaceFiles({ cwd: '/path/to/workspace' });
  * // Returns: ['src/index.ts', 'package.json', '.openpkgs/rules/cursor.md', ...]
+ * 
+ * @example
+ * // Scan a specific directory
+ * const packageFiles = await scanWorkspaceFiles({ 
+ *   cwd: '/workspace',
+ *   basePath: '/workspace/.openpackage/packages/my-pkg'
+ * });
+ * // Returns files relative to basePath: ['file1.txt', 'subdir/file2.txt', ...]
  */
 export async function scanWorkspaceFiles(
   options: FileScanOptions = {}
 ): Promise<string[]> {
   const {
     cwd = process.cwd(),
+    basePath,
     excludeDirs = [],
     maxFiles = 10000,
     followSymlinks = false
   } = options;
+  
+  // Use basePath if provided, otherwise use cwd
+  const scanDir = basePath || cwd;
   
   // Merge default and custom exclude directories
   const allExcludeDirs = new Set([
@@ -116,7 +131,7 @@ export async function scanWorkspaceFiles(
     };
     
     // Walk files and collect relative paths
-    for await (const filePath of walkFiles(cwd, { filter, followSymlinks })) {
+    for await (const filePath of walkFiles(scanDir, { filter, followSymlinks })) {
       // Stop if we've hit the max files limit
       if (fileCount >= maxFiles) {
         logger.debug(`File scan limit reached: ${maxFiles} files`);
@@ -124,7 +139,7 @@ export async function scanWorkspaceFiles(
       }
       
       // Convert to relative path for display
-      const relativePath = relative(cwd, filePath);
+      const relativePath = relative(scanDir, filePath);
       
       // Skip if relative path is empty (shouldn't happen, but safety check)
       if (!relativePath || relativePath === '.') {
@@ -149,10 +164,10 @@ export async function scanWorkspaceFiles(
       return a.localeCompare(b);
     });
     
-    logger.debug(`Scanned ${files.length} files in workspace`, { cwd });
+    logger.debug(`Scanned ${files.length} files in workspace`, { scanDir });
     
   } catch (error) {
-    logger.error('Error scanning workspace files', { error, cwd });
+    logger.error('Error scanning workspace files', { error, scanDir });
     throw new Error(`Failed to scan workspace files: ${error}`);
   }
   

@@ -111,6 +111,20 @@ export class FileSelectorWithHeader extends AutocompletePrompt<FileOption> {
    * Main render method with dynamic header
    */
   private renderWithHeader(): string {
+    // Handle final states with collapsed rendering
+    if (this.state === 'cancel') {
+      return this.renderCancelled();
+    }
+    
+    if (this.state === 'submit') {
+      // Treat empty selection as cancellation
+      if (this.selectedValues.length === 0) {
+        return this.renderCancelled();
+      }
+      return this.renderSubmitted();
+    }
+    
+    // Render full interactive UI for active/initial/error states
     const sections: string[] = [];
 
     // === DYNAMIC HEADER SECTION ===
@@ -231,6 +245,29 @@ export class FileSelectorWithHeader extends AutocompletePrompt<FileOption> {
   private renderFooter(): string {
     const hints = pico.dim('Space: select • Enter: confirm • Esc: cancel');
     return `${pico.cyan('└')}  ${hints}`;
+  }
+
+  /**
+   * Render the collapsed cancelled state
+   */
+  private renderCancelled(): string {
+    const symbol = pico.red('■');  // Red square for cancelled
+    const end = pico.gray('└');
+    
+    return `${symbol}  ${this.message}\n${end}  ${pico.dim('Operation cancelled')}`;
+  }
+
+  /**
+   * Render the collapsed submitted state (for successful selection)
+   */
+  private renderSubmitted(): string {
+    const symbol = pico.green('◇');  // Green hollow diamond for success
+    const bar = pico.gray('│');
+    
+    const count = this.selectedValues.length;
+    const status = pico.dim(`${count} file${count === 1 ? '' : 's'} selected`);
+    
+    return `${symbol}  ${this.message}\n${bar}  ${status}`;
   }
 }
 

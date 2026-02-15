@@ -17,6 +17,9 @@ export interface FileSelectionOptions {
   /** Base directory to scan from (default: process.cwd()) */
   cwd?: string;
   
+  /** Specific directory path to scan (overrides cwd if provided) */
+  basePath?: string;
+  
   /** Prompt message to display (default: 'Select files') */
   message?: string;
   
@@ -61,6 +64,7 @@ export async function interactiveFileSelect(
 ): Promise<string[] | null> {
   const {
     cwd = process.cwd(),
+    basePath,
     message = 'Select files to add',
     placeholder = 'Type to search files...',
     maxItems = 10,
@@ -68,6 +72,8 @@ export async function interactiveFileSelect(
     showIntro = true,
     fuzzyThreshold = 0.5
   } = options;
+  
+  const scanDir = basePath || cwd;
   
   try {
     // Show helpful intro note
@@ -80,8 +86,8 @@ export async function interactiveFileSelect(
     }
     
     // Scan workspace for all files
-    logger.debug('Scanning workspace for files', { cwd });
-    const allFiles = await scanWorkspaceFiles({ cwd, excludeDirs });
+    logger.debug('Scanning workspace for files', { scanDir });
+    const allFiles = await scanWorkspaceFiles({ cwd, basePath, excludeDirs });
     
     // Check if any files found
     if (allFiles.length === 0) {
@@ -104,7 +110,7 @@ export async function interactiveFileSelect(
     // Check if user cancelled or selected nothing
     if (!selectedFiles || selectedFiles.length === 0) {
       logger.debug('No files selected or user cancelled');
-      return null;
+      return null;  // Prompt handles its own cancellation display
     }
     
     logger.debug(`User selected ${selectedFiles.length} file(s)`, { selectedFiles });
