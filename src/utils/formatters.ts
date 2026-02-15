@@ -196,21 +196,21 @@ export function formatFileSize(bytes: number): string {
 }
 
 /**
- * Format a single scope as a tag (e.g., " [g]" or " [p]")
+ * Format a single scope as a tag (e.g., " [global]" or " [project]")
  */
 export function formatScopeTag(scope: string): string {
-  return scope === 'global' ? ' [g]' : ' [p]';
+  return scope === 'global' ? ' [global]' : ' [project]';
 }
 
 /**
- * Format one or more scopes as a badge (e.g., "[p]", "[g]", or "[p, g]")
+ * Format one or more scopes as a badge (e.g., "[project]", "[global]", or "[project, global]")
  */
 export function formatScopeBadge(scopes: Set<string> | string): string {
   if (typeof scopes === 'string') {
-    return scopes === 'global' ? '[g]' : '[p]';
+    return scopes === 'global' ? '[global]' : '[project]';
   }
   const sorted = Array.from(scopes).sort();
-  const badges = sorted.map(s => s === 'project' ? 'p' : 'g').join(', ');
+  const badges = sorted.map(s => s === 'project' ? 'project' : 'global').join(', ');
   return `[${badges}]`;
 }
 
