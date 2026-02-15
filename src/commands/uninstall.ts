@@ -1,9 +1,9 @@
 import path from 'path';
 import { Command } from 'commander';
-import prompts from 'prompts';
+import { outro, cancel, note, spinner } from '@clack/prompts';
 
 import type { UninstallOptions, ExecutionContext } from '../types/index.js';
-import { withErrorHandling, ValidationError, UserCancellationError } from '../utils/errors.js';
+import { withErrorHandling, ValidationError } from '../utils/errors.js';
 import { runUninstallPipeline, runSelectiveUninstallPipeline } from '../core/uninstall/uninstall-pipeline.js';
 import { reportUninstallResult, reportResourceUninstallResult } from '../core/uninstall/uninstall-reporter.js';
 import { createExecutionContext } from '../core/execution-context.js';
@@ -15,6 +15,7 @@ import { disambiguate } from '../core/resources/disambiguation-prompt.js';
 import { buildPreservedDirectoriesSet } from '../utils/directory-preservation.js';
 import { cleanupEmptyParents } from '../utils/cleanup-empty-parents.js';
 import { formatScopeTag } from '../utils/formatters.js';
+import { clackGroupMultiselect } from '../utils/clack-multiselect.js';
 
 interface UninstallCommandOptions extends UninstallOptions {
   list?: boolean;
@@ -71,7 +72,7 @@ async function handleDirectUninstall(
   );
 
   if (selected.length === 0) {
-    console.log('Uninstall cancelled.');
+    cancel('Uninstall cancelled');
     return;
   }
 
@@ -82,6 +83,8 @@ async function handleDirectUninstall(
     });
     await executeCandidate(candidate, options, ctx);
   }
+  
+  outro('Uninstall complete');
 }
 
 // ---------------------------------------------------------------------------
@@ -93,7 +96,10 @@ async function handleListUninstall(
   options: UninstallCommandOptions,
   programOpts: Record<string, any>
 ) {
-  // Build resources from applicable scopes
+  // Build resources from applicable scopes with spinner
+  const s = spinner();
+  s.start('Loading installed resources');
+  
   const scopeResults = await traverseScopes(
     { programOpts, globalOnly: options.global },
     async ({ scope, context }) => buildWorkspaceResources(context.targetDir, scope)
@@ -110,6 +116,7 @@ async function handleListUninstall(
     filteredPackages = allPackages.filter(p => p.packageName === packageFilter);
 
     if (filteredResources.length === 0 && filteredPackages.length === 0) {
+      s.stop('No resources found');
       throw new ValidationError(`Package '${packageFilter}' not found.`);
     }
   }
@@ -118,77 +125,61 @@ async function handleListUninstall(
   // (single-resource packages are fully represented by their resource entry)
   const multiResourcePackages = filteredPackages.filter(p => p.resourceCount >= 2);
 
-  if (filteredResources.length === 0 && multiResourcePackages.length === 0) {
-    console.log('No installed resources found.');
+  const totalItems = multiResourcePackages.length + filteredResources.length;
+  
+  if (totalItems === 0) {
+    s.stop('No installed resources found');
+    note('Run `opkg install --list` to install resources.', 'Info');
+    outro();
     return;
   }
 
-  const totalItems = multiResourcePackages.length + filteredResources.length;
-  console.log(`  ${totalItems} item${totalItems === 1 ? '' : 's'}\n`);
+  s.stop(`Found ${totalItems} item${totalItems === 1 ? '' : 's'}`);
 
-  // Build choices with section headers
+  // Build grouped options for clack
   type ChoiceValue = { kind: 'resource'; resource: ResolvedResource } | { kind: 'package'; pkg: ResolvedPackage };
-  const choices: Array<{ title: string; value?: ChoiceValue; description?: string; disabled?: boolean }> = [];
+  const groupedOptions: Record<string, Array<{ value: ChoiceValue; label: string; hint: string }>> = {};
 
   // Packages section
   if (multiResourcePackages.length > 0) {
-    for (const pkg of multiResourcePackages) {
+    groupedOptions['Packages'] = multiResourcePackages.map(pkg => {
       const versionSuffix = pkg.version && pkg.version !== '0.0.0' ? ` (v${pkg.version})` : '';
       const scopeTag = formatScopeTag(pkg.scope);
-      choices.push({
-        title: `${pkg.packageName}${versionSuffix} (${pkg.resourceCount} resources)${scopeTag}`,
+      return {
         value: { kind: 'package', pkg },
-        description: formatFileListDescription(pkg.targetFiles)
-      });
-    }
+        label: `${pkg.packageName}${versionSuffix} (${pkg.resourceCount} resources)${scopeTag}`,
+        hint: formatFileListHint(pkg.targetFiles, 2)
+      };
+    });
   }
 
   // Resources section
   if (filteredResources.length > 0) {
-    for (const resource of filteredResources) {
+    groupedOptions['Resources'] = filteredResources.map(resource => {
       const typeLabel = resource.resourceType;
       const fromPkg = resource.packageName && !packageFilter
         ? `, from ${resource.packageName}`
         : '';
       const scopeTag = formatScopeTag(resource.scope);
-      choices.push({
-        title: `${resource.resourceName} (${typeLabel}${fromPkg})${scopeTag}`,
+      return {
         value: { kind: 'resource', resource },
-        description: formatFileListDescription(resource.targetFiles)
-      });
-    }
+        label: `${resource.resourceName} (${typeLabel}${fromPkg})${scopeTag}`,
+        hint: formatFileListHint(resource.targetFiles, 2)
+      };
+    });
   }
 
-  let selected: ChoiceValue[];
-  try {
-    const response = await prompts(
-      {
-        type: 'multiselect',
-        name: 'items',
-        message: 'Select items to uninstall:',
-        choices: choices as any,
-        hint: '- Space: select/deselect • Enter: confirm',
-        min: 1,
-        instructions: false
-      },
-      {
-        onCancel: () => {
-          throw new UserCancellationError('Operation cancelled by user');
-        }
-      }
-    );
-
-    selected = response.items || [];
-  } catch (error) {
-    if (error instanceof UserCancellationError) {
-      console.log('Uninstall cancelled.');
-      return;
+  const selected = await clackGroupMultiselect<ChoiceValue>(
+    'Select items to uninstall:',
+    groupedOptions,
+    {
+      selectableGroups: false,
+      groupSpacing: 0
     }
-    throw error;
-  }
+  );
 
-  if (selected.length === 0) {
-    console.log('No items selected. Uninstall cancelled.');
+  if (!selected || selected.length === 0) {
+    cancel('Uninstall cancelled');
     return;
   }
 
@@ -205,7 +196,10 @@ async function handleListUninstall(
 
   if (deduplicatedSelections.length < selected.length) {
     const skipped = selected.length - deduplicatedSelections.length;
-    console.log(`  (${skipped} individual resource${skipped === 1 ? '' : 's'} skipped — package selected)\n`);
+    note(
+      `${skipped} individual resource${skipped === 1 ? '' : 's'} already included in package selection`,
+      'Deduplication'
+    );
   }
 
   for (const selection of deduplicatedSelections) {
@@ -216,8 +210,24 @@ async function handleListUninstall(
       global: (selection.kind === 'package' ? selection.pkg!.scope : selection.resource!.scope) === 'global',
       cwd: programOpts.cwd
     });
-    await executeCandidate(candidate, options, ctx);
+    
+    // Add spinner for each uninstall operation
+    const s = spinner();
+    const itemName = selection.kind === 'package' 
+      ? selection.pkg!.packageName 
+      : selection.resource!.resourceName;
+    s.start(`Uninstalling ${itemName}`);
+    
+    try {
+      await executeCandidate(candidate, options, ctx);
+      s.stop(`Uninstalled ${itemName}`);
+    } catch (error) {
+      s.error(`Failed to uninstall ${itemName}`);
+      throw error;
+    }
   }
+  
+  outro('Uninstall complete');
 }
 
 // ---------------------------------------------------------------------------
@@ -270,10 +280,16 @@ async function executeCandidate(
   const targetDir = execContext.targetDir;
   const removedFiles: string[] = [];
 
+  if (options.dryRun) {
+    note(
+      `Would remove ${resource.targetFiles.length} file${resource.targetFiles.length === 1 ? '' : 's'}:\n${resource.targetFiles.slice(0, 3).join('\n')}${resource.targetFiles.length > 3 ? `\n... and ${resource.targetFiles.length - 3} more` : ''}`,
+      'Dry Run Preview'
+    );
+  }
+
   for (const filePath of resource.targetFiles) {
     const absPath = path.join(targetDir, filePath);
     if (options.dryRun) {
-      console.log(`(dry-run) Would remove: ${filePath}`);
       removedFiles.push(filePath);
     } else if (await exists(absPath)) {
       await remove(absPath);
@@ -329,6 +345,20 @@ function formatFileListDescription(files: string[]): string {
     desc += `\n(+${remaining} more)`;
   }
   return desc;
+}
+
+/**
+ * Format file list for hints (show 2-3 files max)
+ */
+function formatFileListHint(files: string[], maxFiles: number = 2): string {
+  if (files.length === 0) return '(no files)';
+  const displayFiles = files.slice(0, maxFiles);
+  const remaining = files.length - displayFiles.length;
+  let hint = displayFiles.join(', ');
+  if (remaining > 0) {
+    hint += `, +${remaining} more`;
+  }
+  return hint;
 }
 
 // ---------------------------------------------------------------------------

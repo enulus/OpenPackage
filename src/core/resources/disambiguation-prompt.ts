@@ -7,8 +7,9 @@
  * - N candidates → shows multiselect prompt for user to choose
  */
 
-import prompts from 'prompts';
-import { ValidationError, UserCancellationError } from '../../utils/errors.js';
+import { note, cancel } from '@clack/prompts';
+import { clackMultiselect, clackSelect } from '../../utils/clack-wrappers.js';
+import { ValidationError } from '../../utils/errors.js';
 
 export interface DisambiguationChoice<T> {
   title: string;
@@ -71,59 +72,28 @@ export async function disambiguate<T>(
     };
   });
 
-  console.log(ambiguousHeader.replace(/\$\{name\}/g, name));
+  note(ambiguousHeader.replace(/\$\{name\}/g, name).trim());
 
-  try {
-    if (multi) {
-      const response = await prompts(
-        {
-          type: 'multiselect',
-          name: 'items',
-          message: promptMessage,
-          choices,
-          hint: '- Space: select/deselect • Enter: confirm',
-          min: 1,
-          instructions: false,
-        },
-        {
-          onCancel: () => {
-            throw new UserCancellationError('Operation cancelled by user');
-          },
-        }
-      );
+  if (multi) {
+    const selectedIndices = await clackMultiselect(
+      promptMessage,
+      choices.map(c => ({ value: c.value, label: c.title, hint: c.description }))
+    );
 
-      const selectedIndices: number[] = response.items || [];
-      if (selectedIndices.length === 0) {
-        return [];
-      }
-      return selectedIndices.map(i => candidates[i]);
-    } else {
-      // Single select mode
-      const response = await prompts(
-        {
-          type: 'select',
-          name: 'item',
-          message: promptMessage,
-          choices,
-          hint: 'Use arrow keys, Enter to confirm',
-          instructions: false,
-        },
-        {
-          onCancel: () => {
-            throw new UserCancellationError('Operation cancelled by user');
-          },
-        }
-      );
-
-      if (response.item === undefined) {
-        return [];
-      }
-      return [candidates[response.item]];
-    }
-  } catch (error) {
-    if (error instanceof UserCancellationError) {
+    if (!selectedIndices || selectedIndices.length === 0) {
       return [];
     }
-    throw error;
+    return selectedIndices.map(i => candidates[i]);
+  } else {
+    // Single select mode
+    const selectedIndex = await clackSelect(
+      promptMessage,
+      choices.map(c => ({ value: c.value, label: c.title, hint: c.description }))
+    );
+
+    if (selectedIndex === null || selectedIndex === undefined) {
+      return [];
+    }
+    return [candidates[selectedIndex]];
   }
 }
