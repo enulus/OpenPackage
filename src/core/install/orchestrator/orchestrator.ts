@@ -1,5 +1,4 @@
 import { relative } from 'path';
-import { log } from '@clack/prompts';
 import type { CommandResult, InstallOptions, ExecutionContext } from '../../../types/index.js';
 import type { InstallationContext } from '../unified/context.js';
 import type { 
@@ -14,6 +13,7 @@ import {
   handleAmbiguityNonInteractive,
   type BaseMatch 
 } from '../ambiguity-prompts.js';
+import { setOutputMode, output } from '../../../utils/output.js';
 import {
   parseMarketplace,
   promptPluginSelection,
@@ -71,6 +71,19 @@ export class InstallOrchestrator {
     // Step 1: Validate
     assertTargetDirOutsideMetadata(execContext.targetDir);
     validateResolutionFlags(options);
+    
+    // Step 1.5: Determine output mode and validate --list TTY requirement
+    const hasConvenienceFilters = Boolean(
+      options.plugins || options.agents || options.skills || 
+      options.rules || options.commands
+    );
+    const isInteractive = canPrompt() && (options.list || !hasConvenienceFilters);
+    setOutputMode(isInteractive);
+    
+    // Validate --list requires TTY
+    if (options.list && !canPrompt()) {
+      throw new Error('--list requires an interactive terminal (TTY). Use specific filters (--agents, --skills, etc.) for non-interactive installs.');
+    }
     
     // Step 2: Classify input (use sourceCwd for resolving input paths)
     const classification = await classifyInput(input, options, execContext);
@@ -259,7 +272,7 @@ export class InstallOrchestrator {
           ...invalid.map(name => `  - ${name}`),
           `\nAvailable plugins: ${marketplace.plugins.map(p => p.name).join(', ')}`
         ].join('\n');
-        log.error(errorMsg);
+        output.error(errorMsg);
         return {
           success: false,
           error: `Plugins not found: ${invalid.join(', ')}`
@@ -267,12 +280,12 @@ export class InstallOrchestrator {
       }
       
       if (valid.length === 0) {
-        log.info('No valid plugins specified. Installation cancelled.');
+        output.info('No valid plugins specified. Installation cancelled.');
         return { success: true, data: { installed: 0, skipped: 0 } };
       }
       
-      log.info(`Marketplace: ${marketplace.name}`);
-      log.message(`Installing ${valid.length} plugin${valid.length === 1 ? '' : 's'}: ${valid.join(', ')}`);
+      output.info(`Marketplace: ${marketplace.name}`);
+      output.message(`Installing ${valid.length} plugin${valid.length === 1 ? '' : 's'}: ${valid.join(', ')}`);
       
       // Install each plugin in full mode (non-interactive)
       const results: CommandResult[] = [];
@@ -311,7 +324,7 @@ export class InstallOrchestrator {
       selectedPlugin = await promptPluginSelection(marketplace);
       
       if (!selectedPlugin) {
-        log.info('No plugin selected. Installation cancelled.');
+        output.info('No plugin selected. Installation cancelled.');
         return { success: true, data: { installed: 0, skipped: 0 } };
       }
       
@@ -319,7 +332,7 @@ export class InstallOrchestrator {
       const mode = await promptInstallMode(selectedPlugin);
       
       if (!mode) {
-        log.info('Installation cancelled.');
+        output.info('Installation cancelled.');
         return { success: true, data: { installed: 0, skipped: 0 } };
       }
       

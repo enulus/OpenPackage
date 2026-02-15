@@ -4,7 +4,7 @@
  * Interactive menu for selecting specific resources to install
  */
 
-import { log } from '@clack/prompts';
+import { output } from '../../utils/output.js';
 import { logger } from '../../utils/logger.js';
 import { UserCancellationError } from '../../utils/errors.js';
 import { clackGroupMultiselect } from '../../utils/clack-multiselect.js';
@@ -39,7 +39,7 @@ export async function promptResourceSelection(
   
   // No resources found
   if (discovery.total === 0) {
-    log.warn('No resources found in this package');
+    output.warn('No resources found in this package');
     return [];
   }
   
@@ -47,7 +47,7 @@ export async function promptResourceSelection(
   const groupedOptions = buildGroupedOptions(discovery);
   
   if (Object.keys(groupedOptions).length === 0) {
-    log.warn('No installable resources found');
+    output.warn('No installable resources found');
     return [];
   }
   
@@ -191,7 +191,7 @@ export function displaySelectionSummary(selected: SelectedResource[]): void {
     summary.push(`  • ${count} ${label.toLowerCase()}`);
   }
   
-  log.info(summary.join('\n'));
+  output.info(summary.join('\n'));
 }
 
 /**
@@ -211,14 +211,14 @@ export async function promptCatalogSelection(
   });
   
   if (catalog.total === 0) {
-    log.warn('No resources found');
+    output.warn('No resources found');
     return [];
   }
   
   const { choices, categoryMap, indexToEntry } = buildCatalogMenuChoices(catalog);
   
   if (choices.length === 0) {
-    log.warn('No selectable resources found');
+    output.warn('No selectable resources found');
     return [];
   }
   

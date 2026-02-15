@@ -14,7 +14,8 @@ import { applyBaseDetection } from './preprocessing/base-resolver.js';
 import { resolveConvenienceResources } from './preprocessing/convenience-preprocessor.js';
 import { discoverResources } from './resource-discoverer.js';
 import { promptResourceSelection, displaySelectionSummary } from './resource-selection-menu.js';
-import { select, isCancel, spinner, log, note } from '@clack/prompts';
+import { select, isCancel, note, cancel } from '@clack/prompts';
+import { output } from '../../utils/output.js';
 import type { ResourceInstallationSpec } from './convenience-matchers.js';
 import type { SelectedResource } from './resource-types.js';
 import {
@@ -155,9 +156,9 @@ export async function promptPluginSelection(
   marketplace: MarketplaceManifest
 ): Promise<string> {
   // Display marketplace info using clack log
-  log.info(`Marketplace: ${marketplace.name}`);
+  output.info(`Marketplace: ${marketplace.name}`);
   if (marketplace.description) {
-    log.message(marketplace.description);
+    output.message(marketplace.description);
   }
 
   const options = marketplace.plugins
@@ -257,7 +258,7 @@ async function installPluginPartial(
   });
   
   // Discover all resources with spinner
-  const s = spinner();
+  const s = output.spinner();
   s.start('Discovering resources');
   
   const discovery = await discoverResources(pluginDir, repoRoot);
@@ -271,7 +272,7 @@ async function installPluginPartial(
   
   // Check if any resources found
   if (discovery.total === 0) {
-    log.warn('No installable resources found in this plugin');
+    output.warn('No installable resources found in this plugin');
     return {
       success: true,
       data: { installed: 0, skipped: 0 }
@@ -286,7 +287,7 @@ async function installPluginPartial(
   );
   
   if (selected.length === 0) {
-    log.info('No resources selected. Installation cancelled.');
+    cancel('No resources selected. Installation cancelled.');
     return {
       success: true,
       data: { installed: 0, skipped: 0 }
@@ -368,7 +369,7 @@ export async function installMarketplacePlugins(
   if (!pluginEntry) {
     const error = `Plugin '${selectedName}' not found in marketplace`;
     logger.error(error, { marketplace: marketplace.name });
-    log.error(`${selectedName}: ${error}`);
+    output.error(`${selectedName}: ${error}`);
     return { success: false, error };
   }
   
@@ -379,7 +380,7 @@ export async function installMarketplacePlugins(
   } catch (error) {
     logger.error('Failed to normalize plugin source', { plugin: selectedName, error });
     const errorMsg = error instanceof Error ? error.message : 'Invalid source configuration';
-    log.error(`${selectedName}: ${errorMsg}`);
+    output.error(`${selectedName}: ${errorMsg}`);
     return { success: false, error: errorMsg };
   }
   
@@ -420,7 +421,7 @@ export async function installMarketplacePlugins(
   } catch (error) {
     logger.error('Failed to install plugin', { plugin: selectedName, error });
     const errorMsg = error instanceof Error ? error.message : String(error);
-    log.error(`${selectedName}: ${errorMsg}`);
+    output.error(`${selectedName}: ${errorMsg}`);
     return { success: false, error: errorMsg };
   }
 }
@@ -452,7 +453,7 @@ async function installRelativePathPlugin(
       path: pluginSubdir,
       fullPath: pluginDir
     });
-    log.error(`${pluginEntry.name}: ${error}`);
+    output.error(`${pluginEntry.name}: ${error}`);
     return { success: false, error };
   }
   
@@ -557,7 +558,7 @@ async function installRelativePathPlugin(
   });
 
   // Show validation/install spinner for full mode only
-  const installSpinner = spinner();
+  const installSpinner = output.spinner();
   installSpinner.start(`Installing ${pluginEntry.name}`);
 
   // Validate plugin structure with marketplace context
@@ -574,7 +575,7 @@ async function installRelativePathPlugin(
       strict: pluginEntry.strict
     });
     installSpinner.stop();
-    log.error(`${pluginEntry.name}: ${error}`);
+    output.error(`${pluginEntry.name}: ${error}`);
     return { success: false, error };
   }
   
@@ -584,7 +585,7 @@ async function installRelativePathPlugin(
       const error = `Invalid plugin manifest in '${pluginSubdir}' (cannot parse JSON)`;
       logger.error('Invalid plugin manifest', { plugin: pluginEntry.name });
       installSpinner.stop();
-      log.error(`${pluginEntry.name}: ${error}`);
+      output.error(`${pluginEntry.name}: ${error}`);
       return { success: false, error };
     }
   }
@@ -603,10 +604,10 @@ async function installRelativePathPlugin(
   
   if (pipelineResult.success) {
     installSpinner.stop();
-    log.success(installedName);
+    output.success(installedName);
   } else {
     installSpinner.stop();
-    log.error(`${installedName}: ${pipelineResult.error || 'Unknown error'}`);
+    output.error(`${installedName}: ${pipelineResult.error || 'Unknown error'}`);
   }
   
   return {
@@ -727,7 +728,7 @@ async function installGitPlugin(
     plugin: pluginEntry.name
   });
 
-  const installSpinner = spinner();
+  const installSpinner = output.spinner();
   installSpinner.start(`Installing ${pluginEntry.name}`);
 
   const pipelineResult = await runUnifiedInstallPipeline(ctx);
@@ -738,9 +739,9 @@ async function installGitPlugin(
   installSpinner.stop();
   
   if (pipelineResult.success) {
-    log.success(installedName);
+    output.success(installedName);
   } else {
-    log.error(`${installedName}: ${pipelineResult.error || 'Unknown error'}`);
+    output.error(`${installedName}: ${pipelineResult.error || 'Unknown error'}`);
   }
   
   return {

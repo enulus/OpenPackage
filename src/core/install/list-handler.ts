@@ -6,6 +6,8 @@
 
 import { resolve } from 'path';
 import { logger } from '../../utils/logger.js';
+import { output } from '../../utils/output.js';
+import { cancel } from '@clack/prompts';
 import { canPrompt } from './ambiguity-prompts.js';
 import { discoverResources } from './resource-discoverer.js';
 import { promptResourceSelection, displaySelectionSummary } from './resource-selection-menu.js';
@@ -13,7 +15,6 @@ import { buildResourceInstallContexts } from './unified/context-builders.js';
 import { runMultiContextPipeline } from './unified/multi-context-pipeline.js';
 import { getLoaderForSource } from './sources/loader-factory.js';
 import { applyBaseDetection } from './preprocessing/base-resolver.js';
-import { spinner } from '@clack/prompts';
 import type { InstallationContext } from './unified/context.js';
 import type { NormalizedInstallOptions } from './orchestrator/types.js';
 import type { ExecutionContext, CommandResult } from '../../types/index.js';
@@ -63,7 +64,7 @@ export async function handleListSelection(
   });
   
   // Discover all resources with spinner
-  const s = spinner();
+  const s = output.spinner();
   s.start('Discovering resources');
   
   const discovery = await discoverResources(basePath, repoRoot);
@@ -95,7 +96,7 @@ export async function handleListSelection(
     );
     
     if (selected.length === 0) {
-      console.log('No resources selected. Installation cancelled.');
+      cancel('No resources selected. Installation cancelled.');
       return {
         success: true,
         data: { installed: 0, skipped: 0 }
