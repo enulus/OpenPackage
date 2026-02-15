@@ -1,11 +1,10 @@
-import { join, basename, relative } from 'path';
+import { join, basename, relative, resolve } from 'path';
 import { readTextFile, exists } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
 import { ValidationError, UserCancellationError } from '../../utils/errors.js';
 import { buildGitInstallContext, buildPathInstallContext, buildResourceInstallContexts } from './unified/context-builders.js';
 import { runUnifiedInstallPipeline } from './unified/pipeline.js';
 import { detectPluginType, detectPluginWithMarketplace, validatePluginManifest } from './plugin-detector.js';
-import { safePrompts } from '../../utils/prompts.js';
 import { Spinner } from '../../utils/spinner.js';
 import type { CommandResult, InstallOptions, ExecutionContext } from '../../types/index.js';
 import { CLAUDE_PLUGIN_PATHS } from '../../constants/index.js';
@@ -13,6 +12,11 @@ import { runMultiContextPipeline } from './unified/multi-context-pipeline.js';
 import { getLoaderForSource } from './sources/loader-factory.js';
 import { applyBaseDetection } from './preprocessing/base-resolver.js';
 import { resolveConvenienceResources } from './preprocessing/convenience-preprocessor.js';
+import { discoverResources } from './resource-discoverer.js';
+import { promptResourceSelection, displaySelectionSummary } from './resource-selection-menu.js';
+import { select, isCancel, spinner, log, note } from '@clack/prompts';
+import type { ResourceInstallationSpec } from './convenience-matchers.js';
+import type { SelectedResource } from './resource-types.js';
 import {
   normalizePluginSource,
   isRelativePathSource,
@@ -142,53 +146,191 @@ export async function parseMarketplace(
 }
 
 /**
- * Display interactive plugin selection prompt.
+ * Display interactive plugin selection prompt using single selection.
  * 
  * @param marketplace - Parsed marketplace manifest
- * @returns Array of selected plugin names (empty if user cancelled)
+ * @returns Selected plugin name (empty string if user cancelled)
  */
 export async function promptPluginSelection(
   marketplace: MarketplaceManifest
-): Promise<string[]> {
-  console.log(`✓ Marketplace: ${marketplace.name}`);
+): Promise<string> {
+  // Display marketplace info using clack log
+  log.info(`Marketplace: ${marketplace.name}`);
   if (marketplace.description) {
-    console.log(`  ${marketplace.description}`);
+    log.message(marketplace.description);
   }
-  console.log(`${marketplace.plugins.length} plugin${marketplace.plugins.length === 1 ? '' : 's'} available:`);
 
-  const choices = marketplace.plugins
+  const options = marketplace.plugins
     .sort((a, b) => a.name.localeCompare(b.name))
     .map(plugin => ({
-      title: plugin.name,
       value: plugin.name,
-      description: plugin.description || '',
-      selected: false
+      label: plugin.name,
+      hint: plugin.description || ''
     }));
   
   try {
-    const response = await safePrompts({
-      type: 'multiselect',
-      name: 'plugins',
-      message: 'Select plugins to install (space to select, enter to confirm):',
-      choices,
-      min: 1,
-      hint: '- Use arrow keys to navigate, space to select/deselect, enter to confirm'
+    const selectedPlugin = await select({
+      message: 'Select a plugin to install:',
+      options
     });
     
-    if (!response.plugins || response.plugins.length === 0) {
+    if (isCancel(selectedPlugin)) {
       logger.info('User cancelled plugin selection');
-      return [];
+      return '';
     }
     
-    logger.info('User selected plugins', { selected: response.plugins });
-    return response.plugins as string[];
+    logger.info('User selected plugin', { selected: selectedPlugin });
+    return selectedPlugin as string;
   } catch (error) {
     if (error instanceof UserCancellationError) {
       logger.info('User cancelled plugin selection');
-      return [];
+      return '';
     }
     throw error;
   }
+}
+
+/**
+ * Install mode type
+ */
+export type InstallMode = 'full' | 'partial';
+
+/**
+ * Prompt user to choose between full plugin install or partial (individual resources).
+ * 
+ * @param pluginName - Name of the plugin being installed
+ * @returns Install mode ('full' or 'partial'), or empty string if cancelled
+ */
+export async function promptInstallMode(pluginName: string): Promise<InstallMode | ''> {
+  try {
+    const mode = await select({
+      message: `How would you like to install ${pluginName}?`,
+      options: [
+        { 
+          value: 'full', 
+          label: 'Install full plugin', 
+          hint: 'Install all resources from this plugin' 
+        },
+        { 
+          value: 'partial', 
+          label: 'Select individual resources', 
+          hint: 'Choose specific agents, skills, commands, etc.' 
+        }
+      ]
+    });
+    
+    if (isCancel(mode)) {
+      logger.info('User cancelled install mode selection');
+      return '';
+    }
+    
+    logger.info('User selected install mode', { mode });
+    return mode as InstallMode;
+  } catch (error) {
+    if (error instanceof UserCancellationError) {
+      logger.info('User cancelled install mode selection');
+      return '';
+    }
+    throw error;
+  }
+}
+
+/**
+ * Install individual resources from a plugin (partial install mode).
+ * Discovers resources and prompts user to select which ones to install.
+ * 
+ * @param pluginDir - Absolute path to plugin directory
+ * @param pluginEntry - Marketplace plugin entry
+ * @param context - Installation context with source metadata
+ * @param repoRoot - Repository root path
+ * @returns Command result
+ */
+async function installPluginPartial(
+  pluginDir: string,
+  pluginEntry: MarketplacePluginEntry,
+  context: any,
+  repoRoot: string
+): Promise<CommandResult> {
+  logger.info('Starting partial plugin installation', {
+    plugin: pluginEntry.name,
+    path: pluginDir
+  });
+  
+  // Discover all resources with spinner
+  const s = spinner();
+  s.start('Discovering resources');
+  
+  const discovery = await discoverResources(pluginDir, repoRoot);
+  
+  // Stop spinner with completion message
+  if (discovery.total === 0) {
+    s.stop('No resources found');
+  } else {
+    s.stop(`${discovery.total} resource${discovery.total === 1 ? '' : 's'} discovered`);
+  }
+  
+  // Check if any resources found
+  if (discovery.total === 0) {
+    log.warn('No installable resources found in this plugin');
+    return {
+      success: true,
+      data: { installed: 0, skipped: 0 }
+    };
+  }
+  
+  // Prompt for resource selection
+  const selected: SelectedResource[] = await promptResourceSelection(
+    discovery,
+    context.source.packageName || pluginEntry.name,
+    context.source.version
+  );
+  
+  if (selected.length === 0) {
+    log.info('No resources selected. Installation cancelled.');
+    return {
+      success: true,
+      data: { installed: 0, skipped: 0 }
+    };
+  }
+  
+  // Display selection summary
+  displaySelectionSummary(selected);
+  
+  // Convert selected resources to ResourceInstallationSpec format
+  const resourceSpecs: ResourceInstallationSpec[] = selected.map(s => ({
+    name: s.displayName,
+    resourceType: s.resourceType as 'agent' | 'skill' | 'command' | 'rule',
+    resourcePath: s.resourcePath,
+    basePath: resolve(pluginDir),
+    resourceKind: s.installKind,
+    matchedBy: 'filename' as const,
+    resourceVersion: s.version
+  }));
+  
+  // Build resource contexts for installation
+  const resourceContexts = buildResourceInstallContexts(
+    context,
+    resourceSpecs,
+    repoRoot
+  ).map(rc => {
+    // Ensure path-based loader can resolve repo-relative resourcePath
+    if (rc.source.type === 'path') {
+      rc.source.localPath = repoRoot;
+    }
+    return rc;
+  });
+  
+  // Run multi-context pipeline
+  const result = await runMultiContextPipeline(resourceContexts);
+  
+  return {
+    success: result.success,
+    error: result.error,
+    data: {
+      installed: result.data?.installed || 0,
+      skipped: result.data?.skipped || 0
+    }
+  };
 }
 
 /**
@@ -196,7 +338,8 @@ export async function promptPluginSelection(
  * 
  * @param marketplaceDir - Absolute path to cloned marketplace repository root
  * @param marketplace - Parsed marketplace manifest
- * @param selectedNames - Names of plugins to install
+ * @param selectedName - Name of plugin to install
+ * @param installMode - Install mode ('full' or 'partial')
  * @param marketplaceGitUrl - Git URL of the marketplace repository
  * @param marketplaceGitRef - Git ref (branch/tag/sha) if specified
  * @param marketplaceCommitSha - Commit SHA of cached marketplace
@@ -206,7 +349,8 @@ export async function promptPluginSelection(
 export async function installMarketplacePlugins(
   marketplaceDir: string,
   marketplace: MarketplaceManifest,
-  selectedNames: string[],
+  selectedName: string,
+  installMode: InstallMode,
   marketplaceGitUrl: string,
   marketplaceGitRef: string | undefined,
   marketplaceCommitSha: string,
@@ -214,117 +358,71 @@ export async function installMarketplacePlugins(
   execContext: ExecutionContext,
   convenienceOptions?: { agents?: string[]; skills?: string[]; rules?: string[]; commands?: string[] }
 ): Promise<CommandResult> {
-  logger.info('Installing marketplace plugins', { 
+  logger.info('Installing marketplace plugin', { 
     marketplace: marketplace.name,
-    plugins: selectedNames 
+    plugin: selectedName,
+    mode: installMode
   });
   
-  console.log(`Installing ${selectedNames.length} plugin${selectedNames.length === 1 ? '' : 's'}...`);
-  
-  const results: Array<{ 
-    name: string; 
-    scopedName: string; 
-    success: boolean; 
-    error?: string;
-  }> = [];
-  
-  for (const pluginName of selectedNames) {
-    const pluginEntry = marketplace.plugins.find(p => p.name === pluginName);
-    if (!pluginEntry) {
-      logger.error(`Plugin '${pluginName}' not found in marketplace`, { 
-        marketplace: marketplace.name 
-      });
-      results.push({ 
-        name: pluginName,
-        scopedName: pluginName,
-        success: false, 
-        error: `Plugin not found in marketplace` 
-      });
-      continue;
-    }
-    
-    // Normalize the plugin source
-    let normalizedSource: NormalizedPluginSource;
-    try {
-      normalizedSource = normalizePluginSource(pluginEntry.source, pluginName);
-    } catch (error) {
-      logger.error('Failed to normalize plugin source', { plugin: pluginName, error });
-      results.push({ 
-        name: pluginName,
-        scopedName: pluginName,
-        success: false, 
-        error: error instanceof Error ? error.message : 'Invalid source configuration'
-      });
-      continue;
-    }
-    
-    // Install based on source type
-    try {
-      let installResult: CommandResult;
-      
-      if (isRelativePathSource(normalizedSource)) {
-        installResult = await installRelativePathPlugin(
-          marketplaceDir,
-          marketplace,
-          pluginEntry,
-          normalizedSource,
-          marketplaceGitUrl,
-          marketplaceGitRef,
-          marketplaceCommitSha,
-          options,
-          execContext,
-          convenienceOptions
-        );
-      } else if (isGitSource(normalizedSource)) {
-        installResult = await installGitPlugin(
-          marketplace,
-          pluginEntry,
-          normalizedSource,
-          options,
-          execContext,
-          convenienceOptions
-        );
-      } else {
-        throw new Error(`Unsupported source type: ${normalizedSource.type}`);
-      }
-      
-      if (!installResult.success) {
-        results.push({
-          name: pluginName,
-          scopedName: pluginEntry.name,
-          success: false,
-          error: installResult.error || 'Unknown installation error'
-        });
-        continue;
-      }
-      
-      results.push({ 
-        name: pluginName, 
-        scopedName: pluginEntry.name, 
-        success: true 
-      });
-      
-    } catch (error) {
-      logger.error('Failed to install plugin', { plugin: pluginName, error });
-      results.push({ 
-        name: pluginName,
-        scopedName: pluginEntry.name,
-        success: false, 
-        error: error instanceof Error ? error.message : String(error) 
-      });
-    }
+  const pluginEntry = marketplace.plugins.find(p => p.name === selectedName);
+  if (!pluginEntry) {
+    const error = `Plugin '${selectedName}' not found in marketplace`;
+    logger.error(error, { marketplace: marketplace.name });
+    log.error(`${selectedName}: ${error}`);
+    return { success: false, error };
   }
   
-  // Display summary
-  displayInstallationSummary(results);
+  // Normalize the plugin source
+  let normalizedSource: NormalizedPluginSource;
+  try {
+    normalizedSource = normalizePluginSource(pluginEntry.source, selectedName);
+  } catch (error) {
+    logger.error('Failed to normalize plugin source', { plugin: selectedName, error });
+    const errorMsg = error instanceof Error ? error.message : 'Invalid source configuration';
+    log.error(`${selectedName}: ${errorMsg}`);
+    return { success: false, error: errorMsg };
+  }
   
-  // Return success if at least one plugin was installed
-  return {
-    success: results.some(r => r.success),
-    error: results.every(r => !r.success) 
-      ? 'Failed to install any plugins from marketplace'
-      : undefined
-  };
+  // Install based on source type
+  try {
+    let installResult: CommandResult;
+    
+    if (isRelativePathSource(normalizedSource)) {
+      installResult = await installRelativePathPlugin(
+        marketplaceDir,
+        marketplace,
+        pluginEntry,
+        normalizedSource,
+        installMode,
+        marketplaceGitUrl,
+        marketplaceGitRef,
+        marketplaceCommitSha,
+        options,
+        execContext,
+        convenienceOptions
+      );
+    } else if (isGitSource(normalizedSource)) {
+      installResult = await installGitPlugin(
+        marketplace,
+        pluginEntry,
+        normalizedSource,
+        installMode,
+        options,
+        execContext,
+        convenienceOptions
+      );
+    } else {
+      throw new Error(`Unsupported source type: ${normalizedSource.type}`);
+    }
+    
+    return installResult;
+    
+  } catch (error) {
+    logger.error('Failed to install plugin', { plugin: selectedName, error });
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    log.error(`${selectedName}: ${errorMsg}`);
+    return { success: false, error: errorMsg };
+  }
 }
 
 /**
@@ -335,6 +433,7 @@ async function installRelativePathPlugin(
   marketplace: MarketplaceManifest,
   pluginEntry: MarketplacePluginEntry,
   normalizedSource: NormalizedPluginSource,
+  installMode: InstallMode,
   marketplaceGitUrl: string,
   marketplaceGitRef: string | undefined,
   marketplaceCommitSha: string,
@@ -345,10 +444,7 @@ async function installRelativePathPlugin(
   const pluginSubdir = normalizedSource.relativePath!;
   const pluginDir = join(marketplaceDir, pluginSubdir);
   
-  const spinner = new Spinner(`Validating ${pluginEntry.name}`);
-  spinner.start();
-  
-  // Validate plugin subdirectory exists
+  // Validate plugin subdirectory exists (silent for partial mode)
   if (!(await exists(pluginDir))) {
     const error = `Path '${pluginSubdir}' does not exist in marketplace repository`;
     logger.error('Plugin path not found', { 
@@ -356,15 +452,13 @@ async function installRelativePathPlugin(
       path: pluginSubdir,
       fullPath: pluginDir
     });
-    spinner.stop();
-    console.error(`❌ ${pluginEntry.name}: ${error}`);
+    log.error(`${pluginEntry.name}: ${error}`);
     return { success: false, error };
   }
   
   const hasConvenienceOptions = Boolean(convenienceOptions?.agents?.length || convenienceOptions?.skills?.length || convenienceOptions?.rules?.length || convenienceOptions?.commands?.length);
 
   if (hasConvenienceOptions) {
-    spinner.stop();
     logger.info('Convenience filters active, bypassing full plugin validation', {
       plugin: pluginEntry.name,
       path: pluginSubdir
@@ -413,43 +507,7 @@ async function installRelativePathPlugin(
     };
   }
 
-  // Validate plugin structure with marketplace context
-  const detection = await detectPluginWithMarketplace(pluginDir, pluginEntry);
-  
-  if (!detection.isPlugin) {
-    const strictInfo = pluginEntry.strict === false 
-      ? ' Set "strict": false in marketplace entry if this plugin is defined entirely in marketplace.json.'
-      : '';
-    const error = `Path '${pluginSubdir}' does not contain a valid plugin.${strictInfo}`;
-    logger.error('Invalid plugin structure', { 
-      plugin: pluginEntry.name, 
-      path: pluginSubdir,
-      strict: pluginEntry.strict
-    });
-    spinner.stop();
-    console.error(`❌ ${pluginEntry.name}: ${error}`);
-    return { success: false, error };
-  }
-  
-  // For plugins with plugin.json, validate it's parseable
-  if (detection.manifestPath) {
-    if (!(await validatePluginManifest(detection.manifestPath))) {
-      const error = `Invalid plugin manifest in '${pluginSubdir}' (cannot parse JSON)`;
-      logger.error('Invalid plugin manifest', { plugin: pluginEntry.name });
-      spinner.stop();
-      console.error(`❌ ${pluginEntry.name}: ${error}`);
-      return { success: false, error };
-    }
-  }
-  
-  spinner.update(`✓ Installing ${pluginEntry.name}`);
-  logger.info('Installing relative path plugin', {
-    plugin: pluginEntry.name,
-    path: pluginSubdir
-  });
-  
   // Build path context for the already-cloned plugin directory
-  // Use path-based loading (efficient, no re-clone) with git source override for manifest
   const ctx = await buildPathInstallContext(
     execContext,
     pluginDir,
@@ -466,17 +524,76 @@ async function installRelativePathPlugin(
     gitPath: pluginSubdir
   };
   
-  // Add marketplace metadata to context for passing to loader and workspace index
+  // Add marketplace metadata to context
   ctx.source.pluginMetadata = {
     isPlugin: true,
-    pluginType: detection.type as any,
-    manifestPath: detection.manifestPath,
     marketplaceEntry: pluginEntry,
     marketplaceSource: {
       url: marketplaceGitUrl,
       commitSha: marketplaceCommitSha,
       pluginName: pluginEntry.name
     }
+  };
+
+  // Branch based on install mode
+  if (installMode === 'partial') {
+    // Partial install: prompt for resource selection
+    logger.info('Using partial install mode for relative path plugin', {
+      plugin: pluginEntry.name,
+      path: pluginSubdir
+    });
+    
+    ctx.detectedBase = pluginDir;
+    ctx.baseRelative = relative(marketplaceDir, pluginDir) || '.';
+    
+    const repoRoot = marketplaceDir;
+    return await installPluginPartial(pluginDir, pluginEntry, ctx, repoRoot);
+  }
+
+  // Full install: validate and install entire plugin
+  logger.info('Using full install mode for relative path plugin', {
+    plugin: pluginEntry.name,
+    path: pluginSubdir
+  });
+
+  // Show validation/install spinner for full mode only
+  const installSpinner = spinner();
+  installSpinner.start(`Installing ${pluginEntry.name}`);
+
+  // Validate plugin structure with marketplace context
+  const detection = await detectPluginWithMarketplace(pluginDir, pluginEntry);
+  
+  if (!detection.isPlugin) {
+    const strictInfo = pluginEntry.strict === false 
+      ? ' Set "strict": false in marketplace entry if this plugin is defined entirely in marketplace.json.'
+      : '';
+    const error = `Path '${pluginSubdir}' does not contain a valid plugin.${strictInfo}`;
+    logger.error('Invalid plugin structure', { 
+      plugin: pluginEntry.name, 
+      path: pluginSubdir,
+      strict: pluginEntry.strict
+    });
+    installSpinner.stop();
+    log.error(`${pluginEntry.name}: ${error}`);
+    return { success: false, error };
+  }
+  
+  // For plugins with plugin.json, validate it's parseable
+  if (detection.manifestPath) {
+    if (!(await validatePluginManifest(detection.manifestPath))) {
+      const error = `Invalid plugin manifest in '${pluginSubdir}' (cannot parse JSON)`;
+      logger.error('Invalid plugin manifest', { plugin: pluginEntry.name });
+      installSpinner.stop();
+      log.error(`${pluginEntry.name}: ${error}`);
+      return { success: false, error };
+    }
+  }
+  
+  // Update context with detection results
+  ctx.source.pluginMetadata = {
+    ...ctx.source.pluginMetadata,
+    pluginType: detection.type as any,
+    manifestPath: detection.manifestPath
   };
   
   const pipelineResult = await runUnifiedInstallPipeline(ctx);
@@ -485,9 +602,11 @@ async function installRelativePathPlugin(
   const installedName = ctx.source.packageName || pluginEntry.name;
   
   if (pipelineResult.success) {
-    console.log(`✓ ${installedName}`);
+    installSpinner.stop();
+    log.success(installedName);
   } else {
-    console.error(`❌ ${installedName}: ${pipelineResult.error || 'Unknown error'}`);
+    installSpinner.stop();
+    log.error(`${installedName}: ${pipelineResult.error || 'Unknown error'}`);
   }
   
   return {
@@ -503,6 +622,7 @@ async function installGitPlugin(
   marketplace: MarketplaceManifest,
   pluginEntry: MarketplacePluginEntry,
   normalizedSource: NormalizedPluginSource,
+  installMode: InstallMode,
   options: InstallOptions,
   execContext: ExecutionContext,
   convenienceOptions?: { agents?: string[]; skills?: string[]; rules?: string[]; commands?: string[] }
@@ -510,9 +630,6 @@ async function installGitPlugin(
   const gitUrl = normalizedSource.gitUrl!;
   const gitRef = normalizedSource.gitRef;
   const gitPath = normalizedSource.gitPath;
-  
-  const spinner = new Spinner(`Installing ${pluginEntry.name}`);
-  spinner.start();
   
   logger.info('Installing git plugin', {
     plugin: pluginEntry.name,
@@ -537,9 +654,6 @@ async function installGitPlugin(
     isPlugin: true,
     marketplaceEntry: pluginEntry
   };
-  
-  // Stop spinner before pipeline (which has its own output)
-  spinner.stop();
 
   const hasConvenienceOptions = Boolean(convenienceOptions?.agents?.length || convenienceOptions?.skills?.length || convenienceOptions?.rules?.length || convenienceOptions?.commands?.length);
   if (hasConvenienceOptions) {
@@ -574,16 +688,59 @@ async function installGitPlugin(
       error: multiResult.error
     };
   }
+
+  // Branch based on install mode
+  if (installMode === 'partial') {
+    // Partial install: load plugin, discover resources, prompt for selection
+    logger.info('Using partial install mode for git plugin', {
+      plugin: pluginEntry.name
+    });
+
+    const loader = getLoaderForSource(ctx.source);
+    const loaded = await loader.load(ctx.source, options, execContext);
+
+    ctx.source.packageName = loaded.packageName;
+    ctx.source.version = loaded.version;
+    ctx.source.contentRoot = loaded.contentRoot;
+    ctx.source.pluginMetadata = {
+      ...loaded.pluginMetadata,
+      ...(ctx.source.pluginMetadata ?? {}),
+      marketplaceEntry: pluginEntry
+    };
+
+    if (loaded.sourceMetadata?.commitSha) {
+      (ctx.source as any)._commitSha = loaded.sourceMetadata.commitSha;
+    }
+
+    if (loaded.sourceMetadata?.baseDetection) {
+      applyBaseDetection(ctx, loaded);
+    }
+
+    const basePath = ctx.detectedBase || loaded.contentRoot || execContext.targetDir;
+    const repoRoot = loaded.sourceMetadata?.repoPath || loaded.contentRoot || basePath;
+    
+    return await installPluginPartial(basePath, pluginEntry, ctx, repoRoot);
+  }
   
+  // Full install: run unified pipeline
+  logger.info('Using full install mode for git plugin', {
+    plugin: pluginEntry.name
+  });
+
+  const installSpinner = spinner();
+  installSpinner.start(`Installing ${pluginEntry.name}`);
+
   const pipelineResult = await runUnifiedInstallPipeline(ctx);
   
   // Get the actual generated name from the loaded package
   const installedName = ctx.source.packageName || pluginEntry.name;
   
+  installSpinner.stop();
+  
   if (pipelineResult.success) {
-    console.log(`✓ ${installedName}`);
+    log.success(installedName);
   } else {
-    console.error(`❌ ${installedName}: ${pipelineResult.error || 'Unknown error'}`);
+    log.error(`${installedName}: ${pipelineResult.error || 'Unknown error'}`);
   }
   
   return {
@@ -617,25 +774,4 @@ export function validatePluginNames(
   }
 
   return { valid, invalid };
-}
-
-/**
- * Display installation summary.
- */
-function displayInstallationSummary(
-  results: Array<{ name: string; scopedName: string; success: boolean; error?: string }>
-): void {
-  const successful = results.filter(r => r.success);
-  const failed = results.filter(r => !r.success);
-  
-  if (successful.length > 0) {
-    console.log(`✓ Successfully installed: ${successful.length} plugin${successful.length === 1 ? '' : 's'}`);
-  }
-  
-  if (failed.length > 0) {
-    console.log(`❌ Failed: ${failed.length} plugin${failed.length === 1 ? '' : 's'}`);
-    for (const result of failed) {
-      console.log(`  ${result.scopedName}: ${result.error}`);
-    }
-  }
 }

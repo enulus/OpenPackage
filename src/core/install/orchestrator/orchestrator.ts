@@ -1,4 +1,5 @@
 import { relative } from 'path';
+import { log } from '@clack/prompts';
 import type { CommandResult, InstallOptions, ExecutionContext } from '../../../types/index.js';
 import type { InstallationContext } from '../unified/context.js';
 import type { 
@@ -16,6 +17,7 @@ import {
 import {
   parseMarketplace,
   promptPluginSelection,
+  promptInstallMode,
   installMarketplacePlugins,
   validatePluginNames
 } from '../marketplace-handler.js';
@@ -244,18 +246,20 @@ export class InstallOrchestrator {
     
     spinner.stop();
     
-    let selectedPlugins: string[];
+    let selectedPlugin: string;
+    let installMode: 'full' | 'partial' = 'full';
     
     if (options.plugins && options.plugins.length > 0) {
-      // Non-interactive: validate provided plugin names
+      // Non-interactive: validate provided plugin names and install all as full
       const { valid, invalid } = validatePluginNames(marketplace, options.plugins);
       
       if (invalid.length > 0) {
-        console.error(`Error: The following plugins were not found in marketplace '${marketplace.name}':`);
-        for (const name of invalid) {
-          console.error(`  - ${name}`);
-        }
-        console.error(`\nAvailable plugins: ${marketplace.plugins.map(p => p.name).join(', ')}`);
+        const errorMsg = [
+          `Error: The following plugins were not found in marketplace '${marketplace.name}':`,
+          ...invalid.map(name => `  - ${name}`),
+          `\nAvailable plugins: ${marketplace.plugins.map(p => p.name).join(', ')}`
+        ].join('\n');
+        log.error(errorMsg);
         return {
           success: false,
           error: `Plugins not found: ${invalid.join(', ')}`
@@ -263,21 +267,63 @@ export class InstallOrchestrator {
       }
       
       if (valid.length === 0) {
-        console.log('No valid plugins specified. Installation cancelled.');
+        log.info('No valid plugins specified. Installation cancelled.');
         return { success: true, data: { installed: 0, skipped: 0 } };
       }
       
-      selectedPlugins = valid;
-      console.log(`✓ Marketplace: ${marketplace.name}`);
-      console.log(`Installing ${selectedPlugins.length} plugin${selectedPlugins.length === 1 ? '' : 's'}: ${selectedPlugins.join(', ')}`);
+      log.info(`Marketplace: ${marketplace.name}`);
+      log.message(`Installing ${valid.length} plugin${valid.length === 1 ? '' : 's'}: ${valid.join(', ')}`);
+      
+      // Install each plugin in full mode (non-interactive)
+      const results: CommandResult[] = [];
+      for (const pluginName of valid) {
+        const commitSha = (context.source as any)._commitSha || '';
+        if (!commitSha) {
+          throw new Error('Marketplace commit SHA not available');
+        }
+        
+        const result = await installMarketplacePlugins(
+          context.source.contentRoot!,
+          marketplace,
+          pluginName,
+          'full',
+          context.source.gitUrl!,
+          context.source.gitRef,
+          commitSha,
+          options,
+          execContext,
+          { agents: options.agents, skills: options.skills, rules: options.rules, commands: options.commands }
+        );
+        
+        results.push(result);
+      }
+      
+      // Return combined result
+      const allSuccess = results.every(r => r.success);
+      const anySuccess = results.some(r => r.success);
+      
+      return {
+        success: anySuccess,
+        error: allSuccess ? undefined : 'Some plugins failed to install'
+      };
     } else {
-      // Interactive: prompt user
-      selectedPlugins = await promptPluginSelection(marketplace);
+      // Interactive: prompt user for single plugin selection
+      selectedPlugin = await promptPluginSelection(marketplace);
       
-      if (selectedPlugins.length === 0) {
-        console.log('No plugins selected. Installation cancelled.');
+      if (!selectedPlugin) {
+        log.info('No plugin selected. Installation cancelled.');
         return { success: true, data: { installed: 0, skipped: 0 } };
       }
+      
+      // Prompt for install mode
+      const mode = await promptInstallMode(selectedPlugin);
+      
+      if (!mode) {
+        log.info('Installation cancelled.');
+        return { success: true, data: { installed: 0, skipped: 0 } };
+      }
+      
+      installMode = mode;
     }
     
     // Verify it's a git source
@@ -293,7 +339,8 @@ export class InstallOrchestrator {
     return await installMarketplacePlugins(
       context.source.contentRoot!,
       marketplace,
-      selectedPlugins,
+      selectedPlugin,
+      installMode,
       context.source.gitUrl,
       context.source.gitRef,
       commitSha,

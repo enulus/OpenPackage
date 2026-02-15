@@ -4,6 +4,7 @@
  * Interactive menu for selecting specific resources to install
  */
 
+import { log } from '@clack/prompts';
 import { logger } from '../../utils/logger.js';
 import { UserCancellationError } from '../../utils/errors.js';
 import { clackGroupMultiselect } from '../../utils/clack-multiselect.js';
@@ -31,18 +32,14 @@ export async function promptResourceSelection(
   packageVersion?: string
 ): Promise<SelectedResource[]> {
   logger.debug('Prompting resource selection', {
-    packageName,
+    package: packageName,
+    version: packageVersion,
     total: discovery.total
   });
   
-  // Display header
-  const versionSuffix = packageVersion ? ` (v${packageVersion})` : '';
-  console.log(`✓ Package: ${packageName}${versionSuffix}`);
-  console.log(`  ${discovery.total} resource${discovery.total === 1 ? '' : 's'} available\n`);
-  
   // No resources found
   if (discovery.total === 0) {
-    console.log('⚠️  No resources found in this package');
+    log.warn('No resources found in this package');
     return [];
   }
   
@@ -50,7 +47,7 @@ export async function promptResourceSelection(
   const groupedOptions = buildGroupedOptions(discovery);
   
   if (Object.keys(groupedOptions).length === 0) {
-    console.log('⚠️  No installable resources found');
+    log.warn('No installable resources found');
     return [];
   }
   
@@ -187,14 +184,14 @@ export function displaySelectionSummary(selected: SelectedResource[]): void {
     byType.set(resource.resourceType, count + 1);
   }
   
-  console.log(`\n✓ Selected ${selected.length} resource${selected.length === 1 ? '' : 's'}:`);
+  const summary = [`Selected ${selected.length} resource${selected.length === 1 ? '' : 's'}:`];
   
   for (const [type, count] of byType.entries()) {
     const label = getTypeLabel(type);
-    console.log(`  • ${count} ${label.toLowerCase()}`);
+    summary.push(`  • ${count} ${label.toLowerCase()}`);
   }
   
-  console.log('');
+  log.info(summary.join('\n'));
 }
 
 /**
@@ -213,19 +210,15 @@ export async function promptCatalogSelection(
     total: catalog.total
   });
   
-  const versionSuffix = header.version ? ` (v${header.version})` : '';
-  console.log(`✓ Package: ${header.name}${versionSuffix}`);
-  console.log(`  ${catalog.total} resource${catalog.total === 1 ? '' : 's'} available\n`);
-  
   if (catalog.total === 0) {
-    console.log(`⚠️  No resources found`);
+    log.warn('No resources found');
     return [];
   }
   
   const { choices, categoryMap, indexToEntry } = buildCatalogMenuChoices(catalog);
   
   if (choices.length === 0) {
-    console.log(`⚠️  No selectable resources found`);
+    log.warn('No selectable resources found');
     return [];
   }
   
