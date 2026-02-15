@@ -1,4 +1,3 @@
-import { box, note } from '@clack/prompts';
 import { formatPathForDisplay } from '../../utils/formatters.js';
 
 export interface UninstallResult {
@@ -10,35 +9,39 @@ export interface UninstallResult {
 /**
  * Report uninstall results to console
  */
-export function reportUninstallResult(result: UninstallResult): void {
-  const summaryParts: string[] = [];
+export function reportUninstallResult(result: UninstallResult, context?: { interactive?: boolean }): void {
+  // Suppress output in interactive mode (spinner handles feedback)
+  if (context?.interactive) return;
   
+  const cwd = process.cwd();
+  
+  // Main success message
+  console.log(`✓ Uninstalled ${result.packageName}`);
+  
+  // Display removed files in tree-style format
   if (result.removedFiles.length > 0) {
-    summaryParts.push(`Removed files: ${result.removedFiles.length}`);
-  }
-  
-  if (result.rootFilesUpdated.length > 0) {
-    summaryParts.push(`Updated root files: ${result.rootFilesUpdated.length}`);
-  }
-  
-  const content = summaryParts.length > 0 ? summaryParts.join('\n') : 'No changes';
-  
-  box(content, `✓ ${result.packageName}`);
-  
-  if (result.removedFiles.length > 0) {
+    console.log(`✓ Removed files: ${result.removedFiles.length}`);
     const sortedFiles = [...result.removedFiles].sort((a, b) => a.localeCompare(b));
-    const displayFiles = sortedFiles.map(f => formatPathForDisplay(f));
-    const fileList = displayFiles.slice(0, 3).join('\n') + 
-      (displayFiles.length > 3 ? `\n... and ${displayFiles.length - 3} more` : '');
-    note(fileList, 'Removed Files');
+    const displayFiles = sortedFiles.slice(0, 10);
+    for (const file of displayFiles) {
+      console.log(`   ├── ${formatPathForDisplay(file, cwd)}`);
+    }
+    if (sortedFiles.length > 10) {
+      console.log(`   ... and ${sortedFiles.length - 10} more`);
+    }
   }
   
+  // Display updated root files in tree-style format
   if (result.rootFilesUpdated.length > 0) {
+    console.log(`✓ Updated root files: ${result.rootFilesUpdated.length}`);
     const sortedFiles = [...result.rootFilesUpdated].sort((a, b) => a.localeCompare(b));
-    const displayFiles = sortedFiles.map(f => `${formatPathForDisplay(f)} (updated)`);
-    const fileList = displayFiles.slice(0, 3).join('\n') + 
-      (displayFiles.length > 3 ? `\n... and ${displayFiles.length - 3} more` : '');
-    note(fileList, 'Updated Root Files');
+    const displayFiles = sortedFiles.slice(0, 10);
+    for (const file of displayFiles) {
+      console.log(`   ├── ${formatPathForDisplay(file, cwd)}`);
+    }
+    if (sortedFiles.length > 10) {
+      console.log(`   ... and ${sortedFiles.length - 10} more`);
+    }
   }
 }
 
@@ -53,26 +56,39 @@ export interface ResourceUninstallResult {
 /**
  * Report resource-level uninstall results to console
  */
-export function reportResourceUninstallResult(result: ResourceUninstallResult): void {
+export function reportResourceUninstallResult(result: ResourceUninstallResult, context?: { interactive?: boolean }): void {
+  // Suppress output in interactive mode (spinner handles feedback)
+  if (context?.interactive) return;
+  
+  const cwd = process.cwd();
+  
+  // Main success message
   const fromPkg = result.packageName ? ` from ${result.packageName}` : '';
-  const fileCount = result.removedFiles.length;
-  const content = `Type: ${result.resourceType}\nFiles removed: ${fileCount}${fromPkg}`;
+  console.log(`✓ Uninstalled ${result.resourceName}${fromPkg}`);
   
-  box(content, `✓ ${result.resourceName}`);
-  
+  // Display removed files in tree-style format
   if (result.removedFiles.length > 0) {
+    console.log(`✓ Removed files: ${result.removedFiles.length}`);
     const sortedFiles = [...result.removedFiles].sort((a, b) => a.localeCompare(b));
-    const displayFiles = sortedFiles.map(f => formatPathForDisplay(f));
-    const fileList = displayFiles.slice(0, 3).join('\n') + 
-      (displayFiles.length > 3 ? `\n... and ${displayFiles.length - 3} more` : '');
-    note(fileList, 'Removed Files');
+    const displayFiles = sortedFiles.slice(0, 10);
+    for (const file of displayFiles) {
+      console.log(`   ├── ${formatPathForDisplay(file, cwd)}`);
+    }
+    if (sortedFiles.length > 10) {
+      console.log(`   ... and ${sortedFiles.length - 10} more`);
+    }
   }
   
+  // Display updated root files in tree-style format
   if (result.rootFilesUpdated.length > 0) {
+    console.log(`✓ Updated root files: ${result.rootFilesUpdated.length}`);
     const sortedFiles = [...result.rootFilesUpdated].sort((a, b) => a.localeCompare(b));
-    const displayFiles = sortedFiles.map(f => `${formatPathForDisplay(f)} (updated)`);
-    const fileList = displayFiles.slice(0, 3).join('\n') + 
-      (displayFiles.length > 3 ? `\n... and ${displayFiles.length - 3} more` : '');
-    note(fileList, 'Updated Root Files');
+    const displayFiles = sortedFiles.slice(0, 10);
+    for (const file of displayFiles) {
+      console.log(`   ├── ${formatPathForDisplay(file, cwd)}`);
+    }
+    if (sortedFiles.length > 10) {
+      console.log(`   ... and ${sortedFiles.length - 10} more`);
+    }
   }
 }

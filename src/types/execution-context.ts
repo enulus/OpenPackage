@@ -40,6 +40,12 @@ export interface ExecutionContext {
    * When present, successful installations will report telemetry.
    */
   telemetryCollector?: TelemetryCollector;
+  
+  /**
+   * Indicates interactive mode (--list).
+   * When true, suppress detailed output to keep the interface clean.
+   */
+  interactive?: boolean;
 }
 
 /**
@@ -56,6 +62,12 @@ export interface ExecutionOptions {
    * (Ignored if global is true)
    */
   cwd?: string;
+  
+  /**
+   * Indicates interactive mode (--list).
+   * When true, commands should operate in interactive selection mode.
+   */
+  interactive?: boolean;
 }
 
 /**

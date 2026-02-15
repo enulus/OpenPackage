@@ -60,7 +60,8 @@ export async function createExecutionContext(options: ExecutionOptions = {}): Pr
   const context: ExecutionContext = {
     sourceCwd,
     targetDir,
-    isGlobal
+    isGlobal,
+    interactive: options.interactive
   };
   
   // Validate context

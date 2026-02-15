@@ -521,3 +521,45 @@ export async function getContentPreview(filePath: string, maxLines: number = 3):
   }
 }
 
+/**
+ * Display a multiselect prompt
+ * Wrapper around safePrompts for consistent multiselect UX
+ */
+export async function promptMultiselect<T = string>(
+  message: string,
+  choices: Array<{ title: string; value: T; description?: string }>,
+  options?: { hint?: string; min?: number }
+): Promise<T[]> {
+  const response = await safePrompts({
+    type: 'multiselect',
+    name: 'selected',
+    message,
+    choices,
+    hint: options?.hint || '- Space: select/deselect • Enter: confirm',
+    min: options?.min,
+    instructions: false
+  });
+
+  return response.selected || [];
+}
+
+/**
+ * Display a select prompt
+ * Wrapper around safePrompts for consistent select UX
+ */
+export async function promptSelect<T = string>(
+  message: string,
+  choices: Array<{ title: string; value: T; description?: string }>,
+  options?: { hint?: string }
+): Promise<T | null> {
+  const response = await safePrompts({
+    type: 'select',
+    name: 'selected',
+    message,
+    choices,
+    hint: options?.hint || 'Use arrow keys to navigate, Enter to select'
+  });
+
+  return response.selected ?? null;
+}
+

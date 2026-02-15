@@ -7,8 +7,7 @@
  * - N candidates → shows multiselect prompt for user to choose
  */
 
-import { note, cancel } from '@clack/prompts';
-import { clackMultiselect, clackSelect } from '../../utils/clack-wrappers.js';
+import { promptMultiselect, promptSelect } from '../../utils/prompts.js';
 import { ValidationError } from '../../utils/errors.js';
 
 export interface DisambiguationChoice<T> {
@@ -72,12 +71,12 @@ export async function disambiguate<T>(
     };
   });
 
-  note(ambiguousHeader.replace(/\$\{name\}/g, name).trim());
+  console.log(ambiguousHeader.replace(/\$\{name\}/g, name).trim());
 
   if (multi) {
-    const selectedIndices = await clackMultiselect(
+    const selectedIndices = await promptMultiselect(
       promptMessage,
-      choices.map(c => ({ value: c.value, label: c.title, hint: c.description }))
+      choices.map(c => ({ value: c.value, title: c.title, description: c.description }))
     );
 
     if (!selectedIndices || selectedIndices.length === 0) {
@@ -86,9 +85,9 @@ export async function disambiguate<T>(
     return selectedIndices.map(i => candidates[i]);
   } else {
     // Single select mode
-    const selectedIndex = await clackSelect(
+    const selectedIndex = await promptSelect(
       promptMessage,
-      choices.map(c => ({ value: c.value, label: c.title, hint: c.description }))
+      choices.map(c => ({ value: c.value, title: c.title, description: c.description }))
     );
 
     if (selectedIndex === null || selectedIndex === undefined) {
