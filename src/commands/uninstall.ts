@@ -7,12 +7,14 @@ import { withErrorHandling, ValidationError, UserCancellationError } from '../ut
 import { runUninstallPipeline, runSelectiveUninstallPipeline } from '../core/uninstall/uninstall-pipeline.js';
 import { reportUninstallResult, reportResourceUninstallResult } from '../core/uninstall/uninstall-reporter.js';
 import { createExecutionContext } from '../core/execution-context.js';
-import { getHomeDirectory } from '../utils/home-directory.js';
 import { remove, exists } from '../utils/fs.js';
-import { buildWorkspaceResources, type ResolvedResource, type ResolvedPackage } from '../core/uninstall/resource-builder.js';
-import { resolveByName, type ResolutionCandidate } from '../core/uninstall/resource-resolver.js';
+import { buildWorkspaceResources, type ResolvedResource, type ResolvedPackage } from '../core/resources/resource-builder.js';
+import { resolveByName, type ResolutionCandidate } from '../core/resources/resource-resolver.js';
+import { traverseScopes, traverseScopesFlat } from '../core/resources/scope-traversal.js';
+import { disambiguate } from '../core/resources/disambiguation-prompt.js';
 import { buildPreservedDirectoriesSet } from '../utils/directory-preservation.js';
-import { logger } from '../utils/logger.js';
+import { cleanupEmptyParents } from '../utils/cleanup-empty-parents.js';
+import { formatScopeTag } from '../utils/formatters.js';
 
 interface UninstallCommandOptions extends UninstallOptions {
   list?: boolean;
@@ -46,95 +48,37 @@ async function handleDirectUninstall(
   options: UninstallCommandOptions,
   programOpts: Record<string, any>
 ) {
-  // Collect candidates across applicable scopes
-  const candidates: ResolutionCandidate[] = [];
-  const showProject = !options.global;
-  const showGlobal = true; // always include global scope
-
-  if (showProject) {
-    try {
-      const projectCtx = await createExecutionContext({ global: false, cwd: programOpts.cwd });
-      const projectResult = await resolveByName(name, projectCtx.targetDir, 'project');
-      candidates.push(...projectResult.candidates);
-    } catch (error) {
-      logger.debug(`Project scope resolution skipped: ${error}`);
+  const candidates = await traverseScopesFlat<ResolutionCandidate>(
+    { programOpts, globalOnly: options.global },
+    async ({ scope, context }) => {
+      const result = await resolveByName(name, context.targetDir, scope);
+      return result.candidates;
     }
-  }
+  );
 
-  if (showGlobal) {
-    try {
-      const globalCtx = await createExecutionContext({ global: true, cwd: programOpts.cwd });
-      const globalResult = await resolveByName(name, globalCtx.targetDir, 'global');
-      candidates.push(...globalResult.candidates);
-    } catch (error) {
-      logger.debug(`Global scope resolution skipped: ${error}`);
+  const selected = await disambiguate(
+    name,
+    candidates,
+    (c) => ({
+      title: formatCandidateTitle(c),
+      description: formatCandidateDescription(c),
+      value: c,
+    }),
+    {
+      notFoundMessage: `"${name}" not found as a resource or package.\nRun \`opkg ls\` to see installed resources.`,
+      promptMessage: 'Select which to uninstall:',
     }
-  }
-
-  if (candidates.length === 0) {
-    throw new ValidationError(
-      `"${name}" not found as a resource or package.\n` +
-      `Run \`opkg ls\` to see installed resources.`
-    );
-  }
-
-  // Single match — proceed directly
-  if (candidates.length === 1) {
-    const ctx = await createExecutionContext({
-      global: candidates[0].resource?.scope === 'global' || candidates[0].package?.scope === 'global',
-      cwd: programOpts.cwd
-    });
-    await executeCandidate(candidates[0], options, ctx);
-    return;
-  }
-
-  // Multiple matches — prompt for disambiguation
-  const choices = candidates.map((c, i) => ({
-    title: formatCandidateTitle(c),
-    description: formatCandidateDescription(c),
-    value: i
-  }));
-
-  console.log(`\n"${name}" matches multiple items:\n`);
-
-  let selected: number[];
-  try {
-    const response = await prompts(
-      {
-        type: 'multiselect',
-        name: 'items',
-        message: 'Select which to uninstall:',
-        choices,
-        hint: '- Space: select/deselect • Enter: confirm',
-        min: 1,
-        instructions: false
-      },
-      {
-        onCancel: () => {
-          throw new UserCancellationError('Operation cancelled by user');
-        }
-      }
-    );
-
-    selected = response.items || [];
-  } catch (error) {
-    if (error instanceof UserCancellationError) {
-      console.log('Uninstall cancelled.');
-      return;
-    }
-    throw error;
-  }
+  );
 
   if (selected.length === 0) {
-    console.log('No items selected. Uninstall cancelled.');
+    console.log('Uninstall cancelled.');
     return;
   }
 
-  for (const idx of selected) {
-    const candidate = candidates[idx];
+  for (const candidate of selected) {
     const ctx = await createExecutionContext({
       global: candidate.resource?.scope === 'global' || candidate.package?.scope === 'global',
-      cwd: programOpts.cwd
+      cwd: programOpts.cwd,
     });
     await executeCandidate(candidate, options, ctx);
   }
@@ -150,32 +94,13 @@ async function handleListUninstall(
   programOpts: Record<string, any>
 ) {
   // Build resources from applicable scopes
-  const allResources: ResolvedResource[] = [];
-  const allPackages: ResolvedPackage[] = [];
-  const showProject = !options.global;
-  const showGlobal = true;
+  const scopeResults = await traverseScopes(
+    { programOpts, globalOnly: options.global },
+    async ({ scope, context }) => buildWorkspaceResources(context.targetDir, scope)
+  );
 
-  if (showProject) {
-    try {
-      const projectCtx = await createExecutionContext({ global: false, cwd: programOpts.cwd });
-      const projectData = await buildWorkspaceResources(projectCtx.targetDir, 'project');
-      allResources.push(...projectData.resources);
-      allPackages.push(...projectData.packages);
-    } catch (error) {
-      logger.debug(`Project scope scan skipped: ${error}`);
-    }
-  }
-
-  if (showGlobal) {
-    try {
-      const globalCtx = await createExecutionContext({ global: true, cwd: programOpts.cwd });
-      const globalData = await buildWorkspaceResources(globalCtx.targetDir, 'global');
-      allResources.push(...globalData.resources);
-      allPackages.push(...globalData.packages);
-    } catch (error) {
-      logger.debug(`Global scope scan skipped: ${error}`);
-    }
-  }
+  const allResources = scopeResults.flatMap(sr => sr.result.resources);
+  const allPackages = scopeResults.flatMap(sr => sr.result.packages);
 
   // Filter to specific package if provided
   let filteredResources = allResources;
@@ -361,27 +286,8 @@ async function executeCandidate(
   // Cleanup empty parent directories
   if (!options.dryRun && removedFiles.length > 0) {
     const preservedDirs = buildPreservedDirectoriesSet(targetDir);
-    // Import and reuse cleanupEmptyParents would be ideal but it's not exported;
-    // handle inline for simplicity
-    for (const filePath of removedFiles) {
-      let dir = path.dirname(path.join(targetDir, filePath));
-      while (dir !== targetDir && dir.startsWith(targetDir)) {
-        if (preservedDirs.has(dir)) break;
-        try {
-          const { readdir } = await import('fs/promises');
-          const entries = await readdir(dir);
-          if (entries.length === 0) {
-            await remove(dir);
-            logger.debug(`Removed empty directory: ${path.relative(targetDir, dir)}`);
-          } else {
-            break;
-          }
-        } catch {
-          break;
-        }
-        dir = path.dirname(dir);
-      }
-    }
+    const deletedAbsPaths = removedFiles.map(f => path.join(targetDir, f));
+    await cleanupEmptyParents(targetDir, deletedAbsPaths, preservedDirs);
   }
 
   reportResourceUninstallResult({
@@ -425,10 +331,6 @@ function formatFileListDescription(files: string[]): string {
     desc += `\n(+${remaining} more)`;
   }
   return desc;
-}
-
-function formatScopeTag(scope: string): string {
-  return scope === 'global' ? ' [g]' : ' [p]';
 }
 
 // ---------------------------------------------------------------------------

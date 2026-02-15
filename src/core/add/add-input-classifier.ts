@@ -8,7 +8,7 @@ import { detectGitSource } from '../../utils/git-url-detection.js';
 import { ValidationError } from '../../utils/errors.js';
 import { logger } from '../../utils/logger.js';
 
-export type AddMode = 'dependency' | 'copy';
+export type AddMode = 'dependency' | 'copy' | 'workspace-resource';
 
 export interface AddInputClassification {
   mode: AddMode;
@@ -20,6 +20,8 @@ export interface AddInputClassification {
   localPath?: string;
   resourcePath?: string;
   copySourcePath?: string;
+  /** Resolved workspace resource (for workspace-resource mode) */
+  resolvedResource?: import('../resources/resource-builder.js').ResolvedResource;
 }
 
 export interface AddClassifyOptions {
@@ -120,7 +122,37 @@ export async function classifyAddInput(
       return { mode: 'copy', copySourcePath: absolutePath };
     }
   } catch {
-    // Fall through to legacy classifier
+    // Fall through to workspace resource check / legacy classifier
+  }
+
+  // 3.5. Check if input matches an installed workspace resource by name
+  if (!looksLikePath(input) && !options.copy) {
+    try {
+      const { resolveByName } = await import('../resources/resource-resolver.js');
+      const { traverseScopesFlat } = await import('../resources/scope-traversal.js');
+
+      const resourceCandidates = await traverseScopesFlat(
+        {},
+        async ({ scope, context }) => {
+          const result = await resolveByName(input, context.targetDir, scope);
+          return result.candidates
+            .filter(c => c.kind === 'resource' && c.resource)
+            .map(c => c.resource!);
+        }
+      );
+
+      if (resourceCandidates.length > 0) {
+        logger.debug('Matched workspace resource for add', { input, count: resourceCandidates.length });
+        return {
+          mode: 'workspace-resource' as AddMode,
+          resolvedResource: resourceCandidates[0],
+        };
+      }
+    } catch (error) {
+      logger.debug('Workspace resource check skipped for add', {
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   // 4. Fallback: classifyPackageInput

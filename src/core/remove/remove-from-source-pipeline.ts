@@ -1,5 +1,4 @@
-import { resolve as resolvePath, dirname, join, basename } from 'path';
-import { readdir } from 'fs/promises';
+import { resolve as resolvePath, join, basename } from 'path';
 
 import type { CommandResult } from '../../types/index.js';
 import { FILE_PATTERNS } from '../../constants/index.js';
@@ -13,6 +12,7 @@ import { UserCancellationError } from '../../utils/errors.js';
 import { ensureLocalOpenPackageStructure, createWorkspacePackageYml } from '../../utils/package-management.js';
 import { getLocalOpenPackageDir } from '../../utils/paths.js';
 import { parsePackageYml } from '../../utils/package-yml.js';
+import { cleanupEmptyParents } from '../../utils/cleanup-empty-parents.js';
 
 export interface RemoveFromSourceOptions {
   force?: boolean;
@@ -87,6 +87,55 @@ export async function runRemoveFromSourcePipeline(
     });
   }
 
+  // Try resolving as resource name if path doesn't exist directly
+  const directPath = resolvePath(packageRootDir, resolvedPath);
+  if (!(await exists(directPath))) {
+    try {
+      const { buildSourceResources } = await import('../resources/resource-builder.js');
+      const sourceData = await buildSourceResources(packageRootDir, 'project');
+
+      const nameLower = resolvedPath.toLowerCase();
+      const matchingResources = sourceData.resources.filter(
+        r => r.resourceName.toLowerCase() === nameLower
+      );
+
+      if (matchingResources.length === 1) {
+        logger.info('Resolved resource name to path for remove', {
+          name: resolvedPath,
+          resolvedPath: matchingResources[0].targetFiles[0],
+          resourceType: matchingResources[0].resourceType,
+        });
+        resolvedPath = matchingResources[0].targetFiles[0];
+      } else if (matchingResources.length > 1) {
+        const { disambiguate } = await import('../resources/disambiguation-prompt.js');
+
+        const selected = await disambiguate(
+          resolvedPath,
+          matchingResources,
+          (r) => ({
+            title: `${r.resourceName} (${r.resourceType})`,
+            description: r.targetFiles.join(', '),
+            value: r,
+          }),
+          {
+            notFoundMessage: `"${resolvedPath}" not found in package source.`,
+            promptMessage: 'Select which resource to remove:',
+            multi: false,
+          }
+        );
+
+        if (selected.length === 0) {
+          return { success: false, error: 'Remove cancelled.' };
+        }
+        resolvedPath = selected[0].targetFiles[0];
+      }
+    } catch (error) {
+      logger.debug('Resource name resolution skipped for remove', {
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   // Collect files to remove
   let entries: RemovalEntry[];
   try {
@@ -139,26 +188,19 @@ export async function runRemoveFromSourcePipeline(
 
   // Remove files
   const removedPaths: string[] = [];
-  const directoriesToClean = new Set<string>();
+  const removedAbsolutePaths: string[] = [];
 
   for (const entry of entries) {
     if (await exists(entry.packagePath)) {
       await remove(entry.packagePath);
       removedPaths.push(entry.registryPath);
-      
-      // Track parent directories for cleanup
-      let parent = dirname(entry.packagePath);
-      while (parent !== packageRootDir && parent.startsWith(packageRootDir)) {
-        directoriesToClean.add(parent);
-        parent = dirname(parent);
-      }
-      
+      removedAbsolutePaths.push(entry.packagePath);
       logger.debug('Removed file', { path: entry.packagePath });
     }
   }
 
   // Clean up empty directories
-  await cleanupEmptyDirectories(Array.from(directoriesToClean).sort((a, b) => b.length - a.length));
+  await cleanupEmptyParents(packageRootDir, removedAbsolutePaths);
 
   logger.info('Files removed from package source', {
     packageName: resolvedName,
@@ -175,30 +217,6 @@ export async function runRemoveFromSourcePipeline(
       removedPaths
     }
   };
-}
-
-/**
- * Clean up empty directories after file removal.
- * Directories are processed from deepest to shallowest.
- */
-async function cleanupEmptyDirectories(directories: string[]): Promise<void> {
-  for (const dir of directories) {
-    try {
-      if (await exists(dir)) {
-        const entries = await readdir(dir);
-        if (entries.length === 0) {
-          await remove(dir);
-          logger.debug('Removed empty directory', { path: dir });
-        }
-      }
-    } catch (error) {
-      // Ignore errors during cleanup
-      logger.debug('Failed to clean up directory', { 
-        path: dir, 
-        error: error instanceof Error ? error.message : String(error) 
-      });
-    }
-  }
 }
 
 /**

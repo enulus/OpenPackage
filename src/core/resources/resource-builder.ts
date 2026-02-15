@@ -2,16 +2,20 @@
  * Resource Builder
  *
  * Scans all packages in the workspace index and untracked files to build
- * a flat list of resolved resources for resource-level uninstall operations.
+ * a flat list of resolved resources for resource-level operations.
+ *
+ * Also provides a source-side builder that wraps the resource discoverer
+ * to build resources from a package source directory.
  */
 
 import { readWorkspaceIndex } from '../../utils/workspace-index-yml.js';
 import { isRootPackage } from '../../utils/paths.js';
-import { classifySourceKey } from '../resources/source-key-classifier.js';
+import { classifySourceKey } from './source-key-classifier.js';
 import { getTargetPath } from '../../utils/workspace-index-helpers.js';
 import { scanUntrackedFiles } from '../list/untracked-files-scanner.js';
-import { normalizeType, RESOURCE_TYPE_ORDER } from '../resources/resource-registry.js';
-import type { ResourceScope } from '../list/list-tree-renderer.js';
+import { normalizeType, RESOURCE_TYPE_ORDER } from './resource-registry.js';
+import { deriveUntrackedResourceName } from './resource-naming.js';
+import type { ResourceScope } from './scope-traversal.js';
 
 export interface ResolvedResource {
   kind: 'tracked' | 'untracked';
@@ -24,6 +28,10 @@ export interface ResolvedResource {
   /** Target file paths in the workspace (for display) */
   targetFiles: string[];
   scope: ResourceScope;
+  /** Absolute path to source file/directory (source-side builder only) */
+  sourcePath?: string;
+  /** Install kind - file or directory (source-side builder only) */
+  installKind?: 'file' | 'directory';
 }
 
 export interface ResolvedPackage {
@@ -40,22 +48,8 @@ export interface WorkspaceResources {
 }
 
 /**
- * Derive a display name from an untracked file's workspace path.
- * For SKILL.md files nested in a directory, uses the parent directory name.
- * Otherwise uses the filename without extension.
- */
-function deriveUntrackedResourceName(workspacePath: string): string {
-  const parts = workspacePath.split('/');
-  const fileName = parts[parts.length - 1];
-  if (fileName === 'SKILL.md' && parts.length >= 2) {
-    return parts[parts.length - 2];
-  }
-  return fileName.replace(/\.[^.]+$/, '') || fileName;
-}
-
-/**
  * Build a flat list of all workspace resources (tracked and untracked)
- * for use in resource-level uninstall operations.
+ * for use in resource-level operations.
  */
 export async function buildWorkspaceResources(
   targetDir: string,
@@ -161,4 +155,46 @@ export async function buildWorkspaceResources(
   resolvedPackages.sort((a, b) => a.packageName.localeCompare(b.packageName));
 
   return { resources, packages: resolvedPackages };
+}
+
+/**
+ * Build a flat list of resources from a package source directory.
+ * Wraps the resource discoverer and normalizes output into ResolvedResource[].
+ * Used by commands that operate on package sources (add --copy, remove).
+ *
+ * @param sourceDir - Absolute path to the package source directory
+ * @param scope - Resource scope for the source
+ */
+export async function buildSourceResources(
+  sourceDir: string,
+  scope: ResourceScope
+): Promise<WorkspaceResources> {
+  const { discoverResources } = await import('../install/resource-discoverer.js');
+  const discovery = await discoverResources(sourceDir, sourceDir);
+
+  const resources: ResolvedResource[] = [];
+
+  for (const discovered of discovery.all) {
+    resources.push({
+      kind: 'tracked',
+      resourceName: discovered.displayName,
+      resourceType: discovered.resourceType,
+      sourceKeys: new Set([discovered.resourcePath]),
+      targetFiles: [discovered.resourcePath],
+      scope,
+      sourcePath: discovered.filePath,
+      installKind: discovered.installKind,
+    });
+  }
+
+  // Sort by type order then name (same as workspace builder)
+  const typeOrderMap = new Map(RESOURCE_TYPE_ORDER.map((t, i) => [t, i]));
+  resources.sort((a, b) => {
+    const orderA = typeOrderMap.get(a.resourceType as any) ?? Infinity;
+    const orderB = typeOrderMap.get(b.resourceType as any) ?? Infinity;
+    if (orderA !== orderB) return orderA - orderB;
+    return a.resourceName.localeCompare(b.resourceName);
+  });
+
+  return { resources, packages: [] };
 }

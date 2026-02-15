@@ -9,7 +9,7 @@ export function setupRemoveCommand(program: Command): void {
   program
     .command('remove')
     .alias('rm')
-    .argument('<path>', 'file or directory to remove')
+    .argument('<path>', 'file, directory, or resource name to remove')
     .description('Remove files from a mutable package source or workspace package')
     .option('--from <package-name>', 'source package name (defaults to workspace package)')
     .option('--force', 'Skip confirmation prompts')

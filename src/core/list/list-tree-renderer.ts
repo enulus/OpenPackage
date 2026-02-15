@@ -1,9 +1,7 @@
 import type { ListResourceGroup, ListResourceInfo, ListFileMapping } from './list-pipeline.js';
+import type { ResourceScope } from '../resources/scope-traversal.js';
 
-/**
- * Resource scope for enhanced display
- */
-export type ResourceScope = 'project' | 'global';
+export type { ResourceScope } from '../resources/scope-traversal.js';
 
 /**
  * Enhanced file mapping with status and scope

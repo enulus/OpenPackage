@@ -7,12 +7,13 @@ import { logger } from '../utils/logger.js';
 import { parsePackageYml } from '../utils/package-yml.js';
 import { getLocalPackageYmlPath } from '../utils/paths.js';
 import { createExecutionContext, getDisplayTargetDir } from '../core/execution-context.js';
-import type { UntrackedScanResult, UntrackedFile } from '../core/list/untracked-files-scanner.js';
+import type { UntrackedScanResult } from '../core/list/untracked-files-scanner.js';
 import { classifyInput } from '../core/install/preprocessing/index.js';
 import { resolveRemoteList, type RemoteListResult } from '../core/list/remote-list-resolver.js';
 import { detectEntityType, getEntityDisplayName } from '../utils/entity-detector.js';
-import { formatPathForDisplay } from '../utils/formatters.js';
+import { formatPathForDisplay, formatScopeBadge } from '../utils/formatters.js';
 import { resolveDeclaredPath } from '../utils/path-resolution.js';
+import { deriveUntrackedResourceName } from '../core/resources/resource-naming.js';
 import { RESOURCE_TYPE_ORDER_PLURAL, normalizeType, toPluralKey } from '../core/resources/resource-registry.js';
 import { renderResourceGroup, type TreeRenderConfig, type EnhancedFileMapping, type EnhancedResourceInfo, type EnhancedResourceGroup, type ResourceScope } from '../core/list/list-tree-renderer.js';
 
@@ -79,12 +80,6 @@ function formatFilePath(file: EnhancedFileMapping): string {
     return `~/${file.target}`;
   }
   return file.target;
-}
-
-function formatScopeBadges(scopes: Set<ResourceScope>): string {
-  const sorted = Array.from(scopes).sort();
-  const badges = sorted.map(s => s === 'project' ? 'p' : 'g').join(', ');
-  return dim(`[${badges}]`);
 }
 
 // ---------------------------------------------------------------------------
@@ -251,7 +246,7 @@ function printDepsView(
     const hasResources = showFiles && entry.report.resourceGroups && entry.report.resourceGroups.length > 0;
     const hasBranches = hasChildren || hasResources;
 
-    const scopeBadge = formatScopeBadges(entry.scopes);
+    const scopeBadge = dim(formatScopeBadge(entry.scopes));
     const connector = isLast
       ? (hasBranches ? '└─┬ ' : '└── ')
       : (hasBranches ? '├─┬ ' : '├── ');
@@ -286,17 +281,6 @@ function printDepsView(
 // ---------------------------------------------------------------------------
 // Resources view (default: `opkg list`)
 // ---------------------------------------------------------------------------
-
-function deriveResourceNameFromUntrackedFile(file: UntrackedFile): string {
-  const parts = file.workspacePath.split('/');
-  const fileName = parts[parts.length - 1];
-
-  if (fileName === 'SKILL.md' && parts.length >= 2) {
-    return parts[parts.length - 2];
-  }
-
-  return fileName.replace(/\.[^.]+$/, '') || fileName;
-}
 
 function normalizeCategory(category: string): string {
   return toPluralKey(normalizeType(category));
@@ -356,7 +340,7 @@ function mergeTrackedAndUntrackedResources(
 
   if (untrackedFiles && untrackedFiles.files.length > 0) {
     for (const file of untrackedFiles.files) {
-      const resourceName = deriveResourceNameFromUntrackedFile(file);
+      const resourceName = deriveUntrackedResourceName(file.workspacePath);
       const normalizedType = normalizeCategory(file.category);
 
       if (!typeMap.has(normalizedType)) {
@@ -488,7 +472,7 @@ function printResourcesView(
       const pathB = formatFilePath(b);
       return pathA.localeCompare(pathB);
     },
-    getResourceBadge: (scopes) => scopes ? formatScopeBadges(scopes) : ''
+    getResourceBadge: (scopes) => scopes ? dim(formatScopeBadge(scopes)) : ''
   };
 
   for (let gi = 0; gi < groups.length; gi++) {

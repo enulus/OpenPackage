@@ -7,7 +7,7 @@
  */
 
 import { buildWorkspaceResources, type ResolvedResource, type ResolvedPackage } from './resource-builder.js';
-import type { ResourceScope } from '../list/list-tree-renderer.js';
+import type { ResourceScope } from './scope-traversal.js';
 import { logger } from '../../utils/logger.js';
 
 export interface ResolutionCandidate {

@@ -67,7 +67,7 @@ export function setupAddCommand(program: Command): void {
   program
     .command('add')
     .argument('<resource-spec>',
-      'resource to add (package[@version], gh@owner/repo, https://github.com/owner/repo, /path/to/local)')
+      'resource to add (package[@version], gh@owner/repo, https://github.com/owner/repo, /path/to/local, or installed resource name)')
     .description('Add a dependency to openpackage.yml or copy files to a package')
     .option('--to <package-name>', 'target package (for dependency: which manifest; for copy: which package source)')
     .option('--dev', 'add to dev-dependencies instead of dependencies')
@@ -91,6 +91,29 @@ export function setupAddCommand(program: Command): void {
             to: options.to,
           });
           displayDependencyResult(result, classification);
+        } else if (classification.mode === 'workspace-resource') {
+          if (options.dev) {
+            throw new Error('--dev can only be used when adding a dependency, not when copying files');
+          }
+          const resource = classification.resolvedResource!;
+
+          const { createExecutionContext } = await import('../core/execution-context.js');
+          const path = await import('path');
+          const ctx = await createExecutionContext({
+            global: resource.scope === 'global',
+          });
+
+          const absPath = resource.sourcePath || path.default.join(ctx.targetDir, resource.targetFiles[0]);
+
+          const packageName = options.to;
+          const result = await runAddToSourcePipeline(packageName, absPath, options);
+          if (!result.success) {
+            throw new Error(result.error || 'Add operation failed');
+          }
+          if (result.data) {
+            console.log(`💡 Resolved "${resourceSpec}" from installed workspace resources.`);
+            await displayAddResults(result.data);
+          }
         } else {
           if (options.dev) {
             throw new Error('--dev can only be used when adding a dependency, not when copying files');
