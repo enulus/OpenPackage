@@ -14,7 +14,7 @@ import { traverseScopes, traverseScopesFlat, type ResourceScope } from '../core/
 import { disambiguate } from '../core/resources/disambiguation-prompt.js';
 import { buildPreservedDirectoriesSet } from '../utils/directory-preservation.js';
 import { cleanupEmptyParents } from '../utils/cleanup-empty-parents.js';
-import { formatScopeTag } from '../utils/formatters.js';
+import { formatScopeTag, formatPathForDisplay } from '../utils/formatters.js';
 import { clackGroupMultiselect } from '../utils/clack-multiselect.js';
 import { normalizeType, RESOURCE_TYPE_ORDER, toLabelPlural } from '../core/resources/resource-registry.js';
 import { parsePackageYml } from '../utils/package-yml.js';
@@ -289,7 +289,7 @@ async function handleListUninstall(
     return;
   }
 
-  // Create task log for batch uninstall
+  // Create task log for batch uninstall (minimal output - no per-resource grouping)
   const log = taskLog({
     title: `Uninstalling ${selected.length} item${selected.length === 1 ? '' : 's'}`
   });
@@ -306,8 +306,6 @@ async function handleListUninstall(
       
       if (resources.length === 0) {
         // Empty package - uninstall the package metadata itself
-        log.message(packageName);
-        
         const ctx = await createExecutionContext({
           global: scope === 'global',
           cwd: programOpts.cwd,
@@ -339,8 +337,6 @@ async function handleListUninstall(
       } else {
         // Package has resources - uninstall each resource
         for (const resource of resources) {
-          log.message(resource.resourceName);
-          
           const candidate: ResolutionCandidate = { kind: 'resource', resource };
           const ctx = await createExecutionContext({
             global: scope === 'global',
@@ -367,8 +363,6 @@ async function handleListUninstall(
     } else {
       // User selected an individual resource
       const resource = selection.resource;
-      log.message(resource.resourceName);
-      
       const candidate: ResolutionCandidate = { kind: 'resource', resource };
       const ctx = await createExecutionContext({
         global: resource.scope === 'global',
@@ -400,16 +394,17 @@ async function handleListUninstall(
     .join(', ');
 
   log.success(`Successfully uninstalled ${uninstalledCount} item${uninstalledCount === 1 ? '' : 's'} (${breakdown})`);
-  
-  // Show removed files (up to 10) if any
+
+  // Show removed files as flat list using clack note (similar to non-interactive, no per-resource grouping)
   if (allRemovedFiles.length > 0) {
+    const cwd = process.cwd();
     const sortedFiles = [...allRemovedFiles].sort((a, b) => a.localeCompare(b));
     const displayFiles = sortedFiles.slice(0, 10);
-    const fileList = displayFiles.join('\n');
-    const more = sortedFiles.length > 10 ? `\n... and ${sortedFiles.length - 10} more` : '';
-    note(fileList + more, 'Removed files');
+    const fileLines = displayFiles.map(f => `   ├── ${formatPathForDisplay(f, cwd)}`);
+    const more = sortedFiles.length > 10 ? `\n   ... and ${sortedFiles.length - 10} more` : '';
+    note(fileLines.join('\n') + more, 'Removed files');
   }
-  
+
   outro('Uninstall complete');
 }
 

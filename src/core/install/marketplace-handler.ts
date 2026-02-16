@@ -3,6 +3,7 @@ import { readTextFile, exists } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
 import { ValidationError, UserCancellationError } from '../../utils/errors.js';
 import { buildGitInstallContext, buildPathInstallContext, buildResourceInstallContexts } from './unified/context-builders.js';
+import type { InstallationContext } from './unified/context.js';
 import { runUnifiedInstallPipeline } from './unified/pipeline.js';
 import { detectPluginType, detectPluginWithMarketplace, validatePluginManifest } from './plugin-detector.js';
 import { Spinner } from '../../utils/spinner.js';
@@ -775,4 +776,140 @@ export function validatePluginNames(
   }
 
   return { valid, invalid };
+}
+
+/**
+ * Resolved plugin info for resource discovery (used by --list).
+ */
+export interface ResolvedPluginInfo {
+  pluginEntry: MarketplacePluginEntry;
+  context: InstallationContext;
+  basePath: string;
+  repoRoot: string;
+}
+
+/**
+ * Resolve plugin content roots for resource discovery.
+ * Loads each plugin's source and returns resolved paths and contexts
+ * without installing anything.
+ *
+ * @param marketplaceDir - Absolute path to cloned marketplace repository root
+ * @param marketplace - Parsed marketplace manifest
+ * @param pluginNames - Plugin names to resolve
+ * @param marketplaceGitUrl - Git URL of the marketplace repository
+ * @param marketplaceGitRef - Git ref (branch/tag/sha) if specified
+ * @param marketplaceCommitSha - Commit SHA of cached marketplace
+ * @param options - Install options
+ * @param execContext - Execution context
+ * @returns Array of resolved plugin info objects
+ */
+export async function resolvePluginContentRoots(
+  marketplaceDir: string,
+  marketplace: MarketplaceManifest,
+  pluginNames: string[],
+  marketplaceGitUrl: string,
+  marketplaceGitRef: string | undefined,
+  marketplaceCommitSha: string,
+  options: InstallOptions,
+  execContext: ExecutionContext
+): Promise<ResolvedPluginInfo[]> {
+  const results: ResolvedPluginInfo[] = [];
+
+  for (const name of pluginNames) {
+    const pluginEntry = marketplace.plugins.find(p => p.name === name);
+    if (!pluginEntry) continue;
+
+    let normalizedSource: NormalizedPluginSource;
+    try {
+      normalizedSource = normalizePluginSource(pluginEntry.source, name);
+    } catch (error) {
+      logger.warn('Failed to normalize plugin source for list', { plugin: name, error });
+      continue;
+    }
+
+    try {
+      if (isRelativePathSource(normalizedSource)) {
+        const pluginSubdir = normalizedSource.relativePath!;
+        const pluginDir = join(marketplaceDir, pluginSubdir);
+
+        if (!(await exists(pluginDir))) {
+          logger.warn('Plugin path not found for list', { plugin: name, path: pluginSubdir });
+          continue;
+        }
+
+        const ctx = await buildPathInstallContext(execContext, pluginDir, {
+          ...options,
+          sourceType: 'directory' as const
+        });
+
+        ctx.source.gitSourceOverride = {
+          gitUrl: marketplaceGitUrl,
+          gitRef: marketplaceGitRef,
+          gitPath: pluginSubdir
+        };
+
+        ctx.source.pluginMetadata = {
+          isPlugin: true,
+          marketplaceEntry: pluginEntry,
+          marketplaceSource: {
+            url: marketplaceGitUrl,
+            commitSha: marketplaceCommitSha,
+            pluginName: pluginEntry.name
+          }
+        };
+
+        ctx.detectedBase = pluginDir;
+        ctx.baseRelative = relative(marketplaceDir, pluginDir) || '.';
+
+        results.push({
+          pluginEntry,
+          context: ctx,
+          basePath: pluginDir,
+          repoRoot: marketplaceDir
+        });
+      } else if (isGitSource(normalizedSource)) {
+        const ctx = await buildGitInstallContext(execContext, normalizedSource.gitUrl!, {
+          ...options,
+          gitRef: normalizedSource.gitRef,
+          gitPath: normalizedSource.gitPath
+        });
+
+        ctx.source.pluginMetadata = {
+          isPlugin: true,
+          marketplaceEntry: pluginEntry
+        };
+
+        const loader = getLoaderForSource(ctx.source);
+        const loaded = await loader.load(ctx.source, options, execContext);
+
+        ctx.source.packageName = loaded.packageName;
+        ctx.source.version = loaded.version;
+        ctx.source.contentRoot = loaded.contentRoot;
+        ctx.source.pluginMetadata = {
+          ...loaded.pluginMetadata,
+          ...(ctx.source.pluginMetadata ?? {}),
+          marketplaceEntry: pluginEntry
+        };
+
+        if (loaded.sourceMetadata?.baseDetection) {
+          applyBaseDetection(ctx, loaded);
+        }
+
+        const basePath = ctx.detectedBase || loaded.contentRoot || execContext.targetDir;
+        const repoRoot = loaded.sourceMetadata?.repoPath || loaded.contentRoot || basePath;
+
+        results.push({
+          pluginEntry,
+          context: ctx,
+          basePath,
+          repoRoot
+        });
+      }
+    } catch (error) {
+      logger.warn('Failed to resolve plugin for list', { plugin: name, error });
+      continue;
+    }
+  }
+
+  return results;
 }
