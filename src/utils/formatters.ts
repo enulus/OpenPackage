@@ -1,6 +1,6 @@
 import { PackageYml } from '../types/index.js';
-import { toTildePath } from './path-resolution.js';
 import { relative, isAbsolute } from 'path';
+import { normalizePathWithTilde } from './home-directory.js';
 
 /**
  * Formatting utilities for consistent display across commands
@@ -10,7 +10,7 @@ import { relative, isAbsolute } from 'path';
  * Format a file system path for display to the user.
  * 
  * This function provides a unified way to display paths across all commands:
- * - Uses tilde notation (~) for paths under home directory (e.g., ~/.openpackage/packages/...)
+ * - Uses tilde notation (~) for paths under home directory (e.g., ~/.claude/..., ~/.config/..., ~/.openpackage/...)
  * - Uses relative paths from cwd for paths in the workspace
  * - Falls back to absolute path for other cases
  * 
@@ -20,6 +20,7 @@ import { relative, isAbsolute } from 'path';
  * 
  * @example
  * formatPathForDisplay('/Users/user/.openpackage/packages/my-pkg') // => '~/.openpackage/packages/my-pkg'
+ * formatPathForDisplay('/Users/user/.claude/agents/x.md') // => '~/.claude/agents/x.md'
  * formatPathForDisplay('/Users/user/workspace/file.txt', '/Users/user/workspace') // => 'file.txt'
  * formatPathForDisplay('./relative/path.txt') // => './relative/path.txt'
  */
@@ -34,17 +35,17 @@ export function formatPathForDisplay(path: string, cwd: string = process.cwd()):
     return path;
   }
   
-  // Try tilde notation first (for paths under ~/.openpackage/)
-  const tildePath = toTildePath(path);
-  if (tildePath.startsWith('~')) {
-    return tildePath;
-  }
-  
-  // Try relative path from cwd
+  // Try relative path from cwd first (paths in workspace take precedence)
   const relativePath = relative(cwd, path);
   if (relativePath && !relativePath.startsWith('..')) {
     // Only use relative path if it's within cwd (doesn't start with ..)
     return relativePath;
+  }
+  
+  // Use tilde notation for any path under home directory (~/.claude, ~/.config, ~/.cursor, ~/.openpackage, etc.)
+  const tildePath = normalizePathWithTilde(path);
+  if (tildePath.startsWith('~')) {
+    return tildePath;
   }
   
   // Fall back to absolute path

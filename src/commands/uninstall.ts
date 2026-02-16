@@ -300,13 +300,14 @@ async function handleListUninstall(
   // Track counts by type for summary
   const typeCounts = new Map<string, number>();
   let uninstalledCount = 0;
-  const allRemovedFiles: string[] = [];
+  const allRemovedFiles: Array<{ path: string; targetDir: string }> = [];
 
   for (const selection of selected) {
     if (selection.kind === 'package') {
       // User selected an entire package - use full package uninstall (same as direct uninstall)
       // so that manifest (openpackage.yml) and workspace index are properly updated.
       const { packageName, scope, resources } = selection;
+      const targetDir = scopeToTargetDir.get(scope);
       const pkg = filteredPackages.find(p => p.packageName === packageName && p.scope === scope);
       const ctx = await createExecutionContext({
         global: scope === 'global',
@@ -324,7 +325,9 @@ async function handleListUninstall(
         }
       };
       try {
-        allRemovedFiles.push(...candidate.package!.targetFiles);
+        if (targetDir) {
+          candidate.package!.targetFiles.forEach(f => allRemovedFiles.push({ path: f, targetDir }));
+        }
         await executeCandidate(candidate, options, ctx);
         typeCounts.set('packages', (typeCounts.get('packages') || 0) + 1);
         uninstalledCount++;
@@ -335,6 +338,7 @@ async function handleListUninstall(
     } else {
       // User selected an individual resource
       const resource = selection.resource;
+      const targetDir = scopeToTargetDir.get(resource.scope);
       const candidate: ResolutionCandidate = { kind: 'resource', resource };
       const ctx = await createExecutionContext({
         global: resource.scope === 'global',
@@ -344,7 +348,9 @@ async function handleListUninstall(
       
       try {
         // Collect files before execution
-        allRemovedFiles.push(...resource.targetFiles);
+        if (targetDir) {
+          resource.targetFiles.forEach(f => allRemovedFiles.push({ path: f, targetDir }));
+        }
         
         await executeCandidate(candidate, options, ctx);
         
@@ -367,13 +373,16 @@ async function handleListUninstall(
 
   log.success(`Successfully uninstalled ${uninstalledCount} item${uninstalledCount === 1 ? '' : 's'} (${breakdown})`);
 
-  // Show removed files as flat list using clack note (similar to non-interactive, no per-resource grouping)
+  // Show removed files as flat list using clack note (no tree branch - interactive box provides structure)
   if (allRemovedFiles.length > 0) {
     const cwd = process.cwd();
-    const sortedFiles = [...allRemovedFiles].sort((a, b) => a.localeCompare(b));
-    const displayFiles = sortedFiles.slice(0, 10);
-    const fileLines = displayFiles.map(f => `   ├── ${formatPathForDisplay(f, cwd)}`);
-    const more = sortedFiles.length > 10 ? `\n   ... and ${sortedFiles.length - 10} more` : '';
+    // Resolve to absolute paths for unified formatter, dedupe, then sort
+    const absolutePaths = [...new Set(
+      allRemovedFiles.map(({ path: p, targetDir }) => join(targetDir, p))
+    )].sort((a, b) => a.localeCompare(b));
+    const displayFiles = absolutePaths.slice(0, 10);
+    const fileLines = displayFiles.map(f => `   • ${formatPathForDisplay(f, cwd)}`);
+    const more = absolutePaths.length > 10 ? `\n   ... and ${absolutePaths.length - 10} more` : '';
     note(fileLines.join('\n') + more, 'Removed files');
   }
 
