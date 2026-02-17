@@ -2,6 +2,7 @@ import type { InstallationContext } from '../unified/context.js';
 import type { LoadedPackage } from '../sources/base.js';
 import { join, relative } from 'path';
 import { stat } from 'fs/promises';
+import { logger } from '../../../utils/logger.js';
 
 export type SpecialHandling = 'marketplace' | 'ambiguous';
 
@@ -21,6 +22,9 @@ export interface ApplyBaseDetectionResult {
  *
  * This centralizes logic that used to be duplicated in strategies and the
  * pipeline load phase.
+ * 
+ * Includes state tracking to prevent redundant application when called
+ * multiple times (e.g., in strategy preprocessing and load phase).
  */
 export function applyBaseDetection(
   ctx: InstallationContext,
@@ -31,13 +35,22 @@ export function applyBaseDetection(
     return {};
   }
 
+  // Check if base detection has already been applied
+  if (ctx.source._baseDetectionPerformed) {
+    logger.debug('Base detection already applied, skipping redundant application');
+    return {};
+  }
+
   // If loaders already detected marketplace, surface it for orchestrator routing.
   if (loaded.pluginMetadata?.pluginType === 'marketplace') {
+    ctx.source._baseDetectionPerformed = true;
     return { specialHandling: 'marketplace' };
   }
 
   if (baseDetection?.base) {
     ctx.detectedBase = baseDetection.base;
+    // Keep source.detectedBase in sync
+    ctx.source.detectedBase = baseDetection.base;
   }
 
   if (baseDetection?.matchedPattern && !ctx.matchedPattern) {
@@ -63,6 +76,9 @@ export function applyBaseDetection(
     ctx.baseRelative = relative(loaded.contentRoot, ctx.detectedBase) || '.';
   }
 
+  // Mark as performed
+  ctx.source._baseDetectionPerformed = true;
+
   if (baseDetection?.matchType === 'marketplace') {
     return { specialHandling: 'marketplace' };
   }
@@ -78,6 +94,9 @@ export function applyBaseDetection(
  * Compute resource path scoping for installs targeting a concrete resource.
  *
  * Updates ctx.matchedPattern to scope the install to the specified resourcePath.
+ * 
+ * Includes state tracking to prevent redundant computation when called
+ * multiple times (e.g., in strategy preprocessing and load phase).
  *
  * Rules:
  * - If resource resolves to a directory, pattern becomes `<dir>/**`
@@ -89,6 +108,12 @@ export async function computePathScoping(
   loaded: LoadedPackage,
   resourcePath: string
 ): Promise<void> {
+  // Check if path scoping has already been computed
+  if (ctx._pathScopingPerformed) {
+    logger.debug('Path scoping already computed, skipping redundant computation');
+    return;
+  }
+
   const repoRoot = loaded.sourceMetadata?.repoPath || loaded.contentRoot;
   if (!repoRoot) {
     return;
@@ -118,4 +143,7 @@ export async function computePathScoping(
   }
 
   ctx.matchedPattern = isDirectory ? `${relToBaseRaw.replace(/\/$/, '')}/**` : relToBaseRaw;
+  
+  // Mark as performed
+  ctx._pathScopingPerformed = true;
 }

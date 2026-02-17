@@ -1,4 +1,4 @@
-import { resolve as resolvePath, join, basename } from 'path';
+import { resolve as resolvePath, join } from 'path';
 
 import type { CommandResult } from '../../types/index.js';
 import { FILE_PATTERNS } from '../../constants/index.js';
@@ -10,8 +10,8 @@ import type { PackageContext } from '../package-context.js';
 import { parsePackageYml } from '../../utils/package-yml.js';
 import { exists } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
-import { ensureLocalOpenPackageStructure, createWorkspacePackageYml } from '../../utils/package-management.js';
-import { getLocalOpenPackageDir } from '../../utils/paths.js';
+import { resolveSourceOperationArguments } from '../../utils/source-operation-arguments.js';
+import { buildWorkspacePackageContext } from '../../utils/workspace-package-context.js';
 
 export interface AddToSourceOptions {
   platformSpecific?: boolean;
@@ -34,7 +34,12 @@ export async function runAddToSourcePipeline(
   const cwd = process.cwd();
 
   // Resolve arguments: packageName from --to option, pathArg is required
-  const { resolvedPackageName, resolvedPath } = await resolveAddArguments(cwd, packageName, pathArg);
+  const { resolvedPackageName, resolvedPath } = await resolveSourceOperationArguments(
+    cwd,
+    packageName,
+    pathArg,
+    { command: 'add', checkWorkspaceRoot: false }
+  );
 
   const absInputPath = resolvePath(cwd, resolvedPath);
   if (!(await exists(absInputPath))) {
@@ -48,17 +53,20 @@ export async function runAddToSourcePipeline(
   
   if (isWorkspaceRoot) {
     // No package name: add to workspace root (.openpackage/)
-    const result = await buildWorkspaceRootContext(cwd);
-    if (!result.success) {
-      return { success: false, error: result.error };
+    try {
+      packageContext = await buildWorkspacePackageContext(cwd);
+      sourceType = 'workspace';
+      
+      logger.info('Adding files to workspace package', {
+        sourcePath: packageContext.packageRootDir,
+        inputPath: resolvedPath
+      });
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : String(error) 
+      };
     }
-    packageContext = result.context!;
-    sourceType = 'workspace';
-    
-    logger.info('Adding files to workspace package', {
-      sourcePath: packageContext.packageRootDir,
-      inputPath: resolvedPath
-    });
   } else {
     // Package name provided: resolve mutable source
     let source;
@@ -111,84 +119,10 @@ export async function runAddToSourcePipeline(
 }
 
 /**
- * Resolve add command arguments to determine package name and input path.
- * packageName comes from --to option (undefined if not provided → workspace root).
- * pathArg is the required <path> argument.
- */
-async function resolveAddArguments(
-  cwd: string,
-  packageName: string | undefined,
-  pathArg: string | undefined
-): Promise<{ resolvedPackageName: string | null; resolvedPath: string }> {
-  // Two arguments provided: explicit package name + path
-  if (packageName && pathArg) {
-    return { resolvedPackageName: packageName, resolvedPath: pathArg };
-  }
-
-  // One argument provided
-  const singleArg = packageName || pathArg;
-  if (!singleArg) {
-    throw new Error('Path argument is required for add.');
-  }
-
-  // Check if single arg is a valid filesystem path
-  const absPath = resolvePath(cwd, singleArg);
-  if (await exists(absPath)) {
-    // It's a path → add to workspace root
-    return { resolvedPackageName: null, resolvedPath: singleArg };
-  }
-
-  // Not a filesystem path → treat as package name (error will be thrown later)
-  throw new Error(
-    `Path '${singleArg}' not found.\n\n` +
-    `If you meant to specify a package name, use: opkg add <path> --to ${singleArg}`
-  );
-}
-
-/**
  * Build context for workspace root package at .openpackage/
  * Creates the workspace manifest if it doesn't exist.
  */
 type AddContext = Pick<PackageContext, 'name' | 'version' | 'config' | 'packageYmlPath' | 'packageRootDir' | 'packageFilesDir'>;
-
-async function buildWorkspaceRootContext(
-  cwd: string
-): Promise<{ success: true; context: AddContext } | { success: false; error: string }> {
-  // Ensure .openpackage/ structure exists
-  await ensureLocalOpenPackageStructure(cwd);
-
-  // Create workspace manifest if it doesn't exist
-  await createWorkspacePackageYml(cwd);
-
-  const openpackageDir = getLocalOpenPackageDir(cwd);
-  const packageYmlPath = join(openpackageDir, FILE_PATTERNS.OPENPACKAGE_YML);
-
-  // Load workspace manifest
-  let config;
-  try {
-    config = await parsePackageYml(packageYmlPath);
-  } catch (error) {
-    return {
-      success: false,
-      error: `Failed to read workspace manifest at ${packageYmlPath}: ${error}`
-    };
-  }
-
-  // Use workspace directory name as package name if not specified in manifest
-  const packageName = config.name || basename(cwd);
-
-  return {
-    success: true,
-    context: {
-      name: packageName,
-      version: config.version,
-      config,
-      packageYmlPath,
-      packageRootDir: openpackageDir,
-      packageFilesDir: openpackageDir
-    }
-  };
-}
 
 /**
  * Build add context from a resolved mutable source.

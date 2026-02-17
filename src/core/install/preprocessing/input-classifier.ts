@@ -1,156 +1,85 @@
-import type { InputClassification } from '../orchestrator/types.js';
+import type { InputClassification, InputFeatures } from '../orchestrator/types.js';
 import type { InstallOptions, ExecutionContext } from '../../../types/index.js';
-import { parseResourceArg, type ResourceSpec } from '../../../utils/resource-arg-parser.js';
-import { classifyPackageInput } from '../../../utils/package-input.js';
+import { classifyInputBase, type BaseInputClassification } from '../../../utils/input-classifier-base.js';
 
 /**
  * Classify package input for routing to appropriate install strategy.
  * 
- * Unifies the logic from:
- * - parseResourceArg() for resource-model parsing (gh@, URLs, paths)
- * - classifyPackageInput() for legacy classification
+ * Uses the shared base classifier and enriches results with install-specific features:
+ * - Convenience filters (--agents, --skills, --rules, --commands)
+ * - Resource path tracking for selective installation
  * 
  * @param input - Raw user input (undefined for bulk install)
  * @param options - Install options (to check for convenience filters)
  * @param execContext - Execution context (uses sourceCwd for resolving inputs)
- * @returns Unified input classification
+ * @returns Unified input classification with install features
  */
 export async function classifyInput(
   input: string | undefined,
   options: InstallOptions & { agents?: string[]; skills?: string[]; rules?: string[]; commands?: string[] },
   execContext: ExecutionContext
 ): Promise<InputClassification> {
-  // No input = bulk install
-  if (!input) {
-    return {
-      type: 'bulk',
-      features: {
-        hasResourcePath: false,
-        hasConvenienceFilters: false
-      }
-    };
-  }
+  // Detect convenience filters
+  const hasConvenienceFilters = !!(
+    options.agents?.length ||
+    options.skills?.length ||
+    options.rules?.length ||
+    options.commands?.length
+  );
 
-  const hasConvenienceFilters = !!(options.agents?.length || options.skills?.length || options.rules?.length || options.commands?.length);
+  // Use base classifier
+  const base = await classifyInputBase(input, execContext.sourceCwd);
 
-  // Determine if we should try resource parsing first
-  // Resource parsing handles: gh@ shorthand, GitHub URLs, paths with sub-resources
-  const shouldTryResourceParsing = 
-    hasConvenienceFilters ||
-    input.startsWith('gh@') ||
-    input.startsWith('https://github.com/') ||
-    input.startsWith('http://github.com/');
-
-  if (shouldTryResourceParsing) {
-    try {
-      const resourceSpec = await parseResourceArg(input, execContext.sourceCwd);
-      return resourceSpecToClassification(resourceSpec, hasConvenienceFilters);
-    } catch (error) {
-      // If resource parsing fails and no convenience options, fall through to legacy
-      if (hasConvenienceFilters) {
-        throw error; // With convenience options, resource parsing is required
-      }
-    }
-  }
-
-  // Fall back to legacy classification
-  const legacy = await classifyPackageInput(input, execContext.sourceCwd);
-  return legacyToClassification(legacy, hasConvenienceFilters);
+  // Convert to install-specific classification with features
+  return enrichWithInstallFeatures(base, hasConvenienceFilters);
 }
 
 /**
- * Convert ResourceSpec to InputClassification
+ * Enrich base classification with install-specific features
  */
-function resourceSpecToClassification(
-  spec: ResourceSpec,
+function enrichWithInstallFeatures(
+  base: BaseInputClassification,
   hasConvenienceFilters: boolean
 ): InputClassification {
-  const hasResourcePath = !!spec.path;
+  const features: InputFeatures = {
+    hasConvenienceFilters,
+    hasResourcePath: false
+  };
 
-  switch (spec.type) {
-    case 'github-url':
-    case 'github-shorthand':
-      return {
-        type: 'git',
-        gitUrl: spec.gitUrl!,
-        gitRef: spec.ref,
-        resourcePath: spec.path,
-        features: {
-          hasResourcePath,
-          hasConvenienceFilters
-        }
-      };
-    
-    case 'filepath':
-      return {
-        type: 'path',
-        localPath: spec.absolutePath!,
-        features: {
-          hasResourcePath: false,
-          hasConvenienceFilters
-        }
-      };
-    
-    case 'registry':
-      return {
-        type: 'registry',
-        packageName: spec.name!,
-        version: spec.version,
-        resourcePath: spec.path,
-        features: {
-          hasResourcePath,
-          hasConvenienceFilters
-        }
-      };
-    
-    default:
-      throw new Error(`Unknown resource spec type: ${(spec as any).type}`);
-  }
-}
+  switch (base.type) {
+    case 'bulk':
+      return { type: 'bulk', features };
 
-/**
- * Convert legacy PackageInputClassification to InputClassification
- */
-function legacyToClassification(
-  legacy: Awaited<ReturnType<typeof classifyPackageInput>>,
-  hasConvenienceFilters: boolean
-): InputClassification {
-  switch (legacy.type) {
     case 'git':
       return {
         type: 'git',
-        gitUrl: legacy.gitUrl!,
-        gitRef: legacy.gitRef,
-        resourcePath: legacy.gitPath,
+        gitUrl: base.gitUrl,
+        gitRef: base.gitRef,
+        resourcePath: base.gitPath,
         features: {
-          hasResourcePath: !!legacy.gitPath,
-          hasConvenienceFilters
+          ...features,
+          hasResourcePath: !!base.gitPath
         }
       };
-    
-    case 'directory':
-    case 'tarball':
+
+    case 'local-path':
       return {
         type: 'path',
-        localPath: legacy.resolvedPath!,
-        features: {
-          hasResourcePath: false,
-          hasConvenienceFilters
-        }
+        localPath: base.absolutePath,
+        features
       };
-    
+
     case 'registry':
       return {
         type: 'registry',
-        packageName: legacy.name!,
-        version: legacy.version,
+        packageName: base.packageName,
+        version: base.version,
+        resourcePath: base.registryPath,
         features: {
-          hasResourcePath: !!legacy.registryPath,
-          hasConvenienceFilters
+          ...features,
+          hasResourcePath: !!base.registryPath
         }
       };
-    
-    default:
-      throw new Error(`Unknown legacy classification type: ${legacy.type}`);
   }
 }
+

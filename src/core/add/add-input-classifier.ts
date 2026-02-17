@@ -1,10 +1,6 @@
-import { resolve, basename, extname } from 'path';
+import { resolve } from 'path';
 import { exists } from '../../utils/fs.js';
-import { parseResourceArg, type ResourceSpec } from '../../utils/resource-arg-parser.js';
-import { classifyPackageInput } from '../../utils/package-input.js';
-import { isValidPackageDirectory, loadPackageConfig } from '../package-context.js';
-import { detectPluginType } from '../install/plugin-detector.js';
-import { detectGitSource } from '../../utils/git-url-detection.js';
+import { classifyInputBase, type BaseInputClassification } from '../../utils/input-classifier-base.js';
 import { ValidationError } from '../../utils/errors.js';
 import { logger } from '../../utils/logger.js';
 
@@ -33,134 +29,100 @@ function looksLikePath(input: string): boolean {
   return input.startsWith('/') || input.startsWith('./') || input.startsWith('../') || input.startsWith('~') || input === '.';
 }
 
-function deriveNameFromGitUrl(url: string): string {
-  const match = url.match(/\/([^/]+?)(?:\.git)?$/);
-  return match?.[1] ?? url;
-}
-
+/**
+ * Classify add command input to determine mode (dependency vs. copy) and extract metadata.
+ * 
+ * Uses the shared base classifier and enriches results with add-specific mode determination:
+ * - dependency mode: Add package reference to manifest
+ * - copy mode: Physically copy files to package source
+ * 
+ * @param input - User input string
+ * @param cwd - Current working directory
+ * @param options - Add-specific options (--copy, --dev)
+ * @returns Add classification with mode and metadata
+ */
 export async function classifyAddInput(
   input: string,
   cwd: string,
   options: AddClassifyOptions
 ): Promise<AddInputClassification> {
-  // 1. --copy flag
+  // 1. Handle --copy flag first (force copy mode)
   if (options.copy) {
-    if (!looksLikePath(input)) {
-      throw new ValidationError('--copy can only be used with local paths');
-    }
-    const resolvedAbsPath = resolve(cwd, input);
-    if (!(await exists(resolvedAbsPath))) {
-      throw new ValidationError(`Path not found: ${input}`);
-    }
-    return { mode: 'copy', copySourcePath: resolvedAbsPath };
+    return handleCopyMode(input, cwd);
   }
 
-  // 2. Check for generic git URLs and tarballs first — parseResourceArg doesn't handle these
-  const gitSpec = detectGitSource(input);
-  if (gitSpec && !input.startsWith('gh@') && !input.startsWith('https://github.com/') && !input.startsWith('http://github.com/')) {
-    return {
-      mode: 'dependency',
-      packageName: deriveNameFromGitUrl(gitSpec.url),
-      gitUrl: gitSpec.url,
-      gitRef: gitSpec.ref,
-      gitPath: gitSpec.path,
-    };
+  // 2. Use base classifier
+  const base = await classifyInputBase(input, cwd);
+
+  // 3. Convert to add-specific classification with mode
+  return enrichWithAddMode(base);
+}
+
+/**
+ * Handle --copy mode (force copy regardless of input type)
+ */
+async function handleCopyMode(
+  input: string,
+  cwd: string
+): Promise<AddInputClassification> {
+  if (!looksLikePath(input)) {
+    throw new ValidationError('--copy can only be used with local paths');
   }
-
-  if (input.endsWith('.tgz') || input.endsWith('.tar.gz')) {
-    const resolved = resolve(cwd, input);
-    if (await exists(resolved)) {
-      return {
-        mode: 'dependency',
-        packageName: basename(resolved, extname(resolved)),
-        localPath: resolved,
-      };
-    }
+  
+  const resolvedAbsPath = resolve(cwd, input);
+  if (!(await exists(resolvedAbsPath))) {
+    throw new ValidationError(`Path not found: ${input}`);
   }
+  
+  return { mode: 'copy', copySourcePath: resolvedAbsPath };
+}
 
-  // 3. Try parseResourceArg
-  try {
-    const spec = await parseResourceArg(input, cwd);
+/**
+ * Enrich base classification with add-specific mode determination
+ */
+function enrichWithAddMode(
+  base: BaseInputClassification
+): AddInputClassification {
+  switch (base.type) {
+    case 'bulk':
+      throw new ValidationError('Add command requires an input argument');
 
-    if (spec.type === 'github-url' || spec.type === 'github-shorthand') {
+    case 'git':
       return {
         mode: 'dependency',
-        packageName: spec.repo,
-        gitUrl: spec.gitUrl,
-        gitRef: spec.ref,
-        gitPath: spec.path,
+        packageName: base.derivedName!,
+        gitUrl: base.gitUrl,
+        gitRef: base.gitRef,
+        gitPath: base.gitPath
       };
-    }
 
-    if (spec.type === 'registry') {
-      return {
-        mode: 'dependency',
-        packageName: spec.name,
-        version: spec.version,
-        resourcePath: spec.path,
-      };
-    }
-
-    if (spec.type === 'filepath') {
-      if (spec.isDirectory === false) {
-        return { mode: 'copy', copySourcePath: spec.absolutePath };
+    case 'local-path': {
+      // Determine if dependency or copy based on package validity
+      if (base.isValidPackage) {
+        logger.debug('Classified local directory as dependency', {
+          packageName: base.packageName,
+          absolutePath: base.absolutePath
+        });
+        return {
+          mode: 'dependency',
+          packageName: base.packageName!,
+          localPath: base.absolutePath
+        };
       }
-
-      const absolutePath = spec.absolutePath!;
-      const [isPackage, pluginResult] = await Promise.all([
-        isValidPackageDirectory(absolutePath),
-        detectPluginType(absolutePath),
-      ]);
-
-      if (isPackage || pluginResult.isPlugin) {
-        const config = await loadPackageConfig(absolutePath);
-        const packageName = config?.name ?? basename(absolutePath);
-        logger.debug('Classified local directory as dependency', { packageName, absolutePath });
-        return { mode: 'dependency', packageName, localPath: absolutePath };
-      }
-
-      return { mode: 'copy', copySourcePath: absolutePath };
+      
+      // Not a valid package - copy mode
+      return {
+        mode: 'copy',
+        copySourcePath: base.absolutePath
+      };
     }
-  } catch {
-    // Fall through to legacy classifier
+
+    case 'registry':
+      return {
+        mode: 'dependency',
+        packageName: base.packageName,
+        version: base.version,
+        resourcePath: base.registryPath
+      };
   }
-
-  // 3.5. [DISABLED] Workspace resource resolution by name - inputs are FILE or package only
-  // To re-enable: restore the resolveByName/traverseScopesFlat block that checked for
-  // installed workspace resources by name and returned mode: 'workspace-resource'
-
-  // 4. Fallback: classifyPackageInput
-  const legacy = await classifyPackageInput(input, cwd);
-
-  if (legacy.type === 'git') {
-    return {
-      mode: 'dependency',
-      packageName: deriveNameFromGitUrl(legacy.gitUrl!),
-      gitUrl: legacy.gitUrl,
-      gitRef: legacy.gitRef,
-      gitPath: legacy.gitPath,
-    };
-  }
-
-  if (legacy.type === 'tarball') {
-    return {
-      mode: 'dependency',
-      packageName: basename(legacy.resolvedPath!, extname(legacy.resolvedPath!)),
-      localPath: legacy.resolvedPath,
-    };
-  }
-
-  if (legacy.type === 'directory') {
-    const config = await loadPackageConfig(legacy.resolvedPath!);
-    const packageName = config?.name ?? basename(legacy.resolvedPath!);
-    return { mode: 'dependency', packageName, localPath: legacy.resolvedPath };
-  }
-
-  // registry
-  return {
-    mode: 'dependency',
-    packageName: legacy.name,
-    version: legacy.version,
-    resourcePath: legacy.registryPath,
-  };
 }

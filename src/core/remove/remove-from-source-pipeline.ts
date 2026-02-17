@@ -1,7 +1,6 @@
-import { resolve as resolvePath, join, basename } from 'path';
+import { resolve as resolvePath, join } from 'path';
 
 import type { CommandResult } from '../../types/index.js';
-import { FILE_PATTERNS } from '../../constants/index.js';
 import { resolveMutableSource } from '../source-resolution/resolve-mutable-source.js';
 import { assertMutableSourceOrThrow } from '../../utils/source-mutability.js';
 import { collectRemovalEntries, type RemovalEntry } from './removal-collector.js';
@@ -9,10 +8,9 @@ import { confirmRemoval } from './removal-confirmation.js';
 import { exists, remove } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
 import { UserCancellationError } from '../../utils/errors.js';
-import { ensureLocalOpenPackageStructure, createWorkspacePackageYml } from '../../utils/package-management.js';
-import { getLocalOpenPackageDir } from '../../utils/paths.js';
-import { parsePackageYml } from '../../utils/package-yml.js';
 import { cleanupEmptyParents } from '../../utils/cleanup-empty-parents.js';
+import { resolveSourceOperationArguments } from '../../utils/source-operation-arguments.js';
+import { buildWorkspacePackageContext } from '../../utils/workspace-package-context.js';
 
 export interface RemoveFromSourceOptions {
   force?: boolean;
@@ -38,7 +36,12 @@ export async function runRemoveFromSourcePipeline(
   let resolvedPackageName: string | null;
   let resolvedPath: string;
   try {
-    const resolved = await resolveRemoveArguments(cwd, packageName, pathArg);
+    const resolved = await resolveSourceOperationArguments(
+      cwd,
+      packageName,
+      pathArg,
+      { command: 'remove', checkWorkspaceRoot: true }
+    );
     resolvedPackageName = resolved.resolvedPackageName;
     resolvedPath = resolved.resolvedPath;
   } catch (error) {
@@ -52,15 +55,22 @@ export async function runRemoveFromSourcePipeline(
   
   if (resolvedPackageName === null) {
     // No package name: remove from workspace root (.openpackage/)
-    const context = await buildWorkspaceRootRemovalContext(cwd);
-    packageRootDir = context.packageRootDir;
-    resolvedName = context.packageName;
-    sourceType = 'workspace';
-    
-    logger.info('Removing files from workspace package', {
-      sourcePath: packageRootDir,
-      inputPath: resolvedPath
-    });
+    try {
+      const context = await buildWorkspacePackageContext(cwd);
+      packageRootDir = context.packageRootDir;
+      resolvedName = context.name;
+      sourceType = 'workspace';
+      
+      logger.info('Removing files from workspace package', {
+        sourcePath: packageRootDir,
+        inputPath: resolvedPath
+      });
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : String(error) 
+      };
+    }
   } else {
     // Package name provided: resolve mutable source
     let source;
@@ -171,77 +181,5 @@ export async function runRemoveFromSourcePipeline(
       sourceType,
       removedPaths
     }
-  };
-}
-
-/**
- * Resolve remove command arguments to determine package name and removal path.
- * packageName comes from --from option (undefined if not provided → workspace root).
- * pathArg is the required <path> argument.
- */
-async function resolveRemoveArguments(
-  cwd: string,
-  packageName: string | undefined,
-  pathArg: string | undefined
-): Promise<{ resolvedPackageName: string | null; resolvedPath: string }> {
-  // Two arguments provided: explicit package name + path
-  if (packageName && pathArg) {
-    return { resolvedPackageName: packageName, resolvedPath: pathArg };
-  }
-
-  // One argument provided
-  const singleArg = packageName || pathArg;
-  if (!singleArg) {
-    throw new Error('Path argument is required for remove.');
-  }
-
-  // Check if single arg could be a path (relative or absolute)
-  // We check both filesystem path AND workspace root path
-  const absPath = resolvePath(cwd, singleArg);
-  const openpackageDir = getLocalOpenPackageDir(cwd);
-  const workspaceRootPath = join(openpackageDir, singleArg);
-  
-  if (await exists(absPath) || await exists(workspaceRootPath)) {
-    // It's a valid path → remove from workspace root
-    return { resolvedPackageName: null, resolvedPath: singleArg };
-  }
-
-  // Not a valid path → treat as package name (error will be thrown later)
-  throw new Error(
-    `Path '${singleArg}' not found.\n\n` +
-    `If you meant to specify a package name, use: opkg remove <path> --from ${singleArg}`
-  );
-}
-
-/**
- * Build context for workspace root package at .openpackage/
- * Ensures the workspace manifest exists.
- */
-async function buildWorkspaceRootRemovalContext(
-  cwd: string
-): Promise<{ packageName: string; packageRootDir: string }> {
-  // Ensure .openpackage/ structure exists
-  await ensureLocalOpenPackageStructure(cwd);
-
-  // Create workspace manifest if it doesn't exist
-  await createWorkspacePackageYml(cwd);
-
-  const openpackageDir = getLocalOpenPackageDir(cwd);
-  const packageYmlPath = join(openpackageDir, FILE_PATTERNS.OPENPACKAGE_YML);
-
-  // Load workspace manifest
-  let config;
-  try {
-    config = await parsePackageYml(packageYmlPath);
-  } catch (error) {
-    throw new Error(`Failed to read workspace manifest at ${packageYmlPath}: ${error}`);
-  }
-
-  // Use workspace directory name as package name if not specified in manifest
-  const packageName = config.name || basename(cwd);
-
-  return {
-    packageName,
-    packageRootDir: openpackageDir
   };
 }

@@ -53,6 +53,9 @@ export interface PackageSource {
   // Resolved content root (populated after loading)
   contentRoot?: string;
   
+  /** Internal flag: Base detection has been performed (prevents redundant detection) */
+  _baseDetectionPerformed?: boolean;
+  
   // Plugin-specific metadata (populated during source loading)
   pluginMetadata?: {
     /** Whether this is a Claude Code plugin */
@@ -132,6 +135,9 @@ export interface InstallationContext {
   
   /** Pattern that matched (for pattern-based detection) */
   matchedPattern?: string;
+  
+  /** Internal flag: Path scoping has been computed (prevents redundant computation) */
+  _pathScopingPerformed?: boolean;
   
   /** Ambiguous matches awaiting user resolution */
   ambiguousMatches?: Array<{
