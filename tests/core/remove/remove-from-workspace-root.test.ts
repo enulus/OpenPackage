@@ -150,11 +150,10 @@ async function testErrorOnInvalidPath(): Promise<void> {
     const openpackageDir = path.join(tmp, '.openpackage');
     writePackageManifest(openpackageDir, 'my-workspace');
 
-    // Try to remove with non-existent path
+    // Try to remove with non-existent path (neither file nor dependency)
     const result = await runRemoveFromSourcePipeline(undefined, 'non-existent-path', { force: true });
     assert.ok(!result.success, 'Should fail with non-existent path');
     assert.ok(result.error?.includes('not found'), 'Should indicate path not found');
-    assert.ok(result.error?.includes('opkg remove'), 'Should suggest correct syntax');
 
     console.log('✓ Error handling for invalid path works correctly');
   } finally {

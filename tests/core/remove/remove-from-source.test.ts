@@ -6,6 +6,7 @@ import path from 'node:path';
 import { runRemoveFromSourcePipeline } from '../../../src/core/remove/remove-from-source-pipeline.js';
 import { runAddToSourcePipeline } from '../../../src/core/add/add-to-source-pipeline.js';
 import { readWorkspaceIndex, getWorkspaceIndexPath } from '../../../src/utils/workspace-index-yml.js';
+import { parsePackageYml } from '../../../src/utils/package-yml.js';
 
 const UTF8 = 'utf-8';
 
@@ -18,8 +19,11 @@ function writeFile(p: string, content: string) {
   fs.writeFileSync(p, content, { encoding: UTF8 });
 }
 
-function writePackageManifest(pkgDir: string, pkgName: string, version = '1.0.0') {
-  const manifest = [`name: ${pkgName}`, `version: ${version}`, ''].join('\n');
+function writePackageManifest(pkgDir: string, pkgName: string, version = '1.0.0', deps?: Array<{ name: string; version?: string }>) {
+  const depsYaml = deps?.length
+    ? `dependencies:\n${deps.map(d => `  - name: ${d.name}${d.version ? `\n    version: ${d.version}` : ''}`).join('\n')}\ndev-dependencies: []\n`
+    : 'dependencies: []\ndev-dependencies: []\n';
+  const manifest = [`name: ${pkgName}`, `version: ${version}`, '', depsYaml].join('\n');
   writeFile(path.join(pkgDir, 'openpackage.yml'), manifest);
 }
 
@@ -269,6 +273,119 @@ async function testRemoveCleansUpEmptyDirectories(): Promise<void> {
 }
 
 /**
+ * Test: Remove dependency from package manifest (disambiguation: dependency vs file)
+ */
+async function testRemoveDependencyFromPackage(): Promise<void> {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-remove-dep-'));
+  const originalCwd = process.cwd();
+  try {
+    process.chdir(tmp);
+
+    const pkgName = 'essentials';
+    const pkgDir = path.join(tmp, '.openpackage', 'packages', pkgName);
+
+    // Create package with dependencies (like user's essentials package)
+    writePackageManifest(pkgDir, pkgName, '1.0.0', [
+      { name: 'essential-agent' },
+      { name: '.opencode' }
+    ]);
+
+    // Remove dependency by name (not file path)
+    const result = await runRemoveFromSourcePipeline(pkgName, 'essential-agent', { force: true });
+    assert.ok(result.success, result.error);
+    assert.equal(result.data?.removalType, 'dependency');
+    assert.equal(result.data?.removedDependency, 'essential-agent');
+    assert.equal(result.data?.filesRemoved, 0);
+
+    // Verify dependency was removed from manifest
+    const config = await parsePackageYml(path.join(pkgDir, 'openpackage.yml'));
+    const deps = config.dependencies ?? [];
+    const hasEssentialAgent = deps.some((d: { name: string }) => d.name.toLowerCase() === 'essential-agent');
+    assert.ok(!hasEssentialAgent, 'essential-agent should be removed from dependencies');
+    const hasOpencode = deps.some((d: { name: string }) => d.name === '.opencode');
+    assert.ok(hasOpencode, '.opencode should still be in dependencies');
+
+    console.log('✓ Remove dependency from package manifest works');
+  } finally {
+    process.chdir(originalCwd);
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Test: Bare name when both file and dependency exist → dependency-first (removes dependency)
+ */
+async function testBareNameWhenBothMatchRemovesDependency(): Promise<void> {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-remove-ambiguous-'));
+  const originalCwd = process.cwd();
+  try {
+    process.chdir(tmp);
+
+    const pkgName = 'essentials';
+    const pkgDir = path.join(tmp, '.openpackage', 'packages', pkgName);
+
+    writePackageManifest(pkgDir, pkgName, '1.0.0', [{ name: 'essential-agent' }]);
+    const essentialAgentFile = path.join(pkgDir, 'essential-agent');
+    writeFile(essentialAgentFile, '# content');
+
+    // Bare name when both match → dependency-first
+    const result = await runRemoveFromSourcePipeline(pkgName, 'essential-agent', { force: true });
+    assert.ok(result.success, result.error);
+    assert.equal(result.data?.removalType, 'dependency');
+    assert.equal(result.data?.removedDependency, 'essential-agent');
+    assert.equal(result.data?.filesRemoved, 0);
+
+    assert.ok(fs.existsSync(essentialAgentFile), 'File should remain');
+    const config = await parsePackageYml(path.join(pkgDir, 'openpackage.yml'));
+    const hasEssentialAgent = (config.dependencies ?? []).some(
+      (d: { name: string }) => d.name.toLowerCase() === 'essential-agent'
+    );
+    assert.ok(!hasEssentialAgent, 'Dependency should be removed');
+
+    console.log('✓ Bare name when both match removes dependency (dep-first resolution)');
+  } finally {
+    process.chdir(originalCwd);
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Test: ./path when both file and dependency exist → removes file (explicit path)
+ */
+async function testExplicitPathWhenBothMatchRemovesFile(): Promise<void> {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-remove-ambiguous-file-'));
+  const originalCwd = process.cwd();
+  try {
+    process.chdir(tmp);
+
+    const pkgName = 'essentials';
+    const pkgDir = path.join(tmp, '.openpackage', 'packages', pkgName);
+
+    writePackageManifest(pkgDir, pkgName, '1.0.0', [{ name: 'essential-agent' }]);
+    const essentialAgentFile = path.join(pkgDir, 'essential-agent');
+    writeFile(essentialAgentFile, '# content');
+
+    // ./ prefix → explicit path, file only
+    const result = await runRemoveFromSourcePipeline(pkgName, './essential-agent', { force: true });
+    assert.ok(result.success, result.error);
+    assert.equal(result.data?.removalType, 'files');
+    assert.equal(result.data?.filesRemoved, 1);
+    assert.ok(!fs.existsSync(essentialAgentFile), 'File should be removed');
+
+    const config = await parsePackageYml(path.join(pkgDir, 'openpackage.yml'));
+    const hasEssentialAgent = (config.dependencies ?? []).some(
+      (d: { name: string }) => d.name.toLowerCase() === 'essential-agent'
+    );
+    assert.ok(hasEssentialAgent, 'Dependency should remain');
+
+    console.log('✓ Explicit ./path when both match removes file');
+  } finally {
+    process.chdir(originalCwd);
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+/**
  * Test: Remove fails when path not found
  */
 async function testRemoveFailsWhenPathNotFound(): Promise<void> {
@@ -332,6 +449,9 @@ async function runTests() {
     await testRemoveDirectoryRemovesAllFiles();
     await testRemoveDryRunShowsPreview();
     await testRemoveCleansUpEmptyDirectories();
+    await testRemoveDependencyFromPackage();
+    await testBareNameWhenBothMatchRemovesDependency();
+    await testExplicitPathWhenBothMatchRemovesFile();
     await testRemoveFailsWhenPathNotFound();
     await testRemoveFailsWithEmptyDirectory();
 

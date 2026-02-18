@@ -25,10 +25,6 @@ export interface AddClassifyOptions {
   dev?: boolean;
 }
 
-function looksLikePath(input: string): boolean {
-  return input.startsWith('/') || input.startsWith('./') || input.startsWith('../') || input.startsWith('~') || input === '.';
-}
-
 /**
  * Classify add command input to determine mode (dependency vs. copy) and extract metadata.
  * 
@@ -59,21 +55,19 @@ export async function classifyAddInput(
 }
 
 /**
- * Handle --copy mode (force copy regardless of input type)
+ * Handle --copy mode (force copy regardless of input type).
+ * Accepts any input that resolves to an existing local path (including package directories).
  */
 async function handleCopyMode(
   input: string,
   cwd: string
 ): Promise<AddInputClassification> {
-  if (!looksLikePath(input)) {
-    throw new ValidationError('--copy can only be used with local paths');
-  }
-  
   const resolvedAbsPath = resolve(cwd, input);
   if (!(await exists(resolvedAbsPath))) {
-    throw new ValidationError(`Path not found: ${input}`);
+    throw new ValidationError(
+      `Path not found: ${input}\n--copy requires an existing local path.`
+    );
   }
-  
   return { mode: 'copy', copySourcePath: resolvedAbsPath };
 }
 

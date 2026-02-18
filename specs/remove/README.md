@@ -94,6 +94,12 @@ opkg remove commands/ --from my-pkg --dry-run
 
 # Force removal without confirmation
 opkg remove agents/deprecated.md --force
+
+# Remove dependency (bare name = dependency-first when both match)
+opkg remove essential-agent --from essentials
+
+# Remove file (use ./ for explicit path when both match)
+opkg remove ./essential-agent --from essentials
 ```
 
 ### Workflow Examples
@@ -157,6 +163,10 @@ opkg remove rules/              # Remove directory from workspace root
   - `commands/test.md` - single file
   - `commands/` or `commands` - entire directory
   - `root/tools/helper.sh` - copy-to-root content
+
+### File vs. Dependency Resolution
+- **`./path` or `../path`**: Explicit path syntax → always remove file/directory (no dependency lookup).
+- **Bare names**: Dependency-first resolution. If the input matches a dependency in the manifest, remove the dependency. Otherwise, if it matches a file/directory, remove the file. When both match, bare name removes the dependency; use `./name` to remove the file.
 
 ### Empty Directory Cleanup
 After removing files, `remove` automatically cleans up empty parent directories:

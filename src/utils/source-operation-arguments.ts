@@ -87,6 +87,12 @@ export async function resolveSourceOperationArguments(
     return { resolvedPackageName: null, resolvedPath: singleArg };
   }
 
+  // Path doesn't exist. For remove, pass through so the pipeline can try dependency resolution.
+  // For add, this would have failed earlier. Only remove uses checkWorkspaceRoot.
+  if (checkWorkspaceRoot && command === 'remove') {
+    return { resolvedPackageName: null, resolvedPath: singleArg };
+  }
+
   // Not a valid path → treat as package name (error will be thrown later)
   throw new Error(
     `Path '${singleArg}' not found.\n\n` +

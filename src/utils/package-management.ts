@@ -340,8 +340,9 @@ function doesDependencyMatchPackageName(
   }
   
   // If dependency has a git source, try matching based on git URL + path
-  if (dep.git) {
-    const githubInfo = extractGitHubInfo(dep.git);
+  const gitUrlRaw = dep.url || dep.git;
+  if (gitUrlRaw) {
+    const githubInfo = extractGitHubInfo(gitUrlRaw);
     if (!githubInfo) {
       return false;
     }
@@ -392,17 +393,21 @@ function doesDependencyMatchPackageName(
 }
 
 /**
- * Remove a dependency entry from openpackage.yml (both dependencies and dev-dependencies).
+ * Remove a dependency entry from a manifest file (both dependencies and dev-dependencies).
+ * Use this when removing from a specific package manifest (e.g. --from essentials).
+ *
+ * @param manifestPath - Absolute path to openpackage.yml
+ * @param dependencyName - User-specified name to match (e.g. essential-agent, @scope/pkg)
+ * @returns true if a dependency was removed, false otherwise
  */
-export async function removePackageFromOpenpackageYml(
-  targetDir: string,
-  packageName: string
+export async function removeDependencyFromManifest(
+  manifestPath: string,
+  dependencyName: string
 ): Promise<boolean> {
-  const packageYmlPath = getLocalPackageYmlPath(targetDir);
-  if (!(await exists(packageYmlPath))) return false;
+  if (!(await exists(manifestPath))) return false;
 
   try {
-    const config = await parsePackageYml(packageYmlPath);
+    const config = await parsePackageYml(manifestPath);
     const sections: Array<'dependencies' | 'dev-dependencies'> = [DEPENDENCY_ARRAYS.DEPENDENCIES, DEPENDENCY_ARRAYS.DEV_DEPENDENCIES];
     let removed = false;
     let hadAnyDependencies = false;
@@ -411,11 +416,11 @@ export async function removePackageFromOpenpackageYml(
       const arr = config[section];
       if (!arr) continue;
       if (arr.length > 0) hadAnyDependencies = true;
-      
+
       // Filter out dependencies that match the package name
       // Uses context-aware matching to handle git sources and naming migrations
-      const next = arr.filter(dep => !doesDependencyMatchPackageName(dep, packageName));
-      
+      const next = arr.filter(dep => !doesDependencyMatchPackageName(dep, dependencyName));
+
       if (next.length !== arr.length) {
         config[section] = next as any;
         removed = true;
@@ -426,12 +431,55 @@ export async function removePackageFromOpenpackageYml(
     // 1. A package was removed (to persist the removal), OR
     // 2. The file had dependencies (to trigger migration even if no removal happened)
     if (removed || hadAnyDependencies) {
-      await writePackageYml(packageYmlPath, config);
+      await writePackageYml(manifestPath, config);
     }
     return removed;
   } catch (error) {
-    logger.warn(`Failed to update openpackage.yml when removing ${packageName}: ${error}`);
+    logger.warn(`Failed to update openpackage.yml when removing ${dependencyName}: ${error}`);
     return false;
+  }
+}
+
+/**
+ * Remove a dependency entry from openpackage.yml (both dependencies and dev-dependencies).
+ * Operates on the workspace manifest at .openpackage/openpackage.yml
+ */
+export async function removePackageFromOpenpackageYml(
+  targetDir: string,
+  packageName: string
+): Promise<boolean> {
+  const packageYmlPath = getLocalPackageYmlPath(targetDir);
+  return removeDependencyFromManifest(packageYmlPath, packageName);
+}
+
+/**
+ * Check if a manifest contains a dependency matching the user input.
+ * Uses context-aware matching (direct name, git variations, etc.).
+ *
+ * @param manifestPath - Absolute path to openpackage.yml
+ * @param userInput - User-specified name (e.g. essential-agent, .opencode)
+ * @returns The matched dependency's stored name if found, null otherwise
+ */
+export async function findMatchingDependencyInManifest(
+  manifestPath: string,
+  userInput: string
+): Promise<string | null> {
+  if (!(await exists(manifestPath))) return null;
+
+  try {
+    const config = await parsePackageYml(manifestPath);
+    const sections: Array<'dependencies' | 'dev-dependencies'> = [DEPENDENCY_ARRAYS.DEPENDENCIES, DEPENDENCY_ARRAYS.DEV_DEPENDENCIES];
+
+    for (const section of sections) {
+      const arr = config[section];
+      if (!arr) continue;
+
+      const match = arr.find(dep => doesDependencyMatchPackageName(dep, userInput));
+      if (match) return match.name;
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
 

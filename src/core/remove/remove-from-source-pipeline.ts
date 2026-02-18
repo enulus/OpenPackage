@@ -6,6 +6,8 @@ import { FILE_PATTERNS } from '../../constants/index.js';
 import { resolveMutableSource } from '../source-resolution/resolve-mutable-source.js';
 import { assertMutableSourceOrThrow } from '../../utils/source-mutability.js';
 import { collectRemovalEntries, type RemovalEntry } from './removal-collector.js';
+import { classifyRemoveInput } from './remove-input-classifier.js';
+import { runRemoveDependencyFlow } from './remove-dependency-flow.js';
 import { confirmRemoval } from './removal-confirmation.js';
 import { exists, remove } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
@@ -26,6 +28,10 @@ export interface RemoveFromSourceResult {
   sourcePath: string;
   sourceType: 'workspace' | 'global';
   removedPaths: string[];
+  /** Set when a dependency was removed (vs. file removal) */
+  removalType?: 'files' | 'dependency';
+  /** Dependency name when removalType is 'dependency' */
+  removedDependency?: string;
 }
 
 export async function runRemoveFromSourcePipeline(
@@ -100,18 +106,45 @@ export async function runRemoveFromSourcePipeline(
     });
   }
 
-  // [DISABLED] Resource name resolution - only file/directory paths accepted
-  // To re-enable: restore the buildSourceResources block that resolved names like "my-agent"
-  // to actual file paths within the package when the direct path didn't exist
+  // Classify input: file/directory path vs. dependency (./ = file, bare name = dep-first)
+  const manifestPath = join(packageRootDir, FILE_PATTERNS.OPENPACKAGE_YML);
+  const classification = await classifyRemoveInput(resolvedPath, packageRootDir, manifestPath);
 
-  // Collect files to remove
+  if (classification?.mode === 'dependency') {
+    // Dependency removal: update manifest
+    const depResult = await runRemoveDependencyFlow(
+      manifestPath,
+      classification.dependencyName!,
+      resolvedName
+    );
+    if (!depResult.removed) {
+      return {
+        success: false,
+        error: `Dependency '${resolvedPath}' not found in package.`
+      };
+    }
+    return {
+      success: true,
+      data: {
+        packageName: resolvedName,
+        filesRemoved: 0,
+        sourcePath: packageRootDir,
+        sourceType,
+        removedPaths: [],
+        removalType: 'dependency',
+        removedDependency: classification.dependencyName
+      }
+    };
+  }
+
+  // File removal: collect and remove files
   let entries: RemovalEntry[];
   try {
     entries = await collectRemovalEntries(packageRootDir, resolvedPath);
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : String(error) 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
     };
   }
 
@@ -149,7 +182,8 @@ export async function runRemoveFromSourcePipeline(
         filesRemoved: entries.length,
         sourcePath: packageRootDir,
         sourceType,
-        removedPaths: entries.map(e => e.registryPath)
+        removedPaths: entries.map(e => e.registryPath),
+        removalType: 'files'
       }
     };
   }
@@ -182,7 +216,8 @@ export async function runRemoveFromSourcePipeline(
       filesRemoved: removedPaths.length,
       sourcePath: packageRootDir,
       sourceType,
-      removedPaths
+      removedPaths,
+      removalType: 'files'
     }
   };
 }

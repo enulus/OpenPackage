@@ -17,13 +17,13 @@ export function setupRemoveCommand(program: Command): void {
   program
     .command('remove')
     .alias('rm')
-    .argument('[path]', 'file or directory to remove. If omitted, shows interactive file selector.')
-    .description('Remove files from a mutable package source or workspace package')
+    .argument('[target]', 'file, directory, or dependency to remove. If omitted, shows interactive file selector.')
+    .description('Remove files or dependencies from a mutable package source or workspace package')
     .option('--from <package-name>', 'source package name (defaults to workspace package)')
     .option('--force', 'Skip confirmation prompts')
     .option('--dry-run', 'Preview what would be removed without actually deleting')
     .action(
-      withErrorHandling(async (pathArg: string | undefined, options: RemoveFromSourceOptions & { from?: string }, command: Command) => {
+        withErrorHandling(async (pathArg: string | undefined, options: RemoveFromSourceOptions & { from?: string }, command: Command) => {
         const cwd = process.cwd();
         const programOpts = command.parent?.opts() || {};
 
@@ -48,8 +48,9 @@ export function setupRemoveCommand(program: Command): void {
               '<path> argument is required in non-interactive mode.\n' +
               'Usage: opkg remove <path> [options]\n\n' +
               'Examples:\n' +
-              '  opkg remove file.txt                        # Remove from workspace package\n' +
+              '  opkg remove file.txt                        # Remove file from workspace package\n' +
               '  opkg remove file.txt --from package-name    # Remove from specific package\n' +
+              '  opkg remove essential-agent --from essentials  # Remove dependency from package\n' +
               '  opkg remove                                 # Interactive mode (TTY only)'
             );
           }
@@ -150,19 +151,24 @@ async function processRemoveResource(
   cwd: string,
   execContext: ExecutionContext
 ): Promise<void> {
-  const result = await runRemoveFromSourcePipeline(packageName, pathArg, { ...options, execContext });
+  const result = await runRemoveFromSourcePipeline(packageName, pathArg, {
+    ...options,
+    execContext
+  });
   if (!result.success) {
     throw new Error(result.error || 'Remove operation failed');
   }
   
   // Provide helpful feedback (uses unified output: clack in interactive, plain console otherwise)
   if (result.data) {
-    const { filesRemoved, sourcePath, packageName: resolvedName, removedPaths } = result.data;
+    const { filesRemoved, sourcePath, packageName: resolvedName, removedPaths, removalType, removedDependency } = result.data;
 
     // Determine if this is a workspace root removal
     const isWorkspaceRoot = sourcePath.includes('.openpackage') && !sourcePath.includes('.openpackage/packages');
 
-    if (options.dryRun) {
+    if (removalType === 'dependency') {
+      output.success(`Removed dependency ${removedDependency} from ${resolvedName}`);
+    } else if (options.dryRun) {
       if (isWorkspaceRoot) {
         output.success(`(dry-run) Would remove ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from workspace package`);
       } else {
