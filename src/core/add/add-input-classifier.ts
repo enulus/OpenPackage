@@ -1,8 +1,12 @@
-import { resolve } from 'path';
-import { exists } from '../../utils/fs.js';
+import { join, basename, resolve } from 'path';
+
+import { exists, isDirectory } from '../../utils/fs.js';
 import { classifyInputBase, type BaseInputClassification } from '../../utils/input-classifier-base.js';
 import { ValidationError } from '../../utils/errors.js';
 import { logger } from '../../utils/logger.js';
+import { isValidPackageDirectory } from '../package-context.js';
+import { detectPluginType } from '../install/plugin-detector.js';
+import { parsePackageYml } from '../../utils/package-yml.js';
 
 export type AddMode = 'dependency' | 'copy' | 'workspace-resource';
 
@@ -27,11 +31,13 @@ export interface AddClassifyOptions {
 
 /**
  * Classify add command input to determine mode (dependency vs. copy) and extract metadata.
- * 
- * Uses the shared base classifier and enriches results with add-specific mode determination:
- * - dependency mode: Add package reference to manifest
- * - copy mode: Physically copy files to package source
- * 
+ *
+ * Disambiguation layers (in order):
+ * 1. --copy flag → force copy mode
+ * 2. Trailing slash → local directory (strip /, resolve, require exists+isDirectory)
+ * 3. Bare name with file extension → local file (require exists)
+ * 4. Base classifier → registry, git, explicit paths
+ *
  * @param input - User input string
  * @param cwd - Current working directory
  * @param options - Add-specific options (--copy, --dev)
@@ -42,16 +48,84 @@ export async function classifyAddInput(
   cwd: string,
   options: AddClassifyOptions
 ): Promise<AddInputClassification> {
-  // 1. Handle --copy flag first (force copy mode)
+  // Layer 0: Handle --copy flag first (force copy mode)
   if (options.copy) {
     return handleCopyMode(input, cwd);
   }
 
-  // 2. Use base classifier
-  const base = await classifyInputBase(input, cwd);
+  // Layer 1: Trailing slash → local directory (unambiguous dir intent)
+  if (input.endsWith('/')) {
+    const stripped = input.replace(/\/+$/, '');
+    const resolvedPath = resolve(cwd, stripped);
+    if (await exists(resolvedPath)) {
+      if (await isDirectory(resolvedPath)) {
+        const localPathSpec = await buildLocalPathSpec(resolvedPath);
+        return enrichWithAddMode(localPathSpec);
+      }
+      throw new ValidationError(
+        `Path '${input}' is not a directory. Trailing slash indicates directory intent.`
+      );
+    }
+    throw new ValidationError(`Directory not found: ${input}`);
+  }
 
-  // 3. Convert to add-specific classification with mode
+  // Layer 2: Bare name with file extension → local file (unambiguous file intent)
+  if (isBareNameWithExtension(input)) {
+    const resolvedPath = resolve(cwd, input);
+    if (await exists(resolvedPath)) {
+      return { mode: 'copy', copySourcePath: resolvedPath };
+    }
+    throw new ValidationError(`File not found: ${input}`);
+  }
+
+  // Layer 3: Use base classifier (registry, git, explicit paths)
+  const base = await classifyInputBase(input, cwd);
   return enrichWithAddMode(base);
+}
+
+/** Check if input is a bare name with a file-extension-like suffix (e.g. README.md, config.json) */
+function isBareNameWithExtension(input: string): boolean {
+  if (input.startsWith('./') || input.startsWith('../') || input.startsWith('/') || input.startsWith('~')) {
+    return false;
+  }
+  if (input.includes('@') || input.includes('/')) {
+    return false;
+  }
+  // Exclude tarballs — they are packages, not content files
+  if (input.endsWith('.tgz') || input.endsWith('.tar.gz')) {
+    return false;
+  }
+  const lastDot = input.lastIndexOf('.');
+  if (lastDot <= 0) return false;
+  const ext = input.slice(lastDot + 1);
+  return ext.length >= 1 && ext.length <= 8 && /^[a-zA-Z0-9]+$/.test(ext);
+}
+
+/** Build a LocalPathInputSpec from an absolute path (for trailing-slash and local-path enrichment) */
+async function buildLocalPathSpec(absolutePath: string): Promise<BaseInputClassification> {
+  const isValid = await isValidPackageDirectory(absolutePath);
+  const pluginResult = await detectPluginType(absolutePath);
+
+  let packageName: string | undefined;
+  if (isValid || pluginResult.isPlugin) {
+    try {
+      const manifestPath = join(absolutePath, 'openpackage.yml');
+      if (await exists(manifestPath)) {
+        const config = await parsePackageYml(manifestPath);
+        packageName = config.name ?? basename(absolutePath);
+      }
+    } catch {
+      packageName = basename(absolutePath);
+    }
+  }
+
+  return {
+    type: 'local-path',
+    absolutePath,
+    isDirectory: true,
+    packageName,
+    isValidPackage: isValid || pluginResult.isPlugin
+  };
 }
 
 /**
@@ -91,6 +165,18 @@ function enrichWithAddMode(
       };
 
     case 'local-path': {
+      // Tarballs (.tgz, .tar.gz) → path dependency
+      if (
+        base.absolutePath.endsWith('.tgz') ||
+        base.absolutePath.endsWith('.tar.gz')
+      ) {
+        return {
+          mode: 'dependency',
+          packageName: base.packageName ?? basename(base.absolutePath).replace(/\.(tgz|tar\.gz)$/, ''),
+          localPath: base.absolutePath
+        };
+      }
+
       // Determine if dependency or copy based on package validity
       if (base.isValidPackage) {
         logger.debug('Classified local directory as dependency', {
@@ -103,7 +189,7 @@ function enrichWithAddMode(
           localPath: base.absolutePath
         };
       }
-      
+
       // Not a valid package - copy mode
       return {
         mode: 'copy',

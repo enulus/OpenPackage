@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { join, relative } from 'path';
+import { join, relative, resolve } from 'path';
 
 import type { ExecutionContext } from '../types/execution-context.js';
 
@@ -13,6 +13,7 @@ import { expandDirectorySelections, hasDirectorySelections, countSelectionTypes 
 import { createExecutionContext } from '../core/execution-context.js';
 import { createInteractionPolicy, PromptTier } from '../core/interaction-policy.js';
 import { setOutputMode, output, isInteractive } from '../utils/output.js';
+import { exists } from '../utils/fs.js';
 
 /**
  * Display add operation results.
@@ -57,6 +58,17 @@ function displayDependencyResult(result: AddDependencyResult, classification: Ad
   output.message(`in ${formatPathForDisplay(result.targetManifest, process.cwd())}`);
 }
 
+/** Check if input looks like a bare name (could be registry or local path) */
+function isBareNameInput(input: string): boolean {
+  return (
+    !input.startsWith('./') &&
+    !input.startsWith('../') &&
+    !input.startsWith('/') &&
+    !input.startsWith('~') &&
+    !input.endsWith('/')
+  );
+}
+
 /**
  * Process a single resource spec through the add pipeline
  */
@@ -76,11 +88,24 @@ async function processAddResource(
       // --platform-specific is only valid for copy mode
       throw new Error('--platform-specific can only be used with --copy or when adding files');
     }
-    const result = await runAddDependencyFlow(classification, {
-      dev: options.dev,
-      to: options.to,
-    });
-    displayDependencyResult(result, classification);
+    try {
+      const result = await runAddDependencyFlow(classification, {
+        dev: options.dev,
+        to: options.to,
+      });
+      displayDependencyResult(result, classification);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (isBareNameInput(resourceSpec)) {
+        const localPath = resolve(cwd, resourceSpec);
+        if (await exists(localPath)) {
+          throw new Error(
+            `${msg}\n\nA local path './${resourceSpec}' exists — did you mean:\n  opkg add ./${resourceSpec}`
+          );
+        }
+      }
+      throw error;
+    }
   } else if (classification.mode === 'workspace-resource') {
     if (options.dev) {
       throw new Error('--dev can only be used when adding a dependency, not when copying files');
@@ -118,7 +143,7 @@ async function processAddResource(
 export function setupAddCommand(program: Command): void {
   program
     .command('add')
-    .argument('[resource-spec]',
+    .argument('[target]',
       'resource to add (package[@version], gh@owner/repo, https://github.com/owner/repo, or /path/to/file). If omitted, shows interactive file selector.')
     .description('Add a dependency to openpackage.yml or copy files to a package')
     .option('--to <package-name>', 'target package (for dependency: which manifest; for copy: which package source)')
@@ -127,7 +152,7 @@ export function setupAddCommand(program: Command): void {
     .option('--platform-specific', 'save platform-specific variants for platform subdir inputs')
     .option('--force', 'overwrite existing files without prompting')
     .action(
-      withErrorHandling(async (resourceSpec: string | undefined, options, command: Command) => {
+      withErrorHandling(async (target: string | undefined, options, command: Command) => {
         const cwd = process.cwd();
         const programOpts = command.parent?.opts() || {};
 
@@ -137,20 +162,20 @@ export function setupAddCommand(program: Command): void {
         });
 
         const policy = createInteractionPolicy({
-          interactive: !resourceSpec,
+          interactive: !target,
           force: options.force,
         });
         execContext.interactionPolicy = policy;
 
-        // Set output mode: interactive (clack UI) when no resource-spec, plain console otherwise
-        setOutputMode(!resourceSpec);
+        // Set output mode: interactive (clack UI) when no target, plain console otherwise
+        setOutputMode(!target);
 
-        // If no resource spec provided, show interactive file selector
-        if (!resourceSpec) {
+        // If no target provided, show interactive file selector
+        if (!target) {
           if (!policy.canPrompt(PromptTier.OptionalMenu)) {
             throw new Error(
-              '<resource-spec> argument is required in non-interactive mode.\n' +
-              'Usage: opkg add <resource-spec> [options]\n\n' +
+              '<target> argument is required in non-interactive mode.\n' +
+              'Usage: opkg add <target> [options]\n\n' +
               'Examples:\n' +
               '  opkg add ./path/to/file.txt              # Add local file\n' +
               '  opkg add gh@owner/repo                   # Add from GitHub\n' +
@@ -198,8 +223,8 @@ export function setupAddCommand(program: Command): void {
           return;
         }
         
-        // Process single resource spec (existing behavior)
-        await processAddResource(resourceSpec, options, cwd, execContext);
+        // Process single target (existing behavior)
+        await processAddResource(target, options, cwd, execContext);
       })
     );
 }

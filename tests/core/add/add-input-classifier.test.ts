@@ -142,7 +142,7 @@ async function testCopyFlagOverridesPackageDir(): Promise<void> {
 async function testCopyFlagWithNonLocalErrors(): Promise<void> {
   await assert.rejects(
     () => classifyAddInput('@hyericlee/essentials', '/tmp/any-cwd', { copy: true }),
-    /--copy can only be used with local paths/
+    /Path not found|--copy requires/
   );
   console.log('  ✓ testCopyFlagWithNonLocalErrors');
 }
@@ -171,6 +171,101 @@ async function testTarball(): Promise<void> {
   }
 }
 
+// 16. Trailing slash → local directory (copy when not a package)
+async function testTrailingSlashCopyMode(): Promise<void> {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-test-classifier-'));
+  try {
+    ensureDir(path.join(tmpDir, 'agents'));
+    writeFile(path.join(tmpDir, 'agents', 'somefile.txt'), 'hello');
+    const result = await classifyAddInput('agents/', tmpDir, {});
+    assert.equal(result.mode, 'copy');
+    assert.equal(result.copySourcePath, path.join(tmpDir, 'agents'));
+    console.log('  ✓ testTrailingSlashCopyMode');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+// 17. Trailing slash → local directory (dependency when valid package)
+async function testTrailingSlashDependencyMode(): Promise<void> {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-test-classifier-'));
+  try {
+    ensureDir(path.join(tmpDir, 'my-pkg'));
+    writeFile(path.join(tmpDir, 'my-pkg', 'openpackage.yml'), 'name: my-pkg\nversion: 1.0.0\n');
+    const result = await classifyAddInput('my-pkg/', tmpDir, {});
+    assert.equal(result.mode, 'dependency');
+    assert.equal(result.packageName, 'my-pkg');
+    assert.equal(result.localPath, path.join(tmpDir, 'my-pkg'));
+    console.log('  ✓ testTrailingSlashDependencyMode');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+// 18. Trailing slash with nonexistent directory → error
+async function testTrailingSlashNonexistent(): Promise<void> {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-test-classifier-'));
+  try {
+    await assert.rejects(
+      () => classifyAddInput('nonexistent-dir/', tmpDir, {}),
+      /Directory not found/
+    );
+    console.log('  ✓ testTrailingSlashNonexistent');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+// 19. Bare name with file extension → copy when file exists
+async function testFileExtensionCopyMode(): Promise<void> {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-test-classifier-'));
+  try {
+    writeFile(path.join(tmpDir, 'README.md'), 'content');
+    const result = await classifyAddInput('README.md', tmpDir, {});
+    assert.equal(result.mode, 'copy');
+    assert.equal(result.copySourcePath, path.join(tmpDir, 'README.md'));
+    console.log('  ✓ testFileExtensionCopyMode');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+// 20. Bare name with file extension → copy for config.json
+async function testFileExtensionJson(): Promise<void> {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-test-classifier-'));
+  try {
+    writeFile(path.join(tmpDir, 'config.json'), '{}');
+    const result = await classifyAddInput('config.json', tmpDir, {});
+    assert.equal(result.mode, 'copy');
+    assert.equal(result.copySourcePath, path.join(tmpDir, 'config.json'));
+    console.log('  ✓ testFileExtensionJson');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+// 21. Bare name with file extension, file does not exist → error
+async function testFileExtensionNonexistent(): Promise<void> {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-test-classifier-'));
+  try {
+    await assert.rejects(
+      () => classifyAddInput('prompt.md', tmpDir, {}),
+      /File not found/
+    );
+    console.log('  ✓ testFileExtensionNonexistent');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+// 22. Bare name without extension → registry (unchanged)
+async function testBareNameRegistry(): Promise<void> {
+  const result = await classifyAddInput('essentials', '/tmp/any-cwd', {});
+  assert.equal(result.mode, 'dependency');
+  assert.equal(result.packageName, 'essentials');
+  console.log('  ✓ testBareNameRegistry');
+}
+
 // Run all tests
 await testRegistryPackage();
 await testRegistryPackageWithVersion();
@@ -187,5 +282,12 @@ await testCopyFlagOverridesPackageDir();
 await testCopyFlagWithNonLocalErrors();
 await testCopyFlagWithNonexistentPathErrors();
 await testTarball();
+await testTrailingSlashCopyMode();
+await testTrailingSlashDependencyMode();
+await testTrailingSlashNonexistent();
+await testFileExtensionCopyMode();
+await testFileExtensionJson();
+await testFileExtensionNonexistent();
+await testBareNameRegistry();
 
 console.log('\n✓ All add-input-classifier tests passed');
