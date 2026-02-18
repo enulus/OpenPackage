@@ -10,7 +10,7 @@
  *   output.info('Hello'); // Uses clack in interactive, console.log in non-interactive
  */
 
-import { log, spinner as clackSpinner } from '@clack/prompts';
+import { log, spinner as clackSpinner, confirm as clackConfirm, note as clackNote, isCancel, cancel } from '@clack/prompts';
 import { Spinner } from './spinner.js';
 
 /**
@@ -162,6 +162,48 @@ export const output = {
     } else {
       console.log(`⚠️  ${message}`);
     }
+  },
+
+  /**
+   * Display a note block (title + content). In interactive mode uses clack's note.
+   */
+  note(content: string, title?: string): void {
+    if (isInteractiveMode) {
+      clackNote(content, title ?? '');
+    } else {
+      if (title) {
+        console.log(`\n${title}\n${content}`);
+      } else {
+        console.log(`\n${content}`);
+      }
+    }
+  },
+
+  /**
+   * Prompt for confirmation. In interactive mode uses clack's confirm.
+   * @throws UserCancellationError when user cancels (Ctrl+C)
+   */
+  async confirm(message: string, options?: { initial?: boolean }): Promise<boolean> {
+    if (isInteractiveMode) {
+      const result = await clackConfirm({
+        message,
+        initialValue: options?.initial ?? false
+      });
+      if (isCancel(result)) {
+        cancel('Operation cancelled.');
+        const { UserCancellationError } = await import('./errors.js');
+        throw new UserCancellationError('Operation cancelled by user');
+      }
+      return result as boolean;
+    }
+    const { safePrompts } = await import('./prompts.js');
+    const response = await safePrompts({
+      type: 'confirm',
+      name: 'confirmed',
+      message,
+      initial: options?.initial ?? false
+    });
+    return (response as { confirmed?: boolean }).confirmed ?? false;
   },
 
   /**

@@ -1,7 +1,7 @@
-import { safePrompts } from '../../utils/prompts.js';
 import { UserCancellationError } from '../../utils/errors.js';
 import type { RemovalEntry } from './removal-collector.js';
 import { PromptTier } from '../../core/interaction-policy.js';
+import { output } from '../../utils/output.js';
 
 export interface RemovalConfirmationOptions {
   force?: boolean;
@@ -11,6 +11,7 @@ export interface RemovalConfirmationOptions {
 
 /**
  * Confirm removal operation with user.
+ * Uses unified output (clack in interactive mode, plain console otherwise).
  *
  * @param packageName - Name of the package
  * @param entries - Files to be removed
@@ -33,32 +34,18 @@ export async function confirmRemoval(
     throw new Error('Removal requires confirmation. Use --force in non-interactive mode.');
   }
 
-  console.log(`\nThe following ${entries.length} file${entries.length !== 1 ? 's' : ''} will be removed from '${packageName}':`);
-  
-  // Show up to 20 files, then summarize
-  const maxDisplay = 20;
-  const displayEntries = entries.slice(0, maxDisplay);
-  
-  for (const entry of displayEntries) {
-    console.log(`  - ${entry.registryPath}`);
-  }
+  const count = entries.length;
+  const paths = entries.map(e => e.registryPath);
+  const message =
+    count === 1
+      ? `Remove ${paths[0]} from ${packageName}?`
+      : count <= 3
+        ? `Remove ${paths.join(', ')} from ${packageName}?`
+        : `Remove ${count} files from ${packageName}?`;
 
-  console.log('')
-  
-  if (entries.length > maxDisplay) {
-    console.log(`  ... and ${entries.length - maxDisplay} more file${entries.length - maxDisplay !== 1 ? 's' : ''}`);
-  }
-
-  const response = await safePrompts({
-    type: 'confirm',
-    name: 'confirmed',
-    message: 'Proceed with removal?',
-    initial: false
-  });
-
-  if (!response.confirmed) {
+  const confirmed = await output.confirm(message, { initial: false });
+  if (!confirmed) {
     throw new UserCancellationError();
   }
-
   return true;
 }

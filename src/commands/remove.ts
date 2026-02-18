@@ -2,15 +2,16 @@ import { Command } from 'commander';
 
 import { withErrorHandling } from '../utils/errors.js';
 import { runRemoveFromSourcePipeline, type RemoveFromSourceOptions } from '../core/remove/remove-from-source-pipeline.js';
+import { resolveMutableSource } from '../core/source-resolution/resolve-mutable-source.js';
 import { readWorkspaceIndex } from '../utils/workspace-index-yml.js';
-import { formatPathForDisplay } from '../utils/formatters.js';
+import { getTreeConnector } from '../utils/formatters.js';
 import { interactiveFileSelect } from '../utils/interactive-file-selector.js';
 import { expandDirectorySelections, hasDirectorySelections, countSelectionTypes } from '../utils/expand-directory-selections.js';
 import { interactivePackageSelect, resolvePackageSelection } from '../utils/interactive-package-selector.js';
 import { createExecutionContext } from '../core/execution-context.js';
 import { createInteractionPolicy, PromptTier } from '../core/interaction-policy.js';
+import { setOutputMode, output, isInteractive } from '../utils/output.js';
 import type { ExecutionContext } from '../types/execution-context.js';
-import { getLocalPackageDir } from '../utils/paths.js';
 
 export function setupRemoveCommand(program: Command): void {
   program
@@ -37,6 +38,9 @@ export function setupRemoveCommand(program: Command): void {
         });
         execContext.interactionPolicy = policy;
 
+        // Set output mode: interactive (clack UI) when no path provided, plain console otherwise
+        setOutputMode(!pathArg);
+
         // If no path argument provided, show interactive selector
         if (!pathArg) {
           if (!policy.canPrompt(PromptTier.OptionalMenu)) {
@@ -55,10 +59,14 @@ export function setupRemoveCommand(program: Command): void {
           let packageDir: string;
           
           if (options.from) {
-            // Package specified via --from option
-            selectedPackage = options.from;
-            // Get package directory (will be validated later by pipeline)
-            packageDir = getLocalPackageDir(cwd, options.from);
+            // Package specified via --from option - resolve from workspace or global
+            try {
+              const source = await resolveMutableSource({ cwd, packageName: options.from });
+              selectedPackage = source.packageName;
+              packageDir = source.absolutePath;
+            } catch (error) {
+              throw new Error(error instanceof Error ? error.message : String(error));
+            }
           } else {
             // Show interactive package selector
             const selection = await interactivePackageSelect({
@@ -99,27 +107,26 @@ export function setupRemoveCommand(program: Command): void {
           let filesToProcess: string[];
           if (hasDirectorySelections(selectedFiles)) {
             const counts = countSelectionTypes(selectedFiles);
-            console.log(`\nExpanding ${counts.dirs} director${counts.dirs === 1 ? 'y' : 'ies'} and ${counts.files} file${counts.files === 1 ? '' : 's'}...`);
+            output.info(`Expanding ${counts.dirs} director${counts.dirs === 1 ? 'y' : 'ies'} and ${counts.files} file${counts.files === 1 ? '' : 's'}...`);
             filesToProcess = await expandDirectorySelections(selectedFiles, packageDir);
-            console.log(`Found ${filesToProcess.length} total file${filesToProcess.length === 1 ? '' : 's'} to remove`);
+            output.info(`Found ${filesToProcess.length} total file${filesToProcess.length === 1 ? '' : 's'} to remove`);
           } else {
             filesToProcess = selectedFiles;
           }
           
           // Step 3: Process each selected file sequentially
-          console.log(); // Add spacing before results
           for (let i = 0; i < filesToProcess.length; i++) {
             const file = filesToProcess[i];
             
             // Show progress for multiple files
             if (filesToProcess.length > 1) {
-              console.log(`\n[${i + 1}/${filesToProcess.length}] Processing: ${file}`);
+              output.message(`[${i + 1}/${filesToProcess.length}] Processing: ${file}`);
             }
             
             try {
               await processRemoveResource(selectedPackage ?? undefined, file, options, cwd, execContext);
             } catch (error) {
-              console.error(`✗ Failed to remove ${file}: ${error}`);
+              output.error(`Failed to remove ${file}: ${error}`);
               // Continue with remaining files
             }
           }
@@ -148,60 +155,47 @@ async function processRemoveResource(
     throw new Error(result.error || 'Remove operation failed');
   }
   
-  // Provide helpful feedback
+  // Provide helpful feedback (uses unified output: clack in interactive, plain console otherwise)
   if (result.data) {
-    const { filesRemoved, sourcePath, sourceType, packageName: resolvedName, removedPaths } = result.data;
-    
-    // Format the path for display using unified formatter
-    const displayPath = formatPathForDisplay(sourcePath, cwd);
-    
+    const { filesRemoved, sourcePath, packageName: resolvedName, removedPaths } = result.data;
+
     // Determine if this is a workspace root removal
-    const isWorkspaceRoot = displayPath.includes('.openpackage') && !displayPath.includes('.openpackage/packages');
-    
+    const isWorkspaceRoot = sourcePath.includes('.openpackage') && !sourcePath.includes('.openpackage/packages');
+
     if (options.dryRun) {
       if (isWorkspaceRoot) {
-        console.log(`\n(dry-run) Would remove ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from workspace package`);
+        output.success(`(dry-run) Would remove ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from workspace package`);
       } else {
-        console.log(`\n(dry-run) Would remove ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from ${resolvedName}`);
+        output.success(`(dry-run) Would remove ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from ${resolvedName}`);
       }
     } else {
       if (isWorkspaceRoot) {
-        console.log(`\n✓ Removed ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from workspace package`);
+        output.success(`Removed ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from workspace package`);
       } else {
-        console.log(`\n✓ Removed ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from ${resolvedName}`);
+        output.success(`Removed ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from ${resolvedName}`);
       }
     }
-    
-    console.log(`  Path: ${displayPath}`);
-    console.log(`  Type: ${sourceType} package`);
-    
-    // Show removed files (limited display)
+
     if (removedPaths.length > 0) {
-      const maxDisplay = 10;
-      console.log(`\nFiles ${options.dryRun ? 'to be removed' : 'removed'}:`);
-      
-      const displayPaths = removedPaths.slice(0, maxDisplay);
-      for (const path of displayPaths) {
-        console.log(`  - ${path}`);
-      }
-      
-      if (removedPaths.length > maxDisplay) {
-        console.log(`  ... and ${removedPaths.length - maxDisplay} more`);
+      const sortedPaths = [...removedPaths].sort((a, b) => a.localeCompare(b));
+      if (isInteractive()) {
+        const maxDisplay = 10;
+        const displayPaths = sortedPaths.slice(0, maxDisplay);
+        const more = sortedPaths.length > maxDisplay ? `\n... and ${sortedPaths.length - maxDisplay} more` : '';
+        output.note(displayPaths.join('\n') + more, 'Removed files');
+      } else {
+        for (let i = 0; i < sortedPaths.length; i++) {
+          const connector = getTreeConnector(i === sortedPaths.length - 1);
+          output.message(`  ${connector}${sortedPaths[i]}`);
+        }
       }
     }
-    
+
     if (!options.dryRun && !isWorkspaceRoot) {
-      // Check if package is installed in workspace
       const workspaceIndexRecord = await readWorkspaceIndex(cwd);
       const isInstalled = !!workspaceIndexRecord.index.packages[resolvedName];
-      
       if (isInstalled) {
-        console.log(`\n💡 Deletions not synced to workspace.`);
-        console.log(`   To sync deletions, run:`);
-        console.log(`     opkg install ${resolvedName}`);
-      } else {
-        console.log(`\n💡 Package not installed in workspace.`);
-        console.log(`   If you install this package later, the removed files won't be included.`);
+        output.message(`Run \`opkg install ${resolvedName}\` to sync.`);
       }
     }
   }
