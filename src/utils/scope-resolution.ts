@@ -137,6 +137,26 @@ export function getScopeDisplayPath(
 }
 
 /**
+ * Workspace scope for list/uninstall/view (project or global only, no root)
+ */
+export type WorkspaceScope = 'project' | 'global';
+
+/**
+ * Parse and validate workspace scope from CLI (project or global only)
+ * Used by list, uninstall, view - rejects root scope.
+ *
+ * @param scopeValue - Raw scope value from CLI option
+ * @returns Validated WorkspaceScope
+ */
+export function parseWorkspaceScope(scopeValue: string): WorkspaceScope {
+  const parsed = parseScope(scopeValue);
+  if (parsed === 'root') {
+    throw new Error('root scope not supported; use project or global');
+  }
+  return parsed;
+}
+
+/**
  * Parse and validate scope option from CLI
  * 
  * @param scopeValue - Raw scope value from CLI option

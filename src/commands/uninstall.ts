@@ -22,6 +22,7 @@ import { readWorkspaceIndex } from '../utils/workspace-index-yml.js';
 import { join } from 'path';
 
 interface UninstallCommandOptions extends UninstallOptions {
+  global?: boolean;
   interactive?: boolean;
 }
 
@@ -31,9 +32,14 @@ async function uninstallCommand(
   command: Command
 ) {
   const programOpts = command.parent?.opts() || {};
+  // Default to project (local) scope; -g switches to global (matches install)
+  const traverseOpts = {
+    programOpts,
+    ...(options.global ? { globalOnly: true as const } : { projectOnly: true as const }),
+  };
 
   if (options.interactive) {
-    await handleListUninstall(nameArg, options, programOpts);
+    await handleListUninstall(nameArg, options, programOpts, traverseOpts);
     return;
   }
 
@@ -41,7 +47,7 @@ async function uninstallCommand(
     throw new ValidationError('Resource or package name is required. Use --interactive to interactively select.');
   }
 
-  await handleDirectUninstall(nameArg, options, programOpts);
+  await handleDirectUninstall(nameArg, options, programOpts, traverseOpts);
 }
 
 // ---------------------------------------------------------------------------
@@ -51,10 +57,11 @@ async function uninstallCommand(
 async function handleDirectUninstall(
   name: string,
   options: UninstallCommandOptions,
-  programOpts: Record<string, any>
+  programOpts: Record<string, any>,
+  traverseOpts: { programOpts?: Record<string, any>; globalOnly?: boolean; projectOnly?: boolean }
 ) {
   const candidates = await traverseScopesFlat<ResolutionCandidate>(
-    { programOpts, globalOnly: options.global },
+    traverseOpts,
     async ({ scope, context }) => {
       const result = await resolveByName(name, context.targetDir, scope);
       return result.candidates;
@@ -100,7 +107,8 @@ async function handleDirectUninstall(
 async function handleListUninstall(
   packageFilter: string | undefined,
   options: UninstallCommandOptions,
-  programOpts: Record<string, any>
+  programOpts: Record<string, any>,
+  traverseOpts: { programOpts?: Record<string, any>; globalOnly?: boolean; projectOnly?: boolean }
 ) {
   // Build resources from applicable scopes with spinner
   const s = spinner();
@@ -110,7 +118,7 @@ async function handleListUninstall(
   const scopeToTargetDir = new Map<ResourceScope, string>();
   
   const scopeResults = await traverseScopes(
-    { programOpts, globalOnly: options.global },
+    traverseOpts,
     async ({ scope, context }) => {
       scopeToTargetDir.set(scope, context.targetDir);
       return buildWorkspaceResources(context.targetDir, scope);

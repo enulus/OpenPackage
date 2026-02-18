@@ -3,6 +3,7 @@ import { Command } from 'commander';
 
 import { CommandResult, type ExecutionContext } from '../types/index.js';
 import { withErrorHandling, ValidationError } from '../utils/errors.js';
+import { parseWorkspaceScope } from '../utils/scope-resolution.js';
 import { createExecutionContext } from '../core/execution-context.js';
 import { classifyInput } from '../core/install/preprocessing/index.js';
 import { resolveRemoteList, type RemoteListResult, collectFiles } from '../core/list/remote-list-resolver.js';
@@ -27,8 +28,7 @@ import {
 import type { EnhancedResourceGroup, ResourceScope } from '../core/list/list-tree-renderer.js';
 
 interface ViewOptions {
-  global?: boolean;
-  project?: boolean;
+  scope?: string;
   files?: boolean;
   remote?: boolean;
   profile?: string;
@@ -52,7 +52,7 @@ interface LocalPackageResult {
 async function resolveLocalPackage(
   packageName: string,
   cwd: string,
-  options: { showProject: boolean; showGlobal: boolean }
+  options: { showProject: boolean; showGlobal: boolean; searchRegistry: boolean }
 ): Promise<LocalPackageResult | null> {
   const resolution = await resolvePackageByName({
     cwd,
@@ -60,7 +60,7 @@ async function resolveLocalPackage(
     checkCwd: false,
     searchWorkspace: options.showProject,
     searchGlobal: options.showGlobal,
-    searchRegistry: true
+    searchRegistry: options.searchRegistry
   });
 
   if (!resolution.found || !resolution.path) {
@@ -156,14 +156,24 @@ async function viewCommand(
 ): Promise<CommandResult> {
   const programOpts = command.parent?.opts() || {};
 
-  if (options.global && options.project) {
-    throw new ValidationError('Cannot use --global and --project together.');
+  if (options.scope && options.remote) {
+    throw new ValidationError('Cannot use --scope with --remote; choose one: --scope for local lookup or --remote for remote-only.');
+  }
+
+  // Parse and validate scope when provided
+  let viewScope: 'project' | 'global' | undefined;
+  if (options.scope) {
+    try {
+      viewScope = parseWorkspaceScope(options.scope);
+    } catch (error) {
+      throw error instanceof ValidationError ? error : new ValidationError(error instanceof Error ? error.message : String(error));
+    }
   }
 
   // --- Remote-only mode ---
   if (options.remote) {
     const execContext = await createExecutionContext({
-      global: options.global,
+      global: viewScope === 'global',
       cwd: programOpts.cwd
     });
     const remoteResult = await resolveRemoteForPackage(packageName, execContext, options);
@@ -175,9 +185,9 @@ async function viewCommand(
   }
 
   // --- Try local first ---
-  const showBothScopes = !options.global && !options.project;
-  const showGlobal = options.global || showBothScopes;
-  const showProject = options.project || showBothScopes;
+  const showBothScopes = viewScope === undefined;
+  const showGlobal = viewScope === 'global' || showBothScopes;
+  const showProject = viewScope === 'project' || showBothScopes;
 
   const results = await collectScopedData(
     packageName,
@@ -194,10 +204,11 @@ async function viewCommand(
 
   // --- Fallback tier 2: local packages directory (not in workspace index) ---
   if (results.length === 0) {
+    const searchRegistry = showBothScopes; // only when no scope specified
     const localResult = await resolveLocalPackage(
       packageName,
       programOpts.cwd || process.cwd(),
-      { showProject, showGlobal }
+      { showProject, showGlobal, searchRegistry }
     );
 
     if (localResult) {
@@ -206,7 +217,7 @@ async function viewCommand(
 
     // --- Fallback tier 3: remote registry/git ---
     const fallbackContext = await createExecutionContext({
-      global: options.global,
+      global: viewScope === 'global',
       cwd: programOpts.cwd
     });
     const remoteResult = await resolveRemoteForPackage(packageName, fallbackContext, options);
@@ -320,8 +331,7 @@ export function setupViewCommand(program: Command): void {
     .alias('show')
     .description('View package contents, metadata, and dependencies')
     .argument('<package-spec>', 'package name, git URL, or registry spec')
-    .option('-p, --project', 'look in current workspace only')
-    .option('-g, --global', 'look in home directory (~/) only')
+    .option('-s, --scope <scope>', 'workspace scope: project or global (default: search both)')
     .option('-f, --files', 'show individual file paths')
     .option('--remote', 'fetch from remote registry or git, skipping local lookup')
     .option('--profile <profile>', 'profile to use for authentication')

@@ -2,6 +2,7 @@ import { Command } from 'commander';
 
 import { CommandResult } from '../types/index.js';
 import { withErrorHandling, ValidationError } from '../utils/errors.js';
+import { parseWorkspaceScope } from '../utils/scope-resolution.js';
 import { createExecutionContext } from '../core/execution-context.js';
 import {
   collectScopedData,
@@ -14,8 +15,7 @@ import { dim, printDepsView, printResourcesView } from '../core/list/list-printe
 import type { EnhancedResourceGroup, ResourceScope } from '../core/list/list-tree-renderer.js';
 
 interface ListOptions {
-  global?: boolean;
-  project?: boolean;
+  scope?: string;
   all?: boolean;
   files?: boolean;
   tracked?: boolean;
@@ -47,17 +47,26 @@ async function listCommand(
     throw new ValidationError('Cannot use --all with --untracked.');
   }
 
-  if (options.global && options.project) {
-    throw new ValidationError('Cannot use --global and --project together.');
-  }
-
   if (options.deps && options.untracked) {
     throw new ValidationError('Cannot use --deps with --untracked.');
   }
 
-  const showBothScopes = !options.global && !options.project;
-  const showGlobal = options.global || showBothScopes;
-  const showProject = options.project || showBothScopes;
+  let showProject: boolean;
+  let showGlobal: boolean;
+  if (options.scope) {
+    try {
+      const scope = parseWorkspaceScope(options.scope);
+      showProject = scope === 'project';
+      showGlobal = scope === 'global';
+    } catch (error) {
+      throw error instanceof ValidationError
+        ? error
+        : new ValidationError(error instanceof Error ? error.message : String(error));
+    }
+  } else {
+    showProject = true;
+    showGlobal = true;
+  }
 
   const results = await collectScopedData(
     packageName,
@@ -183,8 +192,7 @@ export function setupListCommand(program: Command): void {
     .alias('ls')
     .description('List installed resources and packages')
     .argument('[resource-spec]', 'filter by a specific installed package')
-    .option('-p, --project', 'list in current workspace only')
-    .option('-g, --global', 'list in home directory (~/) only')
+    .option('-s, --scope <scope>', 'workspace scope: project or global (default: both)')
     .option('-d, --deps', 'show dependency tree instead of resources')
     .option('-a, --all', 'show full dependency tree including transitive dependencies')
     .option('-f, --files', 'show individual file paths')
