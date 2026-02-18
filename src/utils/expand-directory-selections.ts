@@ -5,7 +5,7 @@
  * Used by add and remove commands to handle directory selections from interactive file selector.
  */
 
-import { join } from 'path';
+import { join, relative } from 'path';
 import { promises as fs } from 'fs';
 import { walkFiles } from './file-walker.js';
 import { isJunk } from 'junk';
@@ -60,8 +60,8 @@ export async function expandDirectorySelections(
       };
       
       for await (const filePath of walkFiles(absDirPath, { filter })) {
-        // Convert to relative path from basePath
-        const relativePath = filePath.substring(basePath.length + 1);
+        // Convert to relative path from basePath (path.relative handles trailing slashes correctly)
+        const relativePath = relative(basePath, filePath);
         
         // Only add if not already seen (avoid duplicates)
         if (!seenFiles.has(relativePath)) {

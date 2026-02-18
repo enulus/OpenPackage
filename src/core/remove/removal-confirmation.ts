@@ -34,16 +34,7 @@ export async function confirmRemoval(
     throw new Error('Removal requires confirmation. Use --force in non-interactive mode.');
   }
 
-  const count = entries.length;
-  const paths = entries.map(e => e.registryPath);
-  const message =
-    count === 1
-      ? `Remove ${paths[0]} from ${packageName}?`
-      : count <= 3
-        ? `Remove ${paths.join(', ')} from ${packageName}?`
-        : `Remove ${count} files from ${packageName}?`;
-
-  const confirmed = await output.confirm(message, { initial: false });
+  const confirmed = await output.confirm('Confirm removal?', { initial: false });
   if (!confirmed) {
     throw new UserCancellationError();
   }

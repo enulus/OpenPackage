@@ -166,12 +166,12 @@ export class FileSelectorWithHeader extends AutocompletePrompt<FileOption> {
     const count = this.selectedValues.length;
     const lines: string[] = [];
     
-    // Title line with guide
+    // Title line with pointer symbol (◆) for consistency with prompt message
     const title = count === 0 
       ? `Selected: ${pico.dim('none (use Space to select)')}`
       : `Selected: ${pico.cyan(this.getSelectionLabel())}`;
     
-    lines.push(`${pico.cyan('│')}  ${title}`);
+    lines.push(`${pico.cyan('◆')}  ${title}`);
     
     // Show selected files (up to 5)
     if (count > 0) {

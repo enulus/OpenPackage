@@ -5,7 +5,7 @@ import type { ExecutionContext } from '../../types/execution-context.js';
 import { FILE_PATTERNS } from '../../constants/index.js';
 import { resolveMutableSource } from '../source-resolution/resolve-mutable-source.js';
 import { assertMutableSourceOrThrow } from '../../utils/source-mutability.js';
-import { collectSourceEntries } from './source-collector.js';
+import { collectSourceEntries, type SourceEntry } from './source-collector.js';
 import { copyFilesWithConflictResolution } from './add-conflict-handler.js';
 import type { PackageContext } from '../package-context.js';
 import { parsePackageYml } from '../../utils/package-yml.js';
@@ -107,6 +107,79 @@ export async function runAddToSourcePipeline(
 
   // Build array of added file paths (package-root-relative paths)
   const addedFilePaths = changed.map(file => join(packageContext.packageRootDir, file.path));
+
+  return {
+    success: true,
+    data: {
+      packageName: packageContext.name,
+      filesAdded: changed.length,
+      sourcePath: packageContext.packageRootDir,
+      sourceType,
+      isWorkspaceRoot,
+      addedFilePaths
+    }
+  };
+}
+
+/**
+ * Run add pipeline for multiple paths as a single batch (one copy pass, one result).
+ * Used when interactive selection yields multiple files.
+ */
+export async function runAddToSourcePipelineBatch(
+  packageName: string | undefined,
+  absPaths: string[],
+  cwd: string,
+  options: AddToSourceOptions = {}
+): Promise<CommandResult<AddToSourceResult>> {
+  let packageContext: Pick<PackageContext, 'name' | 'version' | 'config' | 'packageYmlPath' | 'packageRootDir' | 'packageFilesDir'>;
+  let sourceType: 'workspace' | 'global';
+  const isWorkspaceRoot = !packageName;
+
+  if (isWorkspaceRoot) {
+    try {
+      packageContext = await buildWorkspacePackageContext(cwd);
+      sourceType = 'workspace';
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  } else {
+    let source;
+    try {
+      source = await resolveMutableSource({ cwd, packageName });
+      assertMutableSourceOrThrow(source.absolutePath, { packageName: source.packageName, command: 'add' });
+      packageContext = await buildPackageContextFromSource(source);
+      sourceType = source.absolutePath.includes(`${cwd}/.openpackage/packages/`) ? 'workspace' : 'global';
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  const allEntries: SourceEntry[] = [];
+  const seenRegistryPaths = new Set<string>();
+
+  for (const absPath of absPaths) {
+    if (!(await exists(absPath))) {
+      return { success: false, error: `Path not found: ${absPath}` };
+    }
+    try {
+      const entries = await collectSourceEntries(absPath, cwd);
+      for (const entry of entries) {
+        if (!seenRegistryPaths.has(entry.registryPath)) {
+          seenRegistryPaths.add(entry.registryPath);
+          allEntries.push(entry);
+        }
+      }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  if (allEntries.length === 0) {
+    return { success: true, data: { packageName: packageContext.name, filesAdded: 0, sourcePath: packageContext.packageRootDir, sourceType, isWorkspaceRoot, addedFilePaths: [] } };
+  }
+
+  const changed = await copyFilesWithConflictResolution(packageContext, allEntries, options);
+  const addedFilePaths = changed.map(f => join(packageContext.packageRootDir, f.path));
 
   return {
     success: true,

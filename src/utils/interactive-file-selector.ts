@@ -8,6 +8,7 @@
 import { note, log } from '@clack/prompts';
 import { promptFileSelector } from './file-selector-with-header.js';
 import { scanWorkspaceFiles } from './file-scanner.js';
+import { countSelectionTypes } from './expand-directory-selections.js';
 import { logger } from './logger.js';
 
 /**
@@ -31,9 +32,6 @@ export interface FileSelectionOptions {
   
   /** Additional directories to exclude from scanning */
   excludeDirs?: string[];
-  
-  /** Show intro note before prompt (default: true) */
-  showIntro?: boolean;
   
   /** Fuzzy search threshold (0-1, default: 0.5) */
   fuzzyThreshold?: number;
@@ -72,7 +70,6 @@ export async function interactiveFileSelect(
     placeholder,
     maxItems = 10,
     excludeDirs = [],
-    showIntro = true,
     fuzzyThreshold = 0.5,
     includeDirs = false
   } = options;
@@ -84,16 +81,6 @@ export async function interactiveFileSelect(
   const scanDir = basePath || cwd;
   
   try {
-    // Show helpful intro note
-    if (showIntro) {
-      const itemType = includeDirs ? 'files and directories' : 'files';
-      note(
-        `The selected ${itemType} will be shown above as you select them.\n` +
-        'Type to search • Space to select • Enter to confirm',
-        'Interactive File Selection'
-      );
-    }
-    
     // Scan workspace for all files
     logger.debug('Scanning workspace for files', { scanDir });
     const allFiles = await scanWorkspaceFiles({ cwd, basePath, excludeDirs, includeDirs });
@@ -123,13 +110,21 @@ export async function interactiveFileSelect(
     }
     
     logger.debug(`User selected ${selectedFiles.length} file(s)`, { selectedFiles });
-    
-    // Show summary after selection
+
+    // Show summary after selection (use dir/file counts when includeDirs)
     const fileList = selectedFiles.length <= 5
       ? selectedFiles.join('\n')
       : selectedFiles.slice(0, 5).join('\n') + `\n... and ${selectedFiles.length - 5} more`;
-    
-    log.success(`Selected ${selectedFiles.length} file(s):\n${fileList}`);
+    const countLabel = includeDirs
+      ? (() => {
+          const { dirs, files } = countSelectionTypes(selectedFiles);
+          const parts: string[] = [];
+          if (dirs > 0) parts.push(`${dirs} dir${dirs === 1 ? '' : 's'}`);
+          if (files > 0) parts.push(`${files} file${files === 1 ? '' : 's'}`);
+          return parts.join(' and ');
+        })()
+      : `${selectedFiles.length} file${selectedFiles.length === 1 ? '' : 's'}`;
+    log.success(`Selected ${countLabel}:\n${fileList}`);
     
     return selectedFiles;
     

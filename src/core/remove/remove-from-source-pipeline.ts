@@ -221,3 +221,87 @@ export async function runRemoveFromSourcePipeline(
     }
   };
 }
+
+/**
+ * Run removal for multiple paths as a single batch (one confirmation, one removal).
+ * Used when interactive selection yields multiple files.
+ */
+export async function runRemoveFromSourcePipelineBatch(
+  packageName: string | null,
+  packageRootDir: string,
+  resolvedName: string,
+  pathArgs: string[],
+  options: RemoveFromSourceOptions = {}
+): Promise<CommandResult<RemoveFromSourceResult>> {
+  const sourceType: 'workspace' | 'global' =
+    packageRootDir.includes(`${process.cwd()}/.openpackage/packages/`) ? 'workspace' : 'global';
+
+  const allEntries: RemovalEntry[] = [];
+  const seenRegistryPaths = new Set<string>();
+
+  for (const pathArg of pathArgs) {
+    try {
+      const entries = await collectRemovalEntries(packageRootDir, pathArg);
+      for (const entry of entries) {
+        if (!seenRegistryPaths.has(entry.registryPath)) {
+          seenRegistryPaths.add(entry.registryPath);
+          allEntries.push(entry);
+        }
+      }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  if (allEntries.length === 0) {
+    return { success: false, error: 'No files found to remove.' };
+  }
+
+  try {
+    await confirmRemoval(resolvedName, allEntries, options);
+  } catch (error) {
+    if (error instanceof UserCancellationError) {
+      throw error;
+    }
+    return { success: false, error: error instanceof Error ? error.message : 'Removal cancelled by user.' };
+  }
+
+  if (options.dryRun) {
+    return {
+      success: true,
+      data: {
+        packageName: resolvedName,
+        filesRemoved: allEntries.length,
+        sourcePath: packageRootDir,
+        sourceType,
+        removedPaths: allEntries.map(e => e.registryPath),
+        removalType: 'files'
+      }
+    };
+  }
+
+  const removedPaths: string[] = [];
+  const removedAbsolutePaths: string[] = [];
+
+  for (const entry of allEntries) {
+    if (await exists(entry.packagePath)) {
+      await remove(entry.packagePath);
+      removedPaths.push(entry.registryPath);
+      removedAbsolutePaths.push(entry.packagePath);
+    }
+  }
+
+  await cleanupEmptyParents(packageRootDir, removedAbsolutePaths);
+
+  return {
+    success: true,
+    data: {
+      packageName: resolvedName,
+      filesRemoved: removedPaths.length,
+      sourcePath: packageRootDir,
+      sourceType,
+      removedPaths,
+      removalType: 'files'
+    }
+  };
+}

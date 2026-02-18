@@ -4,12 +4,12 @@ import { join, relative, resolve } from 'path';
 import type { ExecutionContext } from '../types/execution-context.js';
 
 import { withErrorHandling } from '../utils/errors.js';
-import { runAddToSourcePipeline, type AddToSourceResult } from '../core/add/add-to-source-pipeline.js';
+import { runAddToSourcePipeline, runAddToSourcePipelineBatch, type AddToSourceResult } from '../core/add/add-to-source-pipeline.js';
 import { classifyAddInput, type AddInputClassification } from '../core/add/add-input-classifier.js';
 import { runAddDependencyFlow, type AddDependencyResult } from '../core/add/add-dependency-flow.js';
 import { formatPathForDisplay, getTreeConnector } from '../utils/formatters.js';
 import { interactiveFileSelect } from '../utils/interactive-file-selector.js';
-import { expandDirectorySelections, hasDirectorySelections, countSelectionTypes } from '../utils/expand-directory-selections.js';
+import { expandDirectorySelections, hasDirectorySelections } from '../utils/expand-directory-selections.js';
 import { createExecutionContext } from '../core/execution-context.js';
 import { createInteractionPolicy, PromptTier } from '../core/interaction-policy.js';
 import { setOutputMode, output, isInteractive } from '../utils/output.js';
@@ -194,32 +194,17 @@ export function setupAddCommand(program: Command): void {
           // Expand any directory selections to individual files
           let filesToProcess: string[];
           if (hasDirectorySelections(selectedFiles)) {
-            const counts = countSelectionTypes(selectedFiles);
-            output.info(`Expanding ${counts.dirs} director${counts.dirs === 1 ? 'y' : 'ies'} and ${counts.files} file${counts.files === 1 ? '' : 's'}...`);
             filesToProcess = await expandDirectorySelections(selectedFiles, cwd);
             output.info(`Found ${filesToProcess.length} total file${filesToProcess.length === 1 ? '' : 's'} to add`);
           } else {
             filesToProcess = selectedFiles;
           }
-          
-          // Process each selected file sequentially
-          for (let i = 0; i < filesToProcess.length; i++) {
-            const file = filesToProcess[i];
-            const absPath = join(cwd, file);
-            
-            // Show progress for multiple files
-            if (filesToProcess.length > 1) {
-              output.message(`[${i + 1}/${filesToProcess.length}] Processing: ${file}`);
-            }
-            
-            try {
-              await processAddResource(absPath, options, cwd, execContext);
-            } catch (error) {
-              output.error(`Failed to add ${file}: ${error}`);
-              // Continue with remaining files
-            }
-          }
-          
+
+          const absPaths = filesToProcess.map((f) => join(cwd, f));
+          const result = await runAddToSourcePipelineBatch(options.to, absPaths, cwd, { ...options, execContext });
+          if (!result.success) throw new Error(result.error || 'Add operation failed');
+          if (result.data) displayAddResults(result.data);
+
           return;
         }
         

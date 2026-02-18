@@ -1,14 +1,16 @@
 import { Command } from 'commander';
 
 import { withErrorHandling } from '../utils/errors.js';
-import { runRemoveFromSourcePipeline, type RemoveFromSourceOptions } from '../core/remove/remove-from-source-pipeline.js';
+import { runRemoveFromSourcePipeline, runRemoveFromSourcePipelineBatch, type RemoveFromSourceOptions } from '../core/remove/remove-from-source-pipeline.js';
 import { resolveMutableSource } from '../core/source-resolution/resolve-mutable-source.js';
 import { readWorkspaceIndex } from '../utils/workspace-index-yml.js';
 import { getTreeConnector } from '../utils/formatters.js';
 import { interactiveFileSelect } from '../utils/interactive-file-selector.js';
-import { expandDirectorySelections, hasDirectorySelections, countSelectionTypes } from '../utils/expand-directory-selections.js';
+import { expandDirectorySelections, hasDirectorySelections } from '../utils/expand-directory-selections.js';
 import { interactivePackageSelect, resolvePackageSelection } from '../utils/interactive-package-selector.js';
 import { createExecutionContext } from '../core/execution-context.js';
+import { buildWorkspacePackageContext } from '../utils/workspace-package-context.js';
+import { UserCancellationError } from '../utils/errors.js';
 import { createInteractionPolicy, PromptTier } from '../core/interaction-policy.js';
 import { setOutputMode, output, isInteractive } from '../utils/output.js';
 import type { ExecutionContext } from '../types/execution-context.js';
@@ -107,31 +109,30 @@ export function setupRemoveCommand(program: Command): void {
           // Expand any directory selections to individual files
           let filesToProcess: string[];
           if (hasDirectorySelections(selectedFiles)) {
-            const counts = countSelectionTypes(selectedFiles);
-            output.info(`Expanding ${counts.dirs} director${counts.dirs === 1 ? 'y' : 'ies'} and ${counts.files} file${counts.files === 1 ? '' : 's'}...`);
             filesToProcess = await expandDirectorySelections(selectedFiles, packageDir);
             output.info(`Found ${filesToProcess.length} total file${filesToProcess.length === 1 ? '' : 's'} to remove`);
           } else {
             filesToProcess = selectedFiles;
           }
-          
-          // Step 3: Process each selected file sequentially
-          for (let i = 0; i < filesToProcess.length; i++) {
-            const file = filesToProcess[i];
-            
-            // Show progress for multiple files
-            if (filesToProcess.length > 1) {
-              output.message(`[${i + 1}/${filesToProcess.length}] Processing: ${file}`);
-            }
-            
-            try {
-              await processRemoveResource(selectedPackage ?? undefined, file, options, cwd, execContext);
-            } catch (error) {
-              output.error(`Failed to remove ${file}: ${error}`);
-              // Continue with remaining files
-            }
+
+          const resolvedName = selectedPackage ?? (await buildWorkspacePackageContext(cwd)).name;
+
+          // Batch remove: one confirmation, one removal pass
+          try {
+            const result = await runRemoveFromSourcePipelineBatch(
+              selectedPackage,
+              packageDir,
+              resolvedName,
+              filesToProcess,
+              { ...options, execContext }
+            );
+            if (!result.success) throw new Error(result.error || 'Remove operation failed');
+            if (result.data) await handleRemoveResult(result.data, options, cwd);
+          } catch (error) {
+            if (error instanceof UserCancellationError) return;
+            throw error;
           }
-          
+
           return;
         }
         
@@ -141,9 +142,49 @@ export function setupRemoveCommand(program: Command): void {
     );
 }
 
-/**
- * Process a single resource removal through the remove pipeline
- */
+/** Shared result handling for single-path and batch removal */
+async function handleRemoveResult(
+  data: { filesRemoved: number; sourcePath: string; packageName: string; removedPaths: string[]; removalType?: string; removedDependency?: string },
+  options: RemoveFromSourceOptions & { from?: string },
+  cwd: string
+): Promise<void> {
+  const { filesRemoved, sourcePath, packageName: resolvedName, removedPaths, removalType, removedDependency } = data;
+  const isWorkspaceRoot = sourcePath.includes('.openpackage') && !sourcePath.includes('.openpackage/packages');
+
+  if (removalType === 'dependency') {
+    output.success(`Removed dependency ${removedDependency} from ${resolvedName}`);
+  } else if (options.dryRun) {
+    output.success(isWorkspaceRoot
+      ? `(dry-run) Would remove ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from workspace package`
+      : `(dry-run) Would remove ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from ${resolvedName}`);
+  } else {
+    output.success(isWorkspaceRoot
+      ? `Removed ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from workspace package`
+      : `Removed ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from ${resolvedName}`);
+  }
+
+  if (removedPaths.length > 0) {
+    const sortedPaths = [...removedPaths].sort((a, b) => a.localeCompare(b));
+    if (isInteractive()) {
+      const maxDisplay = 10;
+      const displayPaths = sortedPaths.slice(0, maxDisplay);
+      const more = sortedPaths.length > maxDisplay ? `\n... and ${sortedPaths.length - maxDisplay} more` : '';
+      output.note(displayPaths.join('\n') + more, 'Removed files');
+    } else {
+      for (let i = 0; i < sortedPaths.length; i++) {
+        output.message(`  ${getTreeConnector(i === sortedPaths.length - 1)}${sortedPaths[i]}`);
+      }
+    }
+  }
+
+  if (!options.dryRun && !isWorkspaceRoot) {
+    const workspaceIndexRecord = await readWorkspaceIndex(cwd);
+    if (workspaceIndexRecord.index.packages[resolvedName]) {
+      output.message(`Run \`opkg install ${resolvedName}\` to sync.`);
+    }
+  }
+}
+
 async function processRemoveResource(
   packageName: string | undefined,
   pathArg: string,
@@ -151,58 +192,7 @@ async function processRemoveResource(
   cwd: string,
   execContext: ExecutionContext
 ): Promise<void> {
-  const result = await runRemoveFromSourcePipeline(packageName, pathArg, {
-    ...options,
-    execContext
-  });
-  if (!result.success) {
-    throw new Error(result.error || 'Remove operation failed');
-  }
-  
-  // Provide helpful feedback (uses unified output: clack in interactive, plain console otherwise)
-  if (result.data) {
-    const { filesRemoved, sourcePath, packageName: resolvedName, removedPaths, removalType, removedDependency } = result.data;
-
-    // Determine if this is a workspace root removal
-    const isWorkspaceRoot = sourcePath.includes('.openpackage') && !sourcePath.includes('.openpackage/packages');
-
-    if (removalType === 'dependency') {
-      output.success(`Removed dependency ${removedDependency} from ${resolvedName}`);
-    } else if (options.dryRun) {
-      if (isWorkspaceRoot) {
-        output.success(`(dry-run) Would remove ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from workspace package`);
-      } else {
-        output.success(`(dry-run) Would remove ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from ${resolvedName}`);
-      }
-    } else {
-      if (isWorkspaceRoot) {
-        output.success(`Removed ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from workspace package`);
-      } else {
-        output.success(`Removed ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from ${resolvedName}`);
-      }
-    }
-
-    if (removedPaths.length > 0) {
-      const sortedPaths = [...removedPaths].sort((a, b) => a.localeCompare(b));
-      if (isInteractive()) {
-        const maxDisplay = 10;
-        const displayPaths = sortedPaths.slice(0, maxDisplay);
-        const more = sortedPaths.length > maxDisplay ? `\n... and ${sortedPaths.length - maxDisplay} more` : '';
-        output.note(displayPaths.join('\n') + more, 'Removed files');
-      } else {
-        for (let i = 0; i < sortedPaths.length; i++) {
-          const connector = getTreeConnector(i === sortedPaths.length - 1);
-          output.message(`  ${connector}${sortedPaths[i]}`);
-        }
-      }
-    }
-
-    if (!options.dryRun && !isWorkspaceRoot) {
-      const workspaceIndexRecord = await readWorkspaceIndex(cwd);
-      const isInstalled = !!workspaceIndexRecord.index.packages[resolvedName];
-      if (isInstalled) {
-        output.message(`Run \`opkg install ${resolvedName}\` to sync.`);
-      }
-    }
-  }
+  const result = await runRemoveFromSourcePipeline(packageName, pathArg, { ...options, execContext });
+  if (!result.success) throw new Error(result.error || 'Remove operation failed');
+  if (result.data) await handleRemoveResult(result.data, options, cwd);
 }
