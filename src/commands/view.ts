@@ -262,7 +262,7 @@ async function viewCommand(
         type: firstResult.headerType
       };
 
-  printResourcesView(mergedResources, !!options.files, headerInfo);
+  printResourcesView(mergedResources, !!options.files, headerInfo, { showScopeBadges: false });
 
   // Show declared dependencies from the package manifest
   if (targetPkg && targetPkg.dependencies && targetPkg.dependencies.length > 0) {
@@ -308,7 +308,7 @@ function printLocalPackageView(
       }))
     }));
 
-    printResourcesView(enhanced, showFiles, headerInfo);
+    printResourcesView(enhanced, showFiles, headerInfo, { showScopeBadges: false });
   } else {
     console.log(`${headerInfo.name}${headerInfo.version ? `@${headerInfo.version}` : ''} ${dim(`(${headerInfo.path})`)} ${dim(`[${headerInfo.type}]`)}`);
     console.log(dim('  (no resources)'));

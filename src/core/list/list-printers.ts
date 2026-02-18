@@ -254,7 +254,8 @@ export function printDepsView(
 export function printResourcesView(
   groups: EnhancedResourceGroup[],
   showFiles: boolean,
-  headerInfo?: HeaderInfo
+  headerInfo?: HeaderInfo,
+  options?: { showScopeBadges?: boolean }
 ): void {
   // Print header showing workspace/package name and path if provided
   if (headerInfo) {
@@ -263,7 +264,8 @@ export function printResourcesView(
     console.log(`${headerInfo.name}${version} ${dim(`(${headerInfo.path})`)} ${typeTag}`);
   }
 
-  // Configure for EnhancedFileMapping with scope badges
+  const showScopeBadges = options?.showScopeBadges !== false;
+
   const config: TreeRenderConfig<EnhancedFileMapping> = {
     formatPath: (file) => formatFilePath(file),
     isMissing: (file) => file.status === 'missing',
@@ -272,7 +274,9 @@ export function printResourcesView(
       const pathB = formatFilePath(b);
       return pathA.localeCompare(pathB);
     },
-    getResourceBadge: (scopes) => scopes ? dim(formatScopeBadge(scopes)) : ''
+    ...(showScopeBadges && {
+      getResourceBadge: (scopes) => scopes ? dim(formatScopeBadge(scopes)) : ''
+    })
   };
 
   for (let gi = 0; gi < groups.length; gi++) {
