@@ -20,6 +20,8 @@ export interface RemoveFromSourceOptions {
   force?: boolean;
   dryRun?: boolean;
   execContext?: ExecutionContext;
+  /** Called before confirmation prompt (for non-interactive: show header before "Confirm removal?") */
+  beforeConfirm?: (info: { packageName: string; sourcePath: string }) => void;
 }
 
 export interface RemoveFromSourceResult {
@@ -154,6 +156,11 @@ export async function runRemoveFromSourcePipeline(
       error: `No files found to remove at path: ${resolvedPath}`
     };
   }
+
+  options.beforeConfirm?.({
+    packageName: resolvedName,
+    sourcePath: packageRootDir
+  });
 
   // Confirm removal with user (unless --force or --dry-run)
   try {

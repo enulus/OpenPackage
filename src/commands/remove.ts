@@ -4,7 +4,7 @@ import { withErrorHandling } from '../utils/errors.js';
 import { runRemoveFromSourcePipeline, runRemoveFromSourcePipelineBatch, type RemoveFromSourceOptions } from '../core/remove/remove-from-source-pipeline.js';
 import { resolveMutableSource } from '../core/source-resolution/resolve-mutable-source.js';
 import { readWorkspaceIndex } from '../utils/workspace-index-yml.js';
-import { getTreeConnector } from '../utils/formatters.js';
+import { formatPathForDisplay, getTreeConnector } from '../utils/formatters.js';
 import { interactiveFileSelect } from '../utils/interactive-file-selector.js';
 import { expandDirectorySelections, hasDirectorySelections } from '../utils/expand-directory-selections.js';
 import { interactivePackageSelect, resolvePackageSelection } from '../utils/interactive-package-selector.js';
@@ -91,8 +91,13 @@ export function setupRemoveCommand(program: Command): void {
             packageDir = resolved.packageDir;
           }
           
-          // Step 2: Select files from package
+          // Show package/source before file selection
           const packageLabel = selectedPackage || 'workspace package';
+          const displayPath = formatPathForDisplay(packageDir, cwd);
+          output.step(`From: ${packageLabel} (${displayPath})`);
+          output.connector();
+          
+          // Step 2: Select files from package
           const selectedFiles = await interactiveFileSelect({
             cwd,
             basePath: packageDir,
@@ -127,7 +132,7 @@ export function setupRemoveCommand(program: Command): void {
               { ...options, execContext }
             );
             if (!result.success) throw new Error(result.error || 'Remove operation failed');
-            if (result.data) await handleRemoveResult(result.data, options, cwd);
+            if (result.data) await handleRemoveResult(result.data, options, cwd, true);
           } catch (error) {
             if (error instanceof UserCancellationError) return;
             throw error;
@@ -142,14 +147,25 @@ export function setupRemoveCommand(program: Command): void {
     );
 }
 
-/** Shared result handling for single-path and batch removal */
+/** Shared result handling for single-path and batch removal.
+ * @param skipHeader - When true (interactive remove), header was already shown before selection
+ */
 async function handleRemoveResult(
   data: { filesRemoved: number; sourcePath: string; packageName: string; removedPaths: string[]; removalType?: string; removedDependency?: string },
   options: RemoveFromSourceOptions & { from?: string },
-  cwd: string
+  cwd: string,
+  skipHeader = false
 ): Promise<void> {
   const { filesRemoved, sourcePath, packageName: resolvedName, removedPaths, removalType, removedDependency } = data;
   const isWorkspaceRoot = sourcePath.includes('.openpackage') && !sourcePath.includes('.openpackage/packages');
+
+  if (!skipHeader) {
+    const pkgLabel = isWorkspaceRoot ? 'workspace package' : resolvedName;
+    const displayPath = formatPathForDisplay(sourcePath, cwd);
+    const header = `From: ${pkgLabel} (${displayPath})`;
+    if (isInteractive()) output.info(header);
+    else output.success(header);
+  }
 
   if (removalType === 'dependency') {
     output.success(`Removed dependency ${removedDependency} from ${resolvedName}`);
@@ -192,7 +208,17 @@ async function processRemoveResource(
   cwd: string,
   execContext: ExecutionContext
 ): Promise<void> {
-  const result = await runRemoveFromSourcePipeline(packageName, pathArg, { ...options, execContext });
+  let headerShown = false;
+  const result = await runRemoveFromSourcePipeline(packageName, pathArg, {
+    ...options,
+    execContext,
+    beforeConfirm: (info) => {
+      const pkgLabel = info.packageName;
+      const displayPath = formatPathForDisplay(info.sourcePath, cwd);
+      output.success(`From: ${pkgLabel} (${displayPath})`);
+      headerShown = true;
+    }
+  });
   if (!result.success) throw new Error(result.error || 'Remove operation failed');
-  if (result.data) await handleRemoveResult(result.data, options, cwd);
+  if (result.data) await handleRemoveResult(result.data, options, cwd, headerShown);
 }

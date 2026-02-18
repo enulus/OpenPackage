@@ -11,6 +11,8 @@ import { formatPathForDisplay, getTreeConnector } from '../utils/formatters.js';
 import { interactiveFileSelect } from '../utils/interactive-file-selector.js';
 import { expandDirectorySelections, hasDirectorySelections } from '../utils/expand-directory-selections.js';
 import { createExecutionContext } from '../core/execution-context.js';
+import { resolveMutableSource } from '../core/source-resolution/resolve-mutable-source.js';
+import { buildWorkspacePackageContext } from '../utils/workspace-package-context.js';
 import { createInteractionPolicy, PromptTier } from '../core/interaction-policy.js';
 import { setOutputMode, output, isInteractive } from '../utils/output.js';
 import { exists } from '../utils/fs.js';
@@ -19,10 +21,19 @@ import { exists } from '../utils/fs.js';
  * Display add operation results.
  * Interactive: flat list in clack note (like uninstall -i).
  * Non-interactive: tree view with connectors.
+ * @param skipHeader - When true (interactive add), header was already shown before selection
  */
-function displayAddResults(data: AddToSourceResult): void {
+function displayAddResults(data: AddToSourceResult, skipHeader = false): void {
   const { filesAdded, packageName: resolvedName, addedFilePaths, isWorkspaceRoot, sourcePath } = data;
   const target = isWorkspaceRoot ? 'workspace package' : resolvedName;
+
+  if (!skipHeader) {
+    const pkgLabel = isWorkspaceRoot ? 'workspace package' : resolvedName;
+    const displayPath = formatPathForDisplay(sourcePath, process.cwd());
+    const header = `To: ${pkgLabel} (${displayPath})`;
+    if (isInteractive()) output.info(header);
+    else output.success(header);
+  }
 
   if (filesAdded > 0) {
     const count = filesAdded === 1 ? '1 file' : `${filesAdded} files`;
@@ -47,6 +58,11 @@ function displayAddResults(data: AddToSourceResult): void {
 }
 
 function displayDependencyResult(result: AddDependencyResult, classification: AddInputClassification): void {
+  const displayPath = formatPathForDisplay(result.targetManifest, process.cwd());
+  const header = `To: ${result.packageName} (${displayPath})`;
+  if (isInteractive()) output.info(header);
+  else output.success(header);
+
   // Show auto-detection hint for local paths
   if (result.wasAutoDetected) {
     output.info(`Detected package at ${classification.localPath} — adding as dependency.`);
@@ -183,6 +199,22 @@ export function setupAddCommand(program: Command): void {
             );
           }
 
+          // Resolve target package and show header before file selection
+          let pkgLabel: string;
+          let sourcePath: string;
+          if (options.to) {
+            const source = await resolveMutableSource({ cwd, packageName: options.to });
+            pkgLabel = source.packageName;
+            sourcePath = source.absolutePath;
+          } else {
+            const context = await buildWorkspacePackageContext(cwd);
+            pkgLabel = 'workspace package';
+            sourcePath = context.packageRootDir;
+          }
+          const displayPath = formatPathForDisplay(sourcePath, cwd);
+          output.step(`To: ${pkgLabel} (${displayPath})`);
+          output.connector();
+
           // Show interactive file selector
           const selectedFiles = await interactiveFileSelect({ cwd, includeDirs: true });
           
@@ -203,7 +235,7 @@ export function setupAddCommand(program: Command): void {
           const absPaths = filesToProcess.map((f) => join(cwd, f));
           const result = await runAddToSourcePipelineBatch(options.to, absPaths, cwd, { ...options, execContext });
           if (!result.success) throw new Error(result.error || 'Add operation failed');
-          if (result.data) displayAddResults(result.data);
+          if (result.data) displayAddResults(result.data, true);
 
           return;
         }

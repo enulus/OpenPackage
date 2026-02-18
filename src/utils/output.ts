@@ -121,6 +121,27 @@ export const output = {
   },
 
   /**
+   * Display a step message (diamond symbol, for package header before Selected)
+   */
+  step(message: string): void {
+    if (isInteractiveMode) {
+      log.step(message);
+    } else {
+      console.log(message);
+    }
+  },
+
+  /**
+   * Add single connecting line between package header and Selected section.
+   * Uses spacing: 0 to avoid extra blank lines.
+   */
+  connector(): void {
+    if (isInteractiveMode) {
+      log.message(' ', { spacing: 0 });
+    }
+  },
+
+  /**
    * Display a regular message
    */
   message(message: string): void {
