@@ -3,6 +3,20 @@ import type { RemoteListResult } from './remote-list-resolver.js';
 import { flattenResourceGroups, renderFlatResourceList, type TreeRenderConfig, type EnhancedFileMapping, type EnhancedResourceGroup, type EnhancedResourceInfo, type ResourceScope } from './list-tree-renderer.js';
 import { formatScopeBadge, formatPathForDisplay } from '../../utils/formatters.js';
 import type { ScopeResult, HeaderInfo } from './scope-data-collector.js';
+import type { ViewMetadataEntry } from './view-metadata.js';
+
+export type { ViewMetadataEntry } from './view-metadata.js';
+export { extractMetadataFromManifest } from './view-metadata.js';
+
+export function printMetadataSection(metadata: ViewMetadataEntry[]): void {
+  console.log(sectionHeader('Metadata', metadata.length));
+  metadata.forEach((entry) => {
+    const valueStr = Array.isArray(entry.value)
+      ? entry.value.join(', ')
+      : String(entry.value);
+    console.log(`${dim(entry.key + ':')} ${valueStr}`);
+  });
+}
 
 // ---------------------------------------------------------------------------
 // ANSI helpers
@@ -11,13 +25,22 @@ import type { ScopeResult, HeaderInfo } from './scope-data-collector.js';
 const DIM = '\x1b[2m';
 const RESET = '\x1b[0m';
 const RED = '\x1b[31m';
+const CYAN = '\x1b[36m';
 
 export function dim(text: string): string {
   return `${DIM}${text}${RESET}`;
 }
 
+export function cyan(text: string): string {
+  return `${CYAN}${text}${RESET}`;
+}
+
 function red(text: string): string {
   return `${RED}${text}${RESET}`;
+}
+
+export function sectionHeader(title: string, count: number): string {
+  return `${cyan(`[${title}]`)} ${dim(`(${count})`)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -91,10 +114,20 @@ export function printRemotePackageDetail(
   const pkg = result.package;
   console.log(`${formatPackageLine(pkg)} ${dim(`(${result.sourceLabel})`)} ${dim('[remote]')}`);
 
+  // [Metadata] section (first)
+  const metadata = result.metadata ?? [];
+  printMetadataSection(metadata);
+
+  // Resource count: from groups (flattened), file list, or 0
+  const resourceCount = pkg.resourceGroups && pkg.resourceGroups.length > 0
+    ? flattenResourceGroups(pkg.resourceGroups).length
+    : (pkg.fileList?.length ?? 0);
+  console.log(sectionHeader('Resources', resourceCount));
+
   // Show resource groups if available (preferred view)
   if (pkg.resourceGroups && pkg.resourceGroups.length > 0) {
     printResourceGroups(pkg.resourceGroups, '', showFiles);
-  } 
+  }
   // Fallback to file list if no resource groups but files exist
   else if (pkg.fileList && pkg.fileList.length > 0) {
     printFileList(pkg.fileList, '');
@@ -104,9 +137,8 @@ export function printRemotePackageDetail(
     console.log(dim('  (no files)'));
   }
 
-  if (showDeps && result.dependencies.length > 0) {
-    console.log();
-    console.log('Dependencies:');
+  if (showDeps) {
+    console.log(sectionHeader('Dependencies', result.dependencies.length));
     result.dependencies.forEach((dep, index) => {
       const isLast = index === result.dependencies.length - 1;
       const connector = isLast ? '└── ' : '├── ';
@@ -233,13 +265,22 @@ export function printResourcesView(
   groups: EnhancedResourceGroup[],
   showFiles: boolean,
   headerInfo?: HeaderInfo,
-  options?: { showScopeBadges?: boolean; pathBaseForDisplay?: string }
+  options?: {
+    showScopeBadges?: boolean;
+    pathBaseForDisplay?: string;
+    metadata?: ViewMetadataEntry[];
+  }
 ): void {
   // Print header showing workspace/package name and path if provided
   if (headerInfo) {
     const version = headerInfo.version ? `@${headerInfo.version}` : '';
     const typeTag = dim(`[${headerInfo.type}]`);
     console.log(`${headerInfo.name}${version} ${dim(`(${headerInfo.path})`)} ${typeTag}`);
+  }
+
+  // [Metadata] section (first, when provided)
+  if (options?.metadata !== undefined) {
+    printMetadataSection(options.metadata);
   }
 
   const showScopeBadges = options?.showScopeBadges !== false;
@@ -260,5 +301,6 @@ export function printResourcesView(
   };
 
   const flatResources = flattenResourceGroups(groups);
+  console.log(sectionHeader('Resources', flatResources.length));
   renderFlatResourceList(flatResources, '', showFiles, config);
 }

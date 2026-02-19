@@ -22,10 +22,15 @@ import {
 } from '../core/list/scope-data-collector.js';
 import {
   dim,
+  sectionHeader,
   printResourcesView,
   printRemotePackageDetail,
+  printMetadataSection,
+  extractMetadataFromManifest,
+  type ViewMetadataEntry,
 } from '../core/list/list-printers.js';
 import type { EnhancedResourceGroup, ResourceScope } from '../core/list/list-tree-renderer.js';
+import { resolveDeclaredPath } from '../utils/path-resolution.js';
 
 interface ViewOptions {
   scope?: string;
@@ -47,6 +52,7 @@ interface LocalPackageResult {
   report: ListPackageReport;
   headerInfo: HeaderInfo;
   scope: ResourceScope;
+  metadata: ViewMetadataEntry[];
 }
 
 async function resolveLocalPackage(
@@ -71,6 +77,7 @@ async function resolveLocalPackage(
   let name = packageName;
   let version = resolution.version;
   let dependencies: string[] | undefined;
+  let metadata: ViewMetadataEntry[] = [];
 
   const manifestPath = join(packageDir, 'openpackage.yml');
   if (await exists(manifestPath)) {
@@ -78,6 +85,7 @@ async function resolveLocalPackage(
       const manifest = await parsePackageYml(manifestPath);
       name = manifest.name || packageName;
       version = manifest.version || version;
+      metadata = extractMetadataFromManifest(manifest);
       const allDeps = [
         ...(manifest.dependencies || []),
         ...(manifest['dev-dependencies'] || [])
@@ -87,6 +95,7 @@ async function resolveLocalPackage(
       logger.debug(`Failed to parse manifest at ${manifestPath}: ${error}`);
     }
   }
+  if (metadata.length === 0) metadata = extractMetadataFromManifest({ name, version });
 
   const files = await collectFiles(packageDir, packageDir);
   const fileList: ListFileMapping[] = files.map(f => ({
@@ -117,7 +126,8 @@ async function resolveLocalPackage(
       path: formatPathForDisplay(packageDir),
       type: headerType
     },
-    scope
+    scope,
+    metadata
   };
 }
 
@@ -245,8 +255,9 @@ async function viewCommand(
 
   const mergedResources = mergeResourcesAcrossScopes(scopedResources);
 
-  // Build header from the target package
+  // Build header and metadata from the target package
   const firstResult = results[0].result;
+  const firstScope = results[0].scope;
   const targetPkg = firstResult.data.targetPackage;
   const headerInfo = targetPkg
     ? {
@@ -262,11 +273,34 @@ async function viewCommand(
         type: firstResult.headerType
       };
 
-  printResourcesView(mergedResources, !!options.files, headerInfo, { showScopeBadges: false });
+  // Read manifest for metadata
+  let viewMetadata: ViewMetadataEntry[] = [];
+  if (targetPkg) {
+    try {
+      const execContext = await createExecutionContext({
+        global: firstScope === 'global',
+        cwd: programOpts.cwd
+      });
+      const resolved = resolveDeclaredPath(targetPkg.path, execContext.targetDir);
+      const manifestPath = join(resolved.absolute, 'openpackage.yml');
+      if (await exists(manifestPath)) {
+        const manifest = await parsePackageYml(manifestPath);
+        viewMetadata = extractMetadataFromManifest(manifest);
+      }
+    } catch (e) {
+      logger.debug(`Failed to read manifest for metadata: ${e}`);
+    }
+  }
+  if (viewMetadata.length === 0) viewMetadata = extractMetadataFromManifest({ name: headerInfo.name, version: headerInfo.version });
+
+  printResourcesView(mergedResources, !!options.files, headerInfo, {
+    showScopeBadges: false,
+    metadata: viewMetadata
+  });
 
   // Show declared dependencies from the package manifest
-  if (targetPkg && targetPkg.dependencies && targetPkg.dependencies.length > 0) {
-    printDependenciesList(targetPkg.dependencies);
+  if (targetPkg) {
+    printDependenciesList(targetPkg.dependencies ?? []);
   }
 
   return { success: true };
@@ -277,8 +311,7 @@ async function viewCommand(
 // ---------------------------------------------------------------------------
 
 function printDependenciesList(dependencies: string[]): void {
-  console.log();
-  console.log('Dependencies:');
+  console.log(sectionHeader('Dependencies', dependencies.length));
   dependencies.forEach((dep, index) => {
     const isLast = index === dependencies.length - 1;
     const connector = isLast ? '└── ' : '├── ';
@@ -290,7 +323,7 @@ function printLocalPackageView(
   localResult: LocalPackageResult,
   showFiles: boolean
 ): CommandResult {
-  const { report, headerInfo, scope } = localResult;
+  const { report, headerInfo, scope, metadata } = localResult;
 
   if (report.resourceGroups && report.resourceGroups.length > 0) {
     const enhanced: EnhancedResourceGroup[] = report.resourceGroups.map(group => ({
@@ -308,13 +341,19 @@ function printLocalPackageView(
       }))
     }));
 
-    printResourcesView(enhanced, showFiles, headerInfo, { showScopeBadges: false, pathBaseForDisplay: report.path });
+    printResourcesView(enhanced, showFiles, headerInfo, {
+      showScopeBadges: false,
+      pathBaseForDisplay: report.path,
+      metadata
+    });
   } else {
     console.log(`${headerInfo.name}${headerInfo.version ? `@${headerInfo.version}` : ''} ${dim(`(${headerInfo.path})`)} ${dim(`[${headerInfo.type}]`)}`);
+    printMetadataSection(metadata);
+    console.log(sectionHeader('Resources', 0));
     console.log(dim('  (no resources)'));
   }
 
-  if (report.dependencies && report.dependencies.length > 0) {
+  if (report.dependencies !== undefined) {
     printDependenciesList(report.dependencies);
   }
 

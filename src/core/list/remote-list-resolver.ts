@@ -12,12 +12,15 @@ import { generateGitHubPackageName } from '../../utils/plugin-naming.js';
 import { getPackageVersionPath } from '../directory.js';
 import type { ListPackageReport, ListFileMapping, ListResourceGroup } from './list-pipeline.js';
 import { groupFilesIntoResources } from './list-pipeline.js';
+import type { ViewMetadataEntry } from './view-metadata.js';
+import { extractMetadataFromManifest } from './view-metadata.js';
 
 export interface RemoteListResult {
   sourceType: 'registry' | 'git';
   sourceLabel: string;
   package: ListPackageReport;
   dependencies: RemoteListDependency[];
+  metadata?: ViewMetadataEntry[];
 }
 
 export interface RemoteListDependency {
@@ -84,9 +87,10 @@ async function resolveRegistryList(
 
   const totalFiles = downloads.length;
   
-  // Try to read file structure from local cache
+  // Try to read file structure and manifest from local cache
   const fileList: ListFileMapping[] = [];
   let resourceGroups: ListResourceGroup[] | undefined;
+  let metadata: ViewMetadataEntry[] | undefined;
   
   try {
     const packagePath = getPackageVersionPath(packageName, resolvedVersion);
@@ -104,9 +108,34 @@ async function resolveRegistryList(
       if (fileList.length > 0) {
         resourceGroups = groupFilesIntoResources(fileList);
       }
+      
+      // Read manifest for metadata
+      const { join } = await import('path');
+      const manifestPath = join(packagePath, 'openpackage.yml');
+      if (await exists(manifestPath)) {
+        try {
+          const manifest = await parsePackageYml(manifestPath);
+          metadata = extractMetadataFromManifest(manifest);
+        } catch (e) {
+          logger.debug(`Failed to parse cached manifest: ${e}`);
+        }
+      }
     }
   } catch (error) {
     logger.debug(`Failed to read cached package structure for ${packageName}@${resolvedVersion}: ${error}`);
+  }
+  
+  // Fallback: use API response metadata when no manifest available
+  if (!metadata || metadata.length === 0) {
+    const apiPkg = response.package;
+    const fallback: Partial<Parameters<typeof extractMetadataFromManifest>[0]> = {
+      name: packageName,
+      version: resolvedVersion,
+      description: apiPkg?.description,
+      keywords: apiPkg?.keywords
+    };
+    if (apiPkg?.isPrivate) fallback.private = true;
+    metadata = extractMetadataFromManifest(fallback);
   }
 
   return {
@@ -123,7 +152,8 @@ async function resolveRegistryList(
       resourceGroups,
       dependencies: dependencies.map(d => d.name)
     },
-    dependencies
+    dependencies,
+    metadata
   };
 }
 
@@ -150,12 +180,14 @@ async function resolveGitList(
   let dependencies: RemoteListDependency[] = [];
   const fileList: ListFileMapping[] = [];
 
+  let metadata: ViewMetadataEntry[] | undefined;
   const manifestPath = join(contentRoot, 'openpackage.yml');
   if (await exists(manifestPath)) {
     try {
       const manifest = await parsePackageYml(manifestPath);
       name = manifest.name || name;
       version = manifest.version;
+      metadata = extractMetadataFromManifest(manifest);
 
       const allDeps = [
         ...(manifest.dependencies || []),
@@ -181,6 +213,7 @@ async function resolveGitList(
   
   // Generate resource groups from file list
   const resourceGroups = fileList.length > 0 ? groupFilesIntoResources(fileList) : undefined;
+  const finalMetadata = metadata ?? extractMetadataFromManifest({ name, version });
 
   return {
     sourceType: 'git',
@@ -196,7 +229,8 @@ async function resolveGitList(
       resourceGroups,
       dependencies: dependencies.map(d => d.name)
     },
-    dependencies
+    dependencies,
+    metadata: finalMetadata
   };
 }
 

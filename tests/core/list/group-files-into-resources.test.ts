@@ -65,4 +65,19 @@ function createFile(source: string, target: string, exists = true): ListFileMapp
   console.log('✓ Other type produces other/uncategorized');
 }
 
+// Platform-suffixed variants group under same resource
+{
+  const files: ListFileMapping[] = [
+    createFile('agents/git/git-manager.md', 'agents/git/git-manager.md'),
+    createFile('agents/git/git-manager.opencode.md', 'agents/git/git-manager.opencode.md'),
+  ];
+  const groups = groupFilesIntoResources(files);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].resourceType, 'agents');
+  assert.equal(groups[0].resources.length, 1);
+  assert.equal(groups[0].resources[0].name, 'agents/git/git-manager');
+  assert.equal(groups[0].resources[0].files.length, 2);
+  console.log('✓ Platform-suffixed variants group under same resource');
+}
+
 console.log('\n✅ All groupFilesIntoResources tests passed');

@@ -28,6 +28,9 @@ import {
   assert.equal(deriveResourceFullName('rules/basics/custom-rules.mdc', 'rule'), 'rules/basics/custom-rules');
   assert.equal(deriveResourceFullName('.cursor/rules/custom-rules.mdc', 'rule'), 'rules/custom-rules');
   assert.equal(deriveResourceFullName('.cursor/rules/basics/custom-rules.mdc', 'rule'), 'rules/basics/custom-rules');
+  // Platform-suffixed variants should resolve to same resource as base
+  assert.equal(deriveResourceFullName('rules/foo.mdc', 'rule'), 'rules/foo');
+  assert.equal(deriveResourceFullName('rules/foo.cursor.mdc', 'rule'), 'rules/foo');
   console.log('✓ deriveResourceFullName rules');
 }
 
@@ -35,6 +38,9 @@ import {
 {
   assert.equal(deriveResourceFullName('agents/agent-creator.md', 'agent'), 'agents/agent-creator');
   assert.equal(deriveResourceFullName('.opencode/agents/foo.md', 'agent'), 'agents/foo');
+  // Platform-suffixed variants should resolve to same resource as base
+  assert.equal(deriveResourceFullName('agents/git/git-manager.md', 'agent'), 'agents/git/git-manager');
+  assert.equal(deriveResourceFullName('agents/git/git-manager.opencode.md', 'agent'), 'agents/git/git-manager');
   console.log('✓ deriveResourceFullName agents');
 }
 

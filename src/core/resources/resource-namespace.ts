@@ -7,6 +7,7 @@
 
 import { stripExtension } from './resource-naming.js';
 import { getResourceTypeDef, toPluralKey, type ResourceTypeId } from './resource-registry.js';
+import { stripPlatformSuffixFromFilename } from '../flows/platform-suffix-handler.js';
 
 /**
  * Extract the path segment under a category directory from a full path.
@@ -44,14 +45,18 @@ function deriveNamespace(pathUnderCategory: string, resourceType: ResourceTypeId
     return parts[0] || 'unnamed';
   }
 
-  const lastSegment = parts[parts.length - 1];
+  // Strip platform suffix (e.g. git-manager.opencode.md -> git-manager.md) so platform-specific
+  // variants group under the same resource
+  const pathStripped = stripPlatformSuffixFromFilename(pathUnderCategory);
+  const strippedParts = pathStripped.split('/');
+  const lastSegment = strippedParts[strippedParts.length - 1] ?? '';
   const nameWithoutExt = stripExtension(lastSegment);
 
-  if (parts.length === 1) {
+  if (strippedParts.length === 1) {
     return nameWithoutExt || lastSegment;
   }
 
-  const subpath = parts.slice(0, -1).join('/');
+  const subpath = strippedParts.slice(0, -1).join('/');
   return subpath ? `${subpath}/${nameWithoutExt}` : nameWithoutExt;
 }
 
