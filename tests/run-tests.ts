@@ -28,6 +28,10 @@ const testFiles: string[] = [
   
   // Core - List
   'tests/core/list/untracked-files.test.ts',
+  'tests/core/list/group-files-into-resources.test.ts',
+  
+  // Core - Resources
+  'tests/core/resources/resource-namespace.test.ts',
 
   // Core - Source Resolution
   'tests/core/source-resolution/source-mutability.test.ts',

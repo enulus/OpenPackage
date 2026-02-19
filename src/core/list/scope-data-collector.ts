@@ -8,7 +8,7 @@ import type { UntrackedScanResult } from './untracked-files-scanner.js';
 import { detectEntityType, getEntityDisplayName } from '../../utils/entity-detector.js';
 import { formatPathForDisplay } from '../../utils/formatters.js';
 import { resolveDeclaredPath } from '../../utils/path-resolution.js';
-import { deriveUntrackedResourceName } from '../resources/resource-naming.js';
+import { deriveResourceFullName } from '../resources/resource-namespace.js';
 import { RESOURCE_TYPE_ORDER_PLURAL, normalizeType, toPluralKey } from '../resources/resource-registry.js';
 import type { EnhancedFileMapping, EnhancedResourceInfo, EnhancedResourceGroup, ResourceScope } from './list-tree-renderer.js';
 
@@ -247,17 +247,14 @@ export function mergeTrackedAndUntrackedResources(
 
   if (untrackedFiles && untrackedFiles.files.length > 0) {
     for (const file of untrackedFiles.files) {
-      const resourceName = deriveUntrackedResourceName(file.workspacePath);
+      const singularType = normalizeType(file.category);
+      const fullName = deriveResourceFullName(file.workspacePath, singularType);
       const normalizedType = normalizeCategory(file.category);
 
       if (!typeMap.has(normalizedType)) {
         typeMap.set(normalizedType, new Map());
       }
       const resourcesMap = typeMap.get(normalizedType)!;
-
-      // For 'other' type, use a fixed resource name to consolidate all files
-      const finalResourceName = normalizedType === 'other' ? 'uncategorized' : resourceName;
-      const resourceKey = normalizedType === 'other' ? 'uncategorized' : resourceName;
 
       const enhancedFile: EnhancedFileMapping = {
         source: file.workspacePath,
@@ -267,16 +264,16 @@ export function mergeTrackedAndUntrackedResources(
         scope
       };
 
-      if (!resourcesMap.has(resourceKey)) {
-        resourcesMap.set(resourceKey, {
-          name: finalResourceName,
+      if (!resourcesMap.has(fullName)) {
+        resourcesMap.set(fullName, {
+          name: fullName,
           resourceType: normalizedType,
           files: [enhancedFile],
           status: 'untracked',
           scopes: new Set([scope])
         });
       } else {
-        resourcesMap.get(resourceKey)!.files.push(enhancedFile);
+        resourcesMap.get(fullName)!.files.push(enhancedFile);
       }
     }
   }

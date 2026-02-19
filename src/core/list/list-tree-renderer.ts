@@ -148,6 +148,37 @@ export function renderResource<TFile>(
 }
 
 /**
+ * Flatten resource groups into a single sorted list of resources.
+ * Shared by resources view, deps view, and remote package detail.
+ */
+export function flattenResourceGroups<T extends { name: string; files: unknown[] }>(
+  groups: Array<{ resourceType: string; resources: T[] }>
+): T[] {
+  const flat: T[] = [];
+  for (const group of groups) {
+    flat.push(...group.resources);
+  }
+  return flat.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Render a flat list of resources (no category grouping).
+ * Each resource is displayed as category/namespace with optional file children.
+ */
+export function renderFlatResourceList<TFile>(
+  resources: (ListResourceInfo | EnhancedResourceInfo)[],
+  prefix: string,
+  showFiles: boolean,
+  config: TreeRenderConfig<TFile>
+): void {
+  for (let ri = 0; ri < resources.length; ri++) {
+    const resource = resources[ri];
+    const isLast = ri === resources.length - 1;
+    renderResource(resource, prefix, isLast, showFiles, config);
+  }
+}
+
+/**
  * Render a single resource group with all its resources
  */
 export function renderResourceGroup<TFile>(

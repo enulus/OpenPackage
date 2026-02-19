@@ -17,6 +17,7 @@ import { isPlatformId, getAllPlatforms, getPlatformDefinition } from '../platfor
 import { normalizePlatforms } from '../../utils/platform-mapper.js';
 import { DIR_TO_TYPE, RESOURCE_TYPE_ORDER, toPluralKey, type ResourceTypeId } from '../resources/resource-registry.js';
 import { classifySourceKey } from '../resources/source-key-classifier.js';
+import { deriveResourceFullName } from '../resources/resource-namespace.js';
 export { classifySourceKey } from '../resources/source-key-classifier.js';
 
 export type PackageSyncState = 'synced' | 'partial' | 'missing';
@@ -227,16 +228,13 @@ export function groupFilesIntoResources(fileList: ListFileMapping[]): ListResour
   const resourceMap = new Map<string, ListResourceInfo>();
 
   for (const file of fileList) {
-    const { resourceType, resourceName } = classifySourceKey(file.source);
-    
-    // For 'other' type, consolidate all files into one resource instead of creating subcategories
-    const key = resourceType === 'other' 
-      ? 'other::uncategorized'
-      : `${resourceType}::${resourceName}`;
+    const { resourceType } = classifySourceKey(file.source);
+    const fullName = deriveResourceFullName(file.source, resourceType);
+    const key = fullName;
 
     if (!resourceMap.has(key)) {
       resourceMap.set(key, {
-        name: resourceType === 'other' ? 'uncategorized' : resourceName,
+        name: fullName,
         resourceType,
         files: []
       });

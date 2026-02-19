@@ -1,6 +1,6 @@
 import type { ListPackageReport, ListTreeNode, ListResourceGroup, ListFileMapping } from './list-pipeline.js';
 import type { RemoteListResult } from './remote-list-resolver.js';
-import { renderResourceGroup, type TreeRenderConfig, type EnhancedFileMapping, type EnhancedResourceGroup, type ResourceScope } from './list-tree-renderer.js';
+import { flattenResourceGroups, renderFlatResourceList, type TreeRenderConfig, type EnhancedFileMapping, type EnhancedResourceGroup, type EnhancedResourceInfo, type ResourceScope } from './list-tree-renderer.js';
 import { formatScopeBadge, formatPathForDisplay } from '../../utils/formatters.js';
 import type { ScopeResult, HeaderInfo } from './scope-data-collector.js';
 
@@ -63,22 +63,20 @@ function printFileList(
   }
 }
 
+/** Config for rendering ListFileMapping (deps view, remote package detail) */
+const LIST_FILE_CONFIG: TreeRenderConfig<ListFileMapping> = {
+  formatPath: (file) => file.target,
+  isMissing: (file) => !file.exists,
+  sortFiles: (a, b) => a.target.localeCompare(b.target)
+};
+
 function printResourceGroups(
   groups: ListResourceGroup[],
   prefix: string,
   showFiles: boolean
 ): void {
-  const config: TreeRenderConfig<ListFileMapping> = {
-    formatPath: (file) => file.target,
-    isMissing: (file) => !file.exists,
-    sortFiles: (a, b) => a.target.localeCompare(b.target)
-  };
-  
-  for (let gi = 0; gi < groups.length; gi++) {
-    const group = groups[gi];
-    const isLastGroup = gi === groups.length - 1;
-    renderResourceGroup(group, prefix, isLastGroup, showFiles, config);
-  }
+  const flatResources = flattenResourceGroups(groups);
+  renderFlatResourceList(flatResources, prefix, showFiles, LIST_FILE_CONFIG);
 }
 
 // ---------------------------------------------------------------------------
@@ -146,18 +144,8 @@ function printDepTreeNode(
   console.log(`${prefix}${connector}${formatPackageLine(node.report)}`);
 
   if (hasResources) {
-    const groups = node.report.resourceGroups!;
-    const config: TreeRenderConfig<ListFileMapping> = {
-      formatPath: (file) => file.target,
-      isMissing: (file) => !file.exists,
-      sortFiles: (a, b) => a.target.localeCompare(b.target)
-    };
-    
-    for (let gi = 0; gi < groups.length; gi++) {
-      const group = groups[gi];
-      const isLastGroup = gi === groups.length - 1 && !hasChildren;
-      renderResourceGroup(group, childPrefix, isLastGroup, true, config);
-    }
+    const flatResources = flattenResourceGroups(node.report.resourceGroups!);
+    renderFlatResourceList(flatResources, childPrefix, true, LIST_FILE_CONFIG);
   }
 
   node.children.forEach((child, index) => {
@@ -225,18 +213,8 @@ export function printDepsView(
 
     // Show resource groups for the top-level package if files are requested
     if (hasResources) {
-      const groups = entry.report.resourceGroups!;
-      const config: TreeRenderConfig<ListFileMapping> = {
-        formatPath: (file) => file.target,
-        isMissing: (file) => !file.exists,
-        sortFiles: (a, b) => a.target.localeCompare(b.target)
-      };
-      
-      for (let gi = 0; gi < groups.length; gi++) {
-        const group = groups[gi];
-        const isLastGroup = gi === groups.length - 1 && !hasChildren;
-        renderResourceGroup(group, childPrefix, isLastGroup, true, config);
-      }
+      const flatResources = flattenResourceGroups(entry.report.resourceGroups!);
+      renderFlatResourceList(flatResources, childPrefix, true, LIST_FILE_CONFIG);
     }
 
     for (let ci = 0; ci < entry.children.length; ci++) {
@@ -281,9 +259,6 @@ export function printResourcesView(
     })
   };
 
-  for (let gi = 0; gi < groups.length; gi++) {
-    const group = groups[gi];
-    const isLastGroup = gi === groups.length - 1;
-    renderResourceGroup(group, '', isLastGroup, showFiles, config);
-  }
+  const flatResources = flattenResourceGroups(groups);
+  renderFlatResourceList(flatResources, '', showFiles, config);
 }
