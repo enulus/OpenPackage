@@ -169,7 +169,7 @@ export abstract class BaseStrategy implements InstallationStrategy {
         filteredSources.set(flow, filtered);
       }
     }
-    
+
     return filteredSources;
   }
 }

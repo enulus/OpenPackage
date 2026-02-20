@@ -3,6 +3,7 @@ import type { LoadedPackage } from '../sources/base.js';
 import { join, relative } from 'path';
 import { stat } from 'fs/promises';
 import { logger } from '../../../utils/logger.js';
+import { ValidationError } from '../../../utils/errors.js';
 
 export type SpecialHandling = 'marketplace' | 'ambiguous';
 
@@ -101,7 +102,7 @@ export function applyBaseDetection(
  * Rules:
  * - If resource resolves to a directory, pattern becomes `<dir>/**`
  * - If resource resolves to a file, pattern becomes `<file>`
- * - If the resource cannot be stat'ed or is outside the detected base, do not overwrite.
+ * - If the resource cannot be stat'ed or is outside the detected base, throws ValidationError.
  */
 export async function computePathScoping(
   ctx: InstallationContext,
@@ -130,7 +131,11 @@ export async function computePathScoping(
     .replace(/^\.\/?/, '');
 
   if (!relToBaseRaw || relToBaseRaw.startsWith('..')) {
-    return;
+    // Path is outside the detected package base - invalid for single-file install
+    throw new ValidationError(
+      `The specified resource path is outside the package base: ${resourcePath}\n\n` +
+      `Please verify the path is within the package you are installing.`
+    );
   }
 
   let isDirectory = false;
@@ -138,12 +143,16 @@ export async function computePathScoping(
     const s = await stat(absResourcePath);
     isDirectory = s.isDirectory();
   } catch {
-    // If the resource doesn't exist or can't be stat'ed, don't overwrite matchedPattern.
-    return;
+    // User specified a concrete file/dir path that does not exist. Fail instead of
+    // silently installing the entire package (which was the prior bug).
+    throw new ValidationError(
+      `The specified resource path does not exist in the repository: ${resourcePath}\n\n` +
+      `Please verify the path. The file or directory may have been moved, or you may have meant a different path.`
+    );
   }
 
   ctx.matchedPattern = isDirectory ? `${relToBaseRaw.replace(/\/$/, '')}/**` : relToBaseRaw;
-  
+
   // Mark as performed
   ctx._pathScopingPerformed = true;
 }

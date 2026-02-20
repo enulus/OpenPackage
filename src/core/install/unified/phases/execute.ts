@@ -38,7 +38,7 @@ export async function executeInstallationPhase(
 
   // Get conflict result from context
   const conflictResult = (ctx as any).conflictResult;
-  
+
   // Execute installation
   const outcome = await performIndexBasedInstallationPhases({
     cwd: ctx.targetDir,
