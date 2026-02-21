@@ -31,6 +31,7 @@ import { exists } from './fs.js';
 import type { Platform } from '../core/platforms.js';
 import type { InstallOptions } from '../types/index.js';
 import type { WorkspaceIndexFileMapping } from '../types/workspace-index.js';
+import type { RelocatedFile } from '../core/install/conflicts/file-conflict-resolver.js';
 import { createContextFromFormat } from '../core/conversion-context/creation.js';
 import { detectFormatWithContextFromDirectory } from '../core/install/helpers/format-detection.js';
 import {
@@ -55,6 +56,10 @@ export interface IndexInstallResult {
   installedFiles: string[];
   updatedFiles: string[];
   deletedFiles: string[];
+  /** True when namespace conflict resolution was triggered for this package */
+  namespaced?: boolean;
+  /** Files that were physically relocated on disk during namespace resolution */
+  relocatedFiles?: RelocatedFile[];
 }
 
 interface PackageIndexRecord {
@@ -249,6 +254,17 @@ export async function installPackageByIndexWithFlows(
       // Collect conflicts and errors using shared utilities
       collectConflictMessages(allConflicts, result.conflicts);
       collectErrorMessages(allErrors, result.errors);
+
+      // Propagate namespace metadata from the strategy result
+      if (result.namespaced) {
+        aggregatedResult.namespaced = true;
+      }
+      if (result.relocatedFiles && result.relocatedFiles.length > 0) {
+        if (!aggregatedResult.relocatedFiles) {
+          aggregatedResult.relocatedFiles = [];
+        }
+        aggregatedResult.relocatedFiles.push(...result.relocatedFiles);
+      }
 
       // Log results per platform
       if (result.filesProcessed > 0) {

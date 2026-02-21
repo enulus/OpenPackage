@@ -91,6 +91,8 @@ export class FlowBasedInstallStrategy extends BaseStrategy {
     // -----------------------------------------------------------------------
     const effectiveOptions = options ?? {};
     const conflictWarnings: string[] = [];
+    let wasNamespaced = false;
+    let conflictRelocatedFiles: Array<{ from: string; to: string }> = [];
 
     try {
       // Pre-compute the target paths that will be written by the flows
@@ -108,7 +110,7 @@ export class FlowBasedInstallStrategy extends BaseStrategy {
         );
 
         // Resolve conflicts — get back the filtered set of allowed targets
-        const { allowedTargets, warnings, packageWasNamespaced, namespaceDir } = await resolveConflictsForTargets(
+        const { allowedTargets, warnings, packageWasNamespaced, namespaceDir, relocatedFiles } = await resolveConflictsForTargets(
           workspaceRoot,
           targets,
           ownershipContext,
@@ -117,6 +119,8 @@ export class FlowBasedInstallStrategy extends BaseStrategy {
           forceOverwrite
         );
         conflictWarnings.push(...warnings);
+        wasNamespaced = packageWasNamespaced;
+        conflictRelocatedFiles = relocatedFiles;
 
         // When bulk namespacing was triggered, rewrite every non-merge flow's
         // `to` pattern so the executor writes files to namespaced locations.
@@ -148,6 +152,10 @@ export class FlowBasedInstallStrategy extends BaseStrategy {
             message: msg
           });
         }
+
+        // Attach namespace metadata to the result
+        result.namespaced = wasNamespaced;
+        result.relocatedFiles = conflictRelocatedFiles;
 
         this.logResults(result, context);
         return result;

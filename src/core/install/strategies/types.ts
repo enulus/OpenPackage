@@ -10,6 +10,8 @@ import type { InstallOptions } from '../../../types/index.js';
 import type { PackageFormat } from '../format-detector.js';
 import type { PackageConversionContext } from '../../../types/conversion-context.js';
 
+import type { RelocatedFile } from '../conflicts/file-conflict-resolver.js';
+
 /**
  * Installation context
  */
@@ -50,6 +52,10 @@ export interface FlowInstallResult {
   errors: FlowInstallError[];
   targetPaths: string[];
   fileMapping: Record<string, any[]>;
+  /** True when namespace conflict resolution was triggered for this package */
+  namespaced?: boolean;
+  /** Files that were physically relocated on disk during namespace resolution */
+  relocatedFiles?: RelocatedFile[];
 }
 
 export interface FlowConflictReport {

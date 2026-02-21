@@ -94,6 +94,14 @@ export interface TargetEntry {
   isMergeFlow?: boolean;
 }
 
+/** A file that was physically moved from one location to another during namespace resolution */
+export interface RelocatedFile {
+  /** Original workspace-relative path before relocation */
+  from: string;
+  /** New workspace-relative path after relocation */
+  to: string;
+}
+
 export interface ConflictResolutionResult {
   /** Targets that should proceed to flow execution (paths may be rewritten to namespaced form) */
   allowedTargets: TargetEntry[];
@@ -111,6 +119,12 @@ export interface ConflictResolutionResult {
    * Only set when packageWasNamespaced is true.
    */
   namespaceDir?: string;
+  /**
+   * Files that were physically relocated on disk during namespace resolution.
+   * These are files owned by *other* packages that were moved into their
+   * own namespace subdirectories to make room for the incoming package.
+   */
+  relocatedFiles: RelocatedFile[];
 }
 
 // ============================================================================
@@ -748,6 +762,7 @@ export async function resolveConflictsForTargets(
   // -------------------------------------------------------------------------
 
   const allowedTargets: TargetEntry[] = [];
+  const relocatedFiles: RelocatedFile[] = [];
 
   for (let i = 0; i < targets.length; i++) {
     const target = targets[i];
@@ -790,7 +805,7 @@ export async function resolveConflictsForTargets(
           // Move the existing owner's file into its namespace
           const ownerSlug = slugByPackageName.get(cls.owner.packageName)
             ?? deriveNamespaceSlug(cls.owner.packageName, existingSlugs);
-          const { warning: nsWarn } = await executeNamespace(
+          const { ownerNamespacedPath, warning: nsWarn } = await executeNamespace(
             cwd,
             target.relPath,
             cls.owner,
@@ -800,6 +815,7 @@ export async function resolveConflictsForTargets(
             ownerSlug
           );
           warnings.push(nsWarn);
+          relocatedFiles.push({ from: normalizePathForProcessing(target.relPath), to: ownerNamespacedPath });
 
           // Rewrite this incoming target to its namespaced path
           const namespacedRel = generateNamespacedPath(
@@ -880,6 +896,7 @@ export async function resolveConflictsForTargets(
     allowedTargets,
     warnings,
     packageWasNamespaced: shouldNamespacePackage,
-    namespaceDir: shouldNamespacePackage ? installingSlug : undefined
+    namespaceDir: shouldNamespacePackage ? installingSlug : undefined,
+    relocatedFiles
   };
 }

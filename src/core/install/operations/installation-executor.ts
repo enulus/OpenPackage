@@ -13,6 +13,7 @@ import { UserCancellationError } from '../../../utils/errors.js';
 import { discoverAndCategorizeFiles } from '../helpers/file-discovery.js';
 import { installOrSyncRootFiles } from './root-files.js';
 import { installPackageByIndexWithFlows as installPackageByIndex, type IndexInstallResult } from '../../../utils/flow-index-installer.js';
+import type { RelocatedFile } from '../conflicts/file-conflict-resolver.js';
 import { ensureDir, exists, writeTextFile } from '../../../utils/fs.js';
 import { dirname, join } from 'path';
 import { checkAndHandleAllPackageConflicts } from './conflict-handler.js';
@@ -40,6 +41,10 @@ export interface InstallationPhasesResult {
   rootFileResults: { installed: string[]; updated: string[]; skipped: string[] };
   totalOpenPackageFiles: number;
   errors?: string[];
+  /** True when namespace conflict resolution was triggered for any package */
+  namespaced?: boolean;
+  /** Files that were physically relocated on disk during namespace resolution */
+  relocatedFiles?: RelocatedFile[];
 }
 
 /**
@@ -59,6 +64,8 @@ export async function performIndexBasedInstallationPhases(params: InstallationPh
   const allUpdatedFiles: string[] = [];
   const allDeletedFiles: string[] = [];
   const errors: string[] = [];
+  let anyNamespaced = false;
+  const allRelocatedFiles: RelocatedFile[] = [];
 
   for (const resolved of packages) {
     try {
@@ -91,6 +98,14 @@ export async function performIndexBasedInstallationPhases(params: InstallationPh
       allAddedFiles.push(...installResult.installedFiles);
       allUpdatedFiles.push(...installResult.updatedFiles);
       allDeletedFiles.push(...installResult.deletedFiles);
+
+      // Aggregate namespace metadata
+      if (installResult.namespaced) {
+        anyNamespaced = true;
+      }
+      if (installResult.relocatedFiles && installResult.relocatedFiles.length > 0) {
+        allRelocatedFiles.push(...installResult.relocatedFiles);
+      }
 
       if (installResult.installed > 0 || installResult.updated > 0 || installResult.deleted > 0) {
         logger.info(`Index-based install for ${resolved.name}: ${installResult.installed} installed, ${installResult.updated} updated, ${installResult.deleted} deleted`);
@@ -201,6 +216,16 @@ export async function performIndexBasedInstallationPhases(params: InstallationPh
     }
   }
 
+  // Deduplicate: remove any root files that also appear in allAddedFiles/allUpdatedFiles
+  const addedSet = new Set(allAddedFiles);
+  const updatedSet = new Set(allUpdatedFiles);
+  const dedupedRootInstalled = Array.from(rootFileResults.installed).filter(
+    f => !addedSet.has(f)
+  );
+  const dedupedRootUpdated = Array.from(rootFileResults.updated).filter(
+    f => !updatedSet.has(f)
+  );
+
   return {
     installedCount: totalInstalled,
     skippedCount: totalSkipped,
@@ -209,10 +234,12 @@ export async function performIndexBasedInstallationPhases(params: InstallationPh
     errors: errors.length > 0 ? errors : undefined,
     allUpdatedFiles,
     rootFileResults: {
-      installed: Array.from(rootFileResults.installed),
-      updated: Array.from(rootFileResults.updated),
+      installed: dedupedRootInstalled,
+      updated: dedupedRootUpdated,
       skipped: Array.from(rootFileResults.skipped)
     },
-    totalOpenPackageFiles: totalInstalled + totalUpdated
+    totalOpenPackageFiles: totalInstalled + totalUpdated,
+    namespaced: anyNamespaced || undefined,
+    relocatedFiles: allRelocatedFiles.length > 0 ? allRelocatedFiles : undefined
   };
 }

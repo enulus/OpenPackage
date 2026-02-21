@@ -66,6 +66,8 @@ export function createEmptyResult(): FlowInstallResult {
     conflicts: [],
     errors: [],
     targetPaths: [],
-    fileMapping: {}
+    fileMapping: {},
+    namespaced: false,
+    relocatedFiles: []
   };
 }

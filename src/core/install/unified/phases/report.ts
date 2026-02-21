@@ -3,7 +3,6 @@ import type { InstallationContext } from '../context.js';
 import type { ExecutionResult } from './execute.js';
 import { displayInstallationResults } from '../../install-reporting.js';
 import { getInstallRootDir } from '../../../../utils/paths.js';
-import { logger } from '../../../../utils/logger.js';
 
 /**
  * Report results phase
@@ -16,21 +15,23 @@ export async function reportResultsPhase(
   
   // Display results (only show "dependency recorded" for dependency installs, not workspace-root)
   const isDependencyInstall = ctx.source.type !== 'workspace';
-  displayInstallationResults(
-    ctx.source.packageName,
-    ctx.resolvedPackages,
-    { platforms: ctx.platforms, created: [] },
-    ctx.options,
+  displayInstallationResults({
+    packageName: ctx.source.packageName,
+    resolvedPackages: ctx.resolvedPackages,
+    platformResult: { platforms: ctx.platforms, created: [] },
+    options: ctx.options,
     mainPackage,
-    installResult.allAddedFiles,
-    installResult.allUpdatedFiles,
-    installResult.rootFileResults,
-    [], // missing packages already handled
-    {}, // remote outcomes already handled
-    installResult.errorCount,
-    installResult.errors,
-    isDependencyInstall
-  );
+    installedFiles: installResult.allAddedFiles,
+    updatedFiles: installResult.allUpdatedFiles,
+    rootFileResults: installResult.rootFileResults,
+    missingPackages: [],
+    missingPackageOutcomes: {},
+    errorCount: installResult.errorCount,
+    errors: installResult.errors,
+    isDependencyInstall,
+    namespaced: installResult.namespaced,
+    relocatedFiles: installResult.relocatedFiles,
+  });
   
   // Build result data
   return {

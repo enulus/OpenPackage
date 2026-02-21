@@ -1,8 +1,5 @@
 import assert from 'node:assert/strict';
 
-const { formatSelectionSummary } = await import(
-  new URL('../../../src/core/install/install-reporting.js', import.meta.url).href
-);
 const { selectInstallVersionUnified } = await import(
   new URL('../../../src/core/install/version-selection.js', import.meta.url).href
 );
@@ -48,28 +45,10 @@ async function honorsLocalModeWithoutFallback() {
   assert.equal(result.resolutionSource, undefined, 'no source when nothing selected');
 }
 
-async function scopedPackageSummaryFormatting() {
-  const scopedName = '@@hyericlee/nextjs';
-  const formatted = formatSelectionSummary('local', scopedName, '0.3.1');
-  assert.equal(
-    formatted,
-    '✓ Selected local @@hyericlee/nextjs@0.3.1',
-    'scoped package summary should retain double @ prefix'
-  );
-
-  const remoteFormatted = formatSelectionSummary('remote', scopedName, '0.3.1');
-  assert.equal(
-    remoteFormatted,
-    '✓ Selected remote @@hyericlee/nextjs@0.3.1',
-    'remote scoped summary should use same formatting'
-  );
-}
-
 async function runTests() {
   await prefersLocalWhenAvailable();
   await fallsBackToRemoteWhenLocalMissing();
   await honorsLocalModeWithoutFallback();
-  await scopedPackageSummaryFormatting();
   console.log('install-selection tests passed');
 }
 

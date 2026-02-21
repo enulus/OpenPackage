@@ -5,6 +5,8 @@ import { resolvePlatforms } from '../../platform-resolution.js';
 import { logger } from '../../../../utils/logger.js';
 import { splitPackageNameForTelemetry } from '../../../../utils/plugin-naming.js';
 
+import type { RelocatedFile } from '../../conflicts/file-conflict-resolver.js';
+
 export interface ExecutionResult {
   installedCount: number;
   skippedCount: number;
@@ -15,6 +17,10 @@ export interface ExecutionResult {
   hadErrors: boolean;
   installedAnyFiles: boolean;
   errors?: string[];
+  /** True when namespace conflict resolution was triggered for any package */
+  namespaced?: boolean;
+  /** Files that were physically relocated on disk during namespace resolution */
+  relocatedFiles?: RelocatedFile[];
 }
 
 /**
