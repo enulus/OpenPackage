@@ -33,7 +33,7 @@ function transformMarkdownWithFlowMap(
   }
 
   // Only transform markdown for now (the reported regression is agent markdown frontmatter)
-  if (extname(entry.sourcePath).toLowerCase() !== '.md') {
+  if (!['.md', '.mdc'].includes(extname(entry.sourcePath).toLowerCase())) {
     return { transformed: false, output: raw };
   }
 

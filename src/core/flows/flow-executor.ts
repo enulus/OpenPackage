@@ -652,7 +652,7 @@ export class DefaultFlowExecutor implements FlowExecutor {
     }
 
     // Check for markdown with platform-specific frontmatter overrides
-    if ((sourceExt === '.md' || sourceExt === '.markdown') && 
+    if ((sourceExt === '.md' || sourceExt === '.mdc' || sourceExt === '.markdown') && 
         context.platform && 
         context.direction === 'install') {
       // Need to parse for frontmatter override merging
@@ -837,6 +837,7 @@ export class DefaultFlowExecutor implements FlowExecutor {
       '.yml': 'yml',
       '.toml': 'toml',
       '.md': 'markdown',
+      '.mdc': 'markdown',
       '.markdown': 'markdown',
       '.txt': 'text',
     };
