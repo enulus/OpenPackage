@@ -9,14 +9,14 @@ import type { PackageYml } from '../../../src/types/index.js';
 
 const tmpBase = mkdtempSync(path.join(os.tmpdir(), 'opkg-install-path-'));
 
-function setupWorkspace(name: string, deps: PackageYml['packages']): string {
+function setupWorkspace(name: string, deps: PackageYml['dependencies']): string {
   const workspaceDir = path.join(tmpBase, name);
   const opkgDir = path.join(workspaceDir, '.openpackage');
   mkdirSync(opkgDir, { recursive: true });
 
   const manifest: PackageYml = {
     name: 'test-workspace',
-    packages: deps || []
+    dependencies: deps || []
   };
 
   const manifestPath = path.join(opkgDir, 'openpackage.yml');
@@ -47,8 +47,7 @@ async function testFindGitSource(): Promise<void> {
   const workspace = setupWorkspace('git-test', [
     { 
       name: 'git-package', 
-      git: 'https://github.com/user/repo.git',
-      ref: 'main'
+      url: 'https://gitlab.com/user/repo.git#main'
     } as any
   ]);
 
@@ -56,7 +55,7 @@ async function testFindGitSource(): Promise<void> {
   assert.ok(gitSource, 'Should find git source');
   assert.equal(gitSource?.type, 'git');
   if (gitSource?.type === 'git') {
-    assert.equal(gitSource.url, 'https://github.com/user/repo.git');
+    assert.equal(gitSource.url, 'https://gitlab.com/user/repo.git');
     assert.equal(gitSource.ref, 'main');
   }
 }
@@ -68,8 +67,8 @@ async function testDevPackagesChecked(): Promise<void> {
 
   const manifest: PackageYml = {
     name: 'test-workspace',
-    packages: [{ name: 'prod-pkg', version: '^1.0.0' }],
-    'dev-packages': [{ name: 'dev-pkg', path: './local/dev-pkg' }]
+    dependencies: [{ name: 'prod-pkg', version: '^1.0.0' }],
+    'dev-dependencies': [{ name: 'dev-pkg', path: './local/dev-pkg' }]
   };
 
   const manifestPath = path.join(opkgDir, 'openpackage.yml');
@@ -105,7 +104,7 @@ async function testGitWithoutRef(): Promise<void> {
   const workspace = setupWorkspace('git-no-ref', [
     { 
       name: 'git-no-ref-package', 
-      git: 'https://github.com/user/repo.git'
+      url: 'https://gitlab.com/user/repo.git'
     } as any
   ]);
 
@@ -113,7 +112,7 @@ async function testGitWithoutRef(): Promise<void> {
   assert.ok(gitSource, 'Should find git source without ref');
   assert.equal(gitSource?.type, 'git');
   if (gitSource?.type === 'git') {
-    assert.equal(gitSource.url, 'https://github.com/user/repo.git');
+    assert.equal(gitSource.url, 'https://gitlab.com/user/repo.git');
     assert.equal(gitSource.ref, undefined);
   }
 }

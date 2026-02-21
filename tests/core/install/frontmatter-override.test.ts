@@ -13,6 +13,9 @@ import { promises as fs } from 'fs';
 const { installPackageWithFlows } = await import(
   new URL('../../../src/core/install/flow-based-installer.js', import.meta.url).href
 );
+const { createUniversalContext } = await import(
+  new URL('../../../src/core/conversion-context/creation.js', import.meta.url).href
+);
 
 console.log('Testing frontmatter override during install...');
 
@@ -81,7 +84,8 @@ async function testFrontmatterOverrideForClaude() {
       platform: 'claude' as any,
       packageVersion: '1.0.0',
       priority: 0,
-      dryRun: false
+      dryRun: false,
+      conversionContext: createUniversalContext()
     };
 
     const result = await installPackageWithFlows(context);
@@ -121,7 +125,8 @@ async function testFrontmatterOverrideForCursor() {
       platform: 'cursor' as any,
       packageVersion: '1.0.0',
       priority: 0,
-      dryRun: false
+      dryRun: false,
+      conversionContext: createUniversalContext()
     };
 
     const result = await installPackageWithFlows(context);

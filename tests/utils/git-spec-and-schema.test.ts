@@ -57,7 +57,7 @@ packages:
   );
   await assert.rejects(
     parsePackageYml(path),
-    /ref but no git source/
+    /ref but no git\/url source/
   );
 })();
 
@@ -76,7 +76,7 @@ packages:
 `
   );
   const parsed = await parsePackageYml(path);
-  assert.equal(parsed.packages?.[0].git, 'https://example.com/foo.git');
+  assert.equal(parsed.dependencies?.[0].url, 'https://example.com/foo.git#main');
 })();
 
 console.log('git-spec-and-schema tests passed');

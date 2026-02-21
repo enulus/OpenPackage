@@ -10,8 +10,8 @@ import {
   applyMapPipeline,
   createMapContext,
   validateMapPipeline,
-} from '../../src/core/flows/map-pipeline/index.js';
-import type { MapPipeline, MapContext } from '../../src/core/flows/map-pipeline/types.js';
+} from '../../../src/core/flows/map-pipeline/index.js';
+import type { MapPipeline, MapContext } from '../../../src/core/flows/map-pipeline/types.js';
 
 /**
  * Helper to create test context

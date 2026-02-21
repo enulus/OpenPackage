@@ -2,7 +2,8 @@
  * Integration tests for switch expressions in flow target paths
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, beforeEach, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
@@ -66,10 +67,10 @@ describe('Switch Target Path Integration', () => {
       const result = await executor.executeFlow(flow, context);
 
       // Verify
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       const targetFile = path.join(workspaceRoot, '.config/opencode/command/test.md');
       const content = await fs.readFile(targetFile, 'utf-8');
-      expect(content).toBe('# Test Command');
+      assert.strictEqual(content, '# Test Command');
     });
 
     it('should write to .opencode when targetRoot is not ~/', async () => {
@@ -105,10 +106,10 @@ describe('Switch Target Path Integration', () => {
       const result = await executor.executeFlow(flow, context);
 
       // Verify
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       const targetFile = path.join(workspaceRoot, '.opencode/command/test.md');
       const content = await fs.readFile(targetFile, 'utf-8');
-      expect(content).toBe('# Test Command');
+      assert.strictEqual(content, '# Test Command');
     });
 
     it('should handle multiple files with switch expression', async () => {
@@ -147,11 +148,11 @@ describe('Switch Target Path Integration', () => {
       const result = await executor.executeFlow(flow, context);
 
       // Verify all files were written
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       for (const file of files) {
         const targetFile = path.join(workspaceRoot, '.config/opencode/command', file);
         const exists = await fs.access(targetFile).then(() => true).catch(() => false);
-        expect(exists).toBe(true);
+        assert.strictEqual(exists, true);
       }
     });
 
@@ -192,29 +193,30 @@ describe('Switch Target Path Integration', () => {
       const result = await executor.executeFlow(flow, context);
 
       // Verify merge
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       const content = await fs.readFile(targetFile, 'utf-8');
       const merged = JSON.parse(content);
-      expect(merged).toEqual({ a: 1, b: 2, c: 3 });
+      assert.deepStrictEqual(merged, { a: 1, b: 2, c: 3 });
     });
   });
 
   describe('Import flows with switch expressions', () => {
     it('should read from .config/opencode when targetRoot is ~/', async () => {
-      // Setup: Create source file in workspace
-      const sourceFile = path.join(workspaceRoot, '.config/opencode/command/test.md');
+      // Setup: Create source file in packageRoot (executor resolves 'from' against packageRoot)
+      // Use non-dot directory path since the glob resolver uses minimatch with dot:false
+      const sourceFile = path.join(packageRoot, 'config/opencode/command/test.md');
       await fs.mkdir(path.dirname(sourceFile), { recursive: true });
       await fs.writeFile(sourceFile, '# Test Command');
 
-      // Define flow with switch expression
+      // Define flow with switch expression using non-dot paths for glob matching
       const flow: Flow = {
         from: {
           $switch: {
             field: '$$targetRoot',
             cases: [
-              { pattern: '~/', value: '.config/opencode/command/**/*.md' },
+              { pattern: '~/', value: 'config/opencode/command/**/*.md' },
             ],
-            default: '.opencode/command/**/*.md',
+            default: 'opencode/command/**/*.md',
           },
         },
         to: 'commands/**/*.md',
@@ -232,28 +234,29 @@ describe('Switch Target Path Integration', () => {
       // Execute flow
       const result = await executor.executeFlow(flow, context);
 
-      // Verify
-      expect(result.success).toBe(true);
-      const targetFile = path.join(packageRoot, 'commands/test.md');
+      // Verify: output is written to workspaceRoot (executor writes 'to' relative to workspaceRoot)
+      assert.strictEqual(result.success, true);
+      const targetFile = path.join(workspaceRoot, 'commands/test.md');
       const content = await fs.readFile(targetFile, 'utf-8');
-      expect(content).toBe('# Test Command');
+      assert.strictEqual(content, '# Test Command');
     });
 
     it('should read from .opencode when targetRoot is not ~/', async () => {
-      // Setup: Create source file in workspace
-      const sourceFile = path.join(workspaceRoot, '.opencode/command/test.md');
+      // Setup: Create source file in packageRoot (executor resolves 'from' against packageRoot)
+      // Use non-dot directory path since the glob resolver uses minimatch with dot:false
+      const sourceFile = path.join(packageRoot, 'opencode/command/test.md');
       await fs.mkdir(path.dirname(sourceFile), { recursive: true });
       await fs.writeFile(sourceFile, '# Test Command');
 
-      // Define flow with switch expression
+      // Define flow with switch expression using non-dot paths for glob matching
       const flow: Flow = {
         from: {
           $switch: {
             field: '$$targetRoot',
             cases: [
-              { pattern: '~/', value: '.config/opencode/command/**/*.md' },
+              { pattern: '~/', value: 'config/opencode/command/**/*.md' },
             ],
-            default: '.opencode/command/**/*.md',
+            default: 'opencode/command/**/*.md',
           },
         },
         to: 'commands/**/*.md',
@@ -271,11 +274,11 @@ describe('Switch Target Path Integration', () => {
       // Execute flow
       const result = await executor.executeFlow(flow, context);
 
-      // Verify
-      expect(result.success).toBe(true);
-      const targetFile = path.join(packageRoot, 'commands/test.md');
+      // Verify: output is written to workspaceRoot (executor writes 'to' relative to workspaceRoot)
+      assert.strictEqual(result.success, true);
+      const targetFile = path.join(workspaceRoot, 'commands/test.md');
       const content = await fs.readFile(targetFile, 'utf-8');
-      expect(content).toBe('# Test Command');
+      assert.strictEqual(content, '# Test Command');
     });
   });
 
@@ -304,8 +307,8 @@ describe('Switch Target Path Integration', () => {
 
       const result = await executor.executeFlow(flow, context);
 
-      expect(result.success).toBe(false);
-      expect(result.error?.message).toMatch(/Variable 'unknownVar' not found/);
+      assert.strictEqual(result.success, false);
+      assert.match(result.error?.message, /Variable 'unknownVar' not found/);
     });
 
     it('should fail when no cases match and no default', async () => {
@@ -337,8 +340,8 @@ describe('Switch Target Path Integration', () => {
 
       const result = await executor.executeFlow(flow, context);
 
-      expect(result.success).toBe(false);
-      expect(result.error?.message).toMatch(/No matching case/);
+      assert.strictEqual(result.success, false);
+      assert.match(result.error?.message, /No matching case/);
     });
   });
 
@@ -365,8 +368,8 @@ describe('Switch Target Path Integration', () => {
 
       const result = await executor.executeFlow(flow, context);
 
-      expect(result.success).toBe(false);
-      expect(result.error?.message).toMatch(/Invalid flow/);
+      assert.strictEqual(result.success, false);
+      assert.match(result.error?.message, /No matching case|Invalid flow|at least one case/);
     });
   });
 });

@@ -9,7 +9,12 @@ import { updateManifestPhase } from '../../../src/core/install/unified/phases/ma
 import { parsePackageYml } from '../../../src/utils/package-yml.js';
 import { getLocalPackageYmlPath } from '../../../src/utils/paths.js';
 import type { PackageYml } from '../../../src/types/index.js';
+import type { ExecutionContext } from '../../../src/types/execution-context.js';
 import type { InstallationContext } from '../../../src/core/install/unified/context.js';
+
+function makeExecContext(targetDir: string): ExecutionContext {
+  return { sourceCwd: targetDir, targetDir, isGlobal: false };
+}
 
 const tmpBase = mkdtempSync(path.join(os.tmpdir(), 'opkg-tilde-test-'));
 
@@ -58,7 +63,7 @@ async function testTildePathInManifest(): Promise<void> {
 
   // Build context for path installation
   const ctx = await buildPathInstallContext(
-    workspaceDir,
+    makeExecContext(workspaceDir),
     packagePath,
     { sourceType: 'directory' }
   );
@@ -116,7 +121,7 @@ async function testRelativePathPreserved(): Promise<void> {
 
   // Build context with relative path
   const ctx = await buildPathInstallContext(
-    workspaceDir,
+    makeExecContext(workspaceDir),
     relativePath,
     { sourceType: 'directory' }
   );
@@ -169,7 +174,7 @@ async function testWorkspaceRelativePath(): Promise<void> {
 
   // Build context with ABSOLUTE path (under workspace)
   const ctx = await buildPathInstallContext(
-    workspaceDir,
+    makeExecContext(workspaceDir),
     packagePath, // absolute path
     { sourceType: 'directory' }
   );

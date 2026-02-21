@@ -113,18 +113,18 @@ This is a test command.
 
     // Transform to package
     const pkg = await transformPluginToPackage(pluginDir);
-    assert.strictEqual(pkg.metadata.name, 'my-plugin');
-    assert.strictEqual(pkg.metadata.version, '2.0.0');
-    assert.strictEqual(pkg.metadata.description, 'A test plugin');
-    assert.strictEqual(pkg.metadata.author, 'Test Author');
+    assert.strictEqual(pkg.package.metadata.name, 'my-plugin');
+    assert.strictEqual(pkg.package.metadata.version, '2.0.0');
+    assert.strictEqual(pkg.package.metadata.description, 'A test plugin');
+    assert.strictEqual(pkg.package.metadata.author, 'Test Author');
 
     // Verify files were extracted (with original paths, .claude-plugin excluded)
-    assert.ok(pkg.files.length > 0, 'Should extract files');
+    assert.ok(pkg.package.files.length > 0, 'Should extract files');
     // Plugin manifest (.claude-plugin/plugin.json) should be excluded
-    const manifestFile = pkg.files.find(f => f.path.includes(DIR_PATTERNS.CLAUDE_PLUGIN));
+    const manifestFile = pkg.package.files.find(f => f.path.includes(DIR_PATTERNS.CLAUDE_PLUGIN));
     assert.ok(!manifestFile, `Should NOT include ${DIR_PATTERNS.CLAUDE_PLUGIN} directory`);
     // Command files should be kept with original paths
-    const commandFile = pkg.files.find(f => f.path === 'commands/test.md');
+    const commandFile = pkg.package.files.find(f => f.path === 'commands/test.md');
     assert.ok(commandFile, 'Should include command file');
   });
 
@@ -171,11 +171,11 @@ This agent has tools.
 
     assert.strictEqual(code, 0, 'Install should succeed');
 
-    // Verify agent was installed to .opencode/agent/
-    const agentFile = join(workspaceDir, '.opencode', 'agent', 'test-agent.md');
+    // Verify agent was installed to .opencode/agents/
+    const agentFile = join(workspaceDir, '.opencode', 'agents', 'test-agent.md');
     assert.ok(
       await exists(agentFile),
-      'Agent should be installed to .opencode/agent/'
+      'Agent should be installed to .opencode/agents/'
     );
 
     // Read the installed agent file and check frontmatter
@@ -188,13 +188,13 @@ This agent has tools.
     const { splitFrontmatter } = await import('../../../src/utils/markdown-frontmatter.js');
     const parsed = splitFrontmatter(installedContent);
 
-    // Verify tools were converted from "Glob, Grep, LS" to { Glob: true, Grep: true, LS: true }
+    // Verify tools were converted from "Glob, Grep, LS" to { glob: true, grep: true, ls: true }
     assert.ok(parsed.frontmatter, 'Should have frontmatter');
     assert.ok(parsed.frontmatter.tools, 'Should have tools field');
     assert.strictEqual(typeof parsed.frontmatter.tools, 'object', 'Tools should be an object, not a string');
-    assert.strictEqual(parsed.frontmatter.tools.Glob, true, 'Glob should be true');
-    assert.strictEqual(parsed.frontmatter.tools.Grep, true, 'Grep should be true');
-    assert.strictEqual(parsed.frontmatter.tools.LS, true, 'LS should be true');
+    assert.strictEqual(parsed.frontmatter.tools.glob, true, 'Glob should be true');
+    assert.strictEqual(parsed.frontmatter.tools.grep, true, 'Grep should be true');
+    assert.strictEqual(parsed.frontmatter.tools.ls, true, 'LS should be true');
   });
 
   it('should parse git spec with subdirectory syntax', async () => {

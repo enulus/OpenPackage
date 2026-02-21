@@ -8,6 +8,7 @@ import { exists, readTextFile, writeTextFile } from './fs.js';
 import { logger } from './logger.js';
 import { getAllPlatforms, getPlatformDefinition } from '../core/platforms.js';
 import { buildOpenMarkerRegex, CLOSE_MARKER_REGEX } from './root-file-extractor.js';
+import { FILE_PATTERNS } from '../constants/index.js';
 
 /** Remove a single package section from root-file content using markers */
 function stripPackageSection(content: string, packageName: string): { changed: boolean; content: string } {
@@ -38,7 +39,7 @@ function stripMultiplePackageSections(content: string, packageNames: string[]): 
 
 /** Discover platform root filenames from platform definitions */
 function getUniqueRootFilenames(): string[] {
-  const set = new Set<string>();
+  const set = new Set<string>([FILE_PATTERNS.AGENTS_MD]);
   for (const platform of getAllPlatforms()) {
     const def = getPlatformDefinition(platform);
     if (def.rootFile) set.add(def.rootFile);

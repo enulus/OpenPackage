@@ -16,11 +16,13 @@ async function cleanup() {
 
 async function testRefCaching() {
   const cacheManager = createCacheManager();
-  const testUrl = 'https://github.com/test/ref-cache-test-repo';
+  // Use a unique URL per run to avoid leaking state from previous test runs
+  // The cache uses the global ~/.openpackage/cache path, not a test-scoped one
+  const testUrl = `https://github.com/test/ref-cache-test-repo-${Date.now()}`;
   const testRef = 'main';
   const testCommit = 'abc1234';
   
-  // Initially should be null
+  // Initially should be null (unique URL ensures no leftover from previous runs)
   const initial = await cacheManager.getCachedCommitForRef(testUrl, testRef);
   assert.strictEqual(initial, null, 'Should return null for uncached ref');
   
@@ -36,7 +38,7 @@ async function testRefCaching() {
 
 async function testImmutableRefNoExpiry() {
   const cacheManager = createCacheManager();
-  const testUrl = 'https://github.com/test/immutable-test-repo';
+  const testUrl = `https://github.com/test/immutable-test-repo-${Date.now()}`;
   
   // Test with semver tag (should never expire based on TTL)
   const semverTag = 'v1.0.0';
@@ -57,7 +59,7 @@ async function testImmutableRefNoExpiry() {
 
 async function testMetadataCaching() {
   const cacheManager = createCacheManager();
-  const testPackage = 'test-metadata-package';
+  const testPackage = `test-metadata-package-${Date.now()}`;
   const testVersions = ['1.0.0', '1.1.0', '2.0.0'];
   
   // Initially should be null

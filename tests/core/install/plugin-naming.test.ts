@@ -15,16 +15,17 @@ describe('Plugin Naming', () => {
       const name = generatePluginName({
         gitUrl: 'https://github.com/anthropics/claude-code.git',
         path: 'plugins/commit-commands',
-        pluginManifestName: 'commit-commands'
+        packageName: 'commit-commands'
       });
       
-      assert.strictEqual(name, 'gh@anthropics/claude-code/commit-commands');
+      // Now uses full path for unambiguous naming
+      assert.strictEqual(name, 'gh@anthropics/claude-code/plugins/commit-commands');
     });
     
     it('should generate scoped name for GitHub plugin without path', () => {
       const name = generatePluginName({
         gitUrl: 'https://github.com/anthropics/my-plugin.git',
-        pluginManifestName: 'my-plugin'
+        packageName: 'my-plugin'
       });
       
       assert.strictEqual(name, 'gh@anthropics/my-plugin');
@@ -41,46 +42,47 @@ describe('Plugin Naming', () => {
     it('should use repo name as fallback when plugin manifest name is undefined', () => {
       const name = generatePluginName({
         gitUrl: 'https://github.com/user/awesome-plugin.git',
-        pluginManifestName: undefined
+        packageName: undefined
       });
       
       assert.strictEqual(name, 'gh@user/awesome-plugin');
     });
     
-    it('should use path basename as fallback when plugin manifest name is undefined', () => {
+    it('should use full path when plugin manifest name is undefined', () => {
       const name = generatePluginName({
         gitUrl: 'https://github.com/user/repo-name.git',
         path: 'plugins/cool-plugin',
-        pluginManifestName: undefined
+        packageName: undefined
       });
       
-      assert.strictEqual(name, 'gh@user/repo-name/cool-plugin');
+      // Full path is used for clarity
+      assert.strictEqual(name, 'gh@user/repo-name/plugins/cool-plugin');
     });
     
-    it('should always use repo name for marketplace plugins', () => {
+    it('should always use full path for marketplace plugins', () => {
       const name = generatePluginName({
         gitUrl: 'https://github.com/user/actual-repo.git',
         path: 'plugins/plugin-a',
-        pluginManifestName: 'plugin-a'
+        packageName: 'plugin-a'
       });
       
-      assert.strictEqual(name, 'gh@user/actual-repo/plugin-a');
+      assert.strictEqual(name, 'gh@user/actual-repo/plugins/plugin-a');
     });
     
-    it('should use repo name even when marketplace has different name', () => {
+    it('should use full path even when marketplace has different name', () => {
       const name = generatePluginName({
         gitUrl: 'https://github.com/anthropics/claude-code-plugins.git',
         path: 'packages/my-plugin',
-        pluginManifestName: 'my-plugin'
+        packageName: 'my-plugin'
       });
       
-      assert.strictEqual(name, 'gh@anthropics/claude-code-plugins/my-plugin');
+      assert.strictEqual(name, 'gh@anthropics/claude-code-plugins/packages/my-plugin');
     });
     
     it('should return plain name for non-GitHub URLs', () => {
       const name = generatePluginName({
         gitUrl: 'https://gitlab.com/user/plugin.git',
-        pluginManifestName: 'my-plugin'
+        packageName: 'my-plugin'
       });
       
       assert.strictEqual(name, 'my-plugin');
@@ -88,7 +90,7 @@ describe('Plugin Naming', () => {
     
     it('should return plain name for local paths (no git URL)', () => {
       const name = generatePluginName({
-        pluginManifestName: 'local-plugin'
+        packageName: 'local-plugin'
       });
       
       assert.strictEqual(name, 'local-plugin');
@@ -97,7 +99,7 @@ describe('Plugin Naming', () => {
     it('should use path basename for local paths when manifest name is undefined', () => {
       const name = generatePluginName({
         path: 'path/to/my-plugin',
-        pluginManifestName: undefined
+        packageName: undefined
       });
       
       assert.strictEqual(name, 'my-plugin');
@@ -239,7 +241,7 @@ describe('Plugin Naming', () => {
         path: 'plugins/commit-commands'
       });
       
-      assert.strictEqual(newName, 'gh@anthropics/claude-code/commit-commands');
+      assert.strictEqual(newName, 'gh@anthropics/claude-code/plugins/commit-commands');
     });
     
     it('should return null for new format', () => {

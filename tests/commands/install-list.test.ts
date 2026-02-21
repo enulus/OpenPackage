@@ -2,21 +2,22 @@
  * Integration tests for install command with --interactive option
  */
 
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, beforeEach, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
 import { join } from 'path';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { discoverResources } from '../../src/core/install/resource-discoverer.js';
-import { setupTestEnvironment, cleanupTestEnvironment } from '../test-helpers.js';
 
 describe('install --interactive', () => {
   let testDir: string;
 
   beforeEach(async () => {
-    const env = await setupTestEnvironment();
-    testDir = env.testDir;
+    testDir = await mkdtemp(join(tmpdir(), 'opkg-install-list-test-'));
   });
 
   afterEach(async () => {
-    await cleanupTestEnvironment(testDir);
+    await rm(testDir, { recursive: true, force: true });
   });
 
   describe('resource discovery', () => {
@@ -24,15 +25,15 @@ describe('install --interactive', () => {
       // This test validates the resource discoverer can find agents
       // A full integration test would require mock prompts
       const result = await discoverResources(testDir, testDir);
-      expect(result).toBeDefined();
-      expect(result.total).toBeGreaterThanOrEqual(0);
-      expect(result.byType).toBeInstanceOf(Map);
+      assert.ok(result);
+      assert.ok(result.total >= 0);
+      assert.ok(result.byType instanceof Map);
     });
 
     it('should return empty result for empty directory', async () => {
       const result = await discoverResources(testDir, testDir);
-      expect(result.total).toBe(0);
-      expect(result.all).toHaveLength(0);
+      assert.strictEqual(result.total, 0);
+      assert.strictEqual(result.all.length, 0);
     });
   });
 
@@ -40,12 +41,12 @@ describe('install --interactive', () => {
     it('should reject --interactive with --agents', () => {
       // This is validated at CLI level in install.ts
       // The validation ensures mutually exclusive options
-      expect(true).toBe(true); // Placeholder
+      assert.strictEqual(true, true); // Placeholder
     });
 
     it('should reject --interactive with --skills', () => {
       // This is validated at CLI level in install.ts
-      expect(true).toBe(true); // Placeholder
+      assert.strictEqual(true, true); // Placeholder
     });
   });
 });

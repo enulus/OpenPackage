@@ -8,7 +8,8 @@
  * - Filtering groups by workspace candidates
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 import {
   buildCandidateGroups,
   filterGroupsWithWorkspace
@@ -30,17 +31,17 @@ describe('save-group-builder', () => {
 
       const groups = buildCandidateGroups(localRefs, workspaceCandidates);
 
-      expect(groups).toHaveLength(2);
+      assert.strictEqual(groups.length, 2);
       
       const group1 = groups.find(g => g.registryPath === 'file1.md');
-      expect(group1).toBeDefined();
-      expect(group1!.localRef).toBeDefined();
-      expect(group1!.workspace).toHaveLength(1);
+      assert.notStrictEqual(group1, undefined);
+      assert.notStrictEqual(group1!.localRef, undefined);
+      assert.strictEqual(group1!.workspace.length, 1);
       
       const group2 = groups.find(g => g.registryPath === 'file2.md');
-      expect(group2).toBeDefined();
-      expect(group2!.localRef).toBeDefined();
-      expect(group2!.workspace).toHaveLength(1);
+      assert.notStrictEqual(group2, undefined);
+      assert.notStrictEqual(group2!.localRef, undefined);
+      assert.strictEqual(group2!.workspace.length, 1);
     });
 
     it('should handle multiple workspace candidates per group', () => {
@@ -56,13 +57,13 @@ describe('save-group-builder', () => {
 
       const groups = buildCandidateGroups(localRefs, workspaceCandidates);
 
-      expect(groups).toHaveLength(1);
-      expect(groups[0].registryPath).toBe('tools/search.md');
-      expect(groups[0].localRef).toBeDefined();
-      expect(groups[0].workspace).toHaveLength(3);
+      assert.strictEqual(groups.length, 1);
+      assert.strictEqual(groups[0].registryPath, 'tools/search.md');
+      assert.notStrictEqual(groups[0].localRef, undefined);
+      assert.strictEqual(groups[0].workspace.length, 3);
       
       const platforms = groups[0].workspace.map(c => c.platform).sort();
-      expect(platforms).toEqual(['claude', 'cursor', 'windsurf']);
+      assert.deepStrictEqual(platforms, ['claude', 'cursor', 'windsurf']);
     });
 
     it('should handle missing local candidates', () => {
@@ -74,10 +75,10 @@ describe('save-group-builder', () => {
 
       const groups = buildCandidateGroups(localRefs, workspaceCandidates);
 
-      expect(groups).toHaveLength(1);
-      expect(groups[0].registryPath).toBe('new-file.md');
-      expect(groups[0].localRef).toBeUndefined();
-      expect(groups[0].workspace).toHaveLength(1);
+      assert.strictEqual(groups.length, 1);
+      assert.strictEqual(groups[0].registryPath, 'new-file.md');
+      assert.strictEqual(groups[0].localRef, undefined);
+      assert.strictEqual(groups[0].workspace.length, 1);
     });
 
     it('should handle missing workspace candidates', () => {
@@ -89,10 +90,10 @@ describe('save-group-builder', () => {
 
       const groups = buildCandidateGroups(localRefs, workspaceCandidates);
 
-      expect(groups).toHaveLength(1);
-      expect(groups[0].registryPath).toBe('old-file.md');
-      expect(groups[0].localRef).toBeDefined();
-      expect(groups[0].workspace).toHaveLength(0);
+      assert.strictEqual(groups.length, 1);
+      assert.strictEqual(groups[0].registryPath, 'old-file.md');
+      assert.notStrictEqual(groups[0].localRef, undefined);
+      assert.strictEqual(groups[0].workspace.length, 0);
     });
 
     it('should handle empty inputs', () => {
@@ -101,7 +102,7 @@ describe('save-group-builder', () => {
 
       const groups = buildCandidateGroups(localRefs, workspaceCandidates);
 
-      expect(groups).toHaveLength(0);
+      assert.strictEqual(groups.length, 0);
     });
 
     it('should organize mixed scenarios', () => {
@@ -118,23 +119,23 @@ describe('save-group-builder', () => {
 
       const groups = buildCandidateGroups(localRefs, workspaceCandidates);
 
-      expect(groups).toHaveLength(4);
+      assert.strictEqual(groups.length, 4);
       
       const group1 = groups.find(g => g.registryPath === 'file1.md');
-      expect(group1?.localRef).toBeDefined();
-      expect(group1?.workspace).toHaveLength(1);
+      assert.notStrictEqual(group1?.localRef, undefined);
+      assert.strictEqual(group1?.workspace.length, 1);
       
       const group2 = groups.find(g => g.registryPath === 'file2.md');
-      expect(group2?.localRef).toBeDefined();
-      expect(group2?.workspace).toHaveLength(0);
+      assert.notStrictEqual(group2?.localRef, undefined);
+      assert.strictEqual(group2?.workspace.length, 0);
       
       const group3 = groups.find(g => g.registryPath === 'file3.md');
-      expect(group3?.localRef).toBeDefined();
-      expect(group3?.workspace).toHaveLength(0);
+      assert.notStrictEqual(group3?.localRef, undefined);
+      assert.strictEqual(group3?.workspace.length, 0);
       
       const group4 = groups.find(g => g.registryPath === 'file4.md');
-      expect(group4?.localRef).toBeUndefined();
-      expect(group4?.workspace).toHaveLength(1);
+      assert.strictEqual(group4?.localRef, undefined);
+      assert.strictEqual(group4?.workspace.length, 1);
     });
   });
 
@@ -162,8 +163,8 @@ describe('save-group-builder', () => {
       const filtered = filterGroupsWithWorkspace(groups);
 
       // Verify
-      expect(filtered).toHaveLength(2);
-      expect(filtered.map(g => g.registryPath).sort()).toEqual(['file1.md', 'file3.md']);
+      assert.strictEqual(filtered.length, 2);
+      assert.deepStrictEqual(filtered.map(g => g.registryPath).sort(), ['file1.md', 'file3.md']);
     });
 
     it('should return empty array when no groups have workspace candidates', () => {
@@ -185,7 +186,7 @@ describe('save-group-builder', () => {
       const filtered = filterGroupsWithWorkspace(groups);
 
       // Verify
-      expect(filtered).toHaveLength(0);
+      assert.strictEqual(filtered.length, 0);
     });
 
     it('should handle empty input', () => {
@@ -196,7 +197,7 @@ describe('save-group-builder', () => {
       const filtered = filterGroupsWithWorkspace(groups);
 
       // Verify
-      expect(filtered).toHaveLength(0);
+      assert.strictEqual(filtered.length, 0);
     });
   });
 });

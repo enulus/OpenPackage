@@ -4,7 +4,8 @@
  * Tests that array patterns work correctly in real flow execution scenarios.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, beforeEach, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
@@ -56,13 +57,13 @@ describe('Priority Patterns in Flow Execution', () => {
 
     const result = await executor.executeFlow(flow, context);
 
-    expect(result.success).toBe(true);
-    expect(result.warnings).toBeDefined();
+    assert.strictEqual(result.success, true);
+    assert.ok(result.warnings);
     
     // Check that the higher priority file was used
     const written = await fs.readFile(path.join(workspaceRoot, 'settings.json'), 'utf-8');
     const data = JSON.parse(written);
-    expect(data.priority).toBe(1);
+    assert.strictEqual(data.priority, 1);
     
     // Check warning about skipped pattern
     const warningFound = result.warnings?.some(w => 
@@ -70,7 +71,7 @@ describe('Priority Patterns in Flow Execution', () => {
       w.includes('config.json') &&
       w.includes('priority')
     );
-    expect(warningFound).toBe(true);
+    assert.strictEqual(warningFound, true);
   });
 
   it('should fallback to second pattern when first does not exist', async () => {
@@ -94,16 +95,16 @@ describe('Priority Patterns in Flow Execution', () => {
 
     const result = await executor.executeFlow(flow, context);
 
-    expect(result.success).toBe(true);
+    assert.strictEqual(result.success, true);
     
     // Check that the second file was used
     const written = await fs.readFile(path.join(workspaceRoot, 'settings.json'), 'utf-8');
     const data = JSON.parse(written);
-    expect(data.source).toBe('json');
+    assert.strictEqual(data.source, 'json');
     
     // Should not have priority warnings since only one file exists
-    const warningFound = result.warnings?.some(w => w.includes('priority'));
-    expect(warningFound).toBe(false);
+    const warningFound = result.warnings?.some(w => w.includes('priority')) ?? false;
+    assert.strictEqual(warningFound, false);
   });
 
   it('should return no matches warning when no patterns match', async () => {
@@ -124,14 +125,14 @@ describe('Priority Patterns in Flow Execution', () => {
 
     const result = await executor.executeFlow(flow, context);
 
-    expect(result.success).toBe(true);
-    expect(result.transformed).toBe(false);
-    expect(result.warnings).toBeDefined();
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.transformed, false);
+    assert.ok(result.warnings);
     
     const warningFound = result.warnings?.some(w => 
       w.includes('No files matched')
     );
-    expect(warningFound).toBe(true);
+    assert.strictEqual(warningFound, true);
   });
 
   it('should work with glob patterns in array', async () => {
@@ -157,12 +158,12 @@ describe('Priority Patterns in Flow Execution', () => {
 
     const result = await executor.executeFlow(flow, context);
 
-    expect(result.success).toBe(true);
+    assert.strictEqual(result.success, true);
     
     // Should have used specific.json (higher priority)
     const written = await fs.readFile(path.join(workspaceRoot, 'output.json'), 'utf-8');
     const data = JSON.parse(written);
-    expect(data.type).toBe('specific');
+    assert.strictEqual(data.type, 'specific');
   });
 
   it('should work with transforms on priority patterns', async () => {
@@ -176,7 +177,7 @@ describe('Priority Patterns in Flow Execution', () => {
     const flow: Flow = {
       from: ['config.jsonc', 'config.json'],
       to: 'output.json',
-      pipe: ['filter-comments'],
+      map: [{ "$pipe": ["filter-comments"] }],
     };
 
     const context: FlowContext = {
@@ -191,13 +192,13 @@ describe('Priority Patterns in Flow Execution', () => {
 
     const result = await executor.executeFlow(flow, context);
 
-    expect(result.success).toBe(true);
-    expect(result.transformed).toBe(true);
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.transformed, true);
     
     // Should have processed jsonc file and stripped comments
     const written = await fs.readFile(path.join(workspaceRoot, 'output.json'), 'utf-8');
     const data = JSON.parse(written);
-    expect(data.key).toBe('value');
-    expect(written).not.toContain('//');
+    assert.strictEqual(data.key, 'value');
+    assert.ok(!written.includes('//'));
   });
 });

@@ -2,7 +2,8 @@
  * Unit tests for switch expression resolution
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 import { resolveSwitchExpression, validateSwitchExpression } from '../../../../src/core/flows/switch-resolver.js';
 import type { SwitchExpression, FlowContext } from '../../../../src/types/flows.js';
 
@@ -31,7 +32,7 @@ describe('Switch Expression Resolution', () => {
       const context = createContext({ targetRoot: '~/' });
       const result = resolveSwitchExpression(switchExpr, context);
 
-      expect(result).toBe('.config/opencode');
+      assert.strictEqual(result, '.config/opencode');
     });
 
     it('should resolve with second case when first does not match', () => {
@@ -48,7 +49,7 @@ describe('Switch Expression Resolution', () => {
       const context = createContext({ targetRoot: '/project' });
       const result = resolveSwitchExpression(switchExpr, context);
 
-      expect(result).toBe('.opencode');
+      assert.strictEqual(result, '.opencode');
     });
 
     it('should use default when no cases match', () => {
@@ -65,7 +66,7 @@ describe('Switch Expression Resolution', () => {
       const context = createContext({ targetRoot: '/some/other/path' });
       const result = resolveSwitchExpression(switchExpr, context);
 
-      expect(result).toBe('.opencode');
+      assert.strictEqual(result, '.opencode');
     });
 
     it('should throw error when no cases match and no default', () => {
@@ -80,7 +81,8 @@ describe('Switch Expression Resolution', () => {
 
       const context = createContext({ targetRoot: '/some/other/path' });
 
-      expect(() => resolveSwitchExpression(switchExpr, context)).toThrow(
+      assert.throws(
+        () => resolveSwitchExpression(switchExpr, context),
         /No matching case in \$switch expression/
       );
     });
@@ -100,7 +102,7 @@ describe('Switch Expression Resolution', () => {
       const context = createContext({ targetRoot: '/home/user' });
       const result = resolveSwitchExpression(switchExpr, context);
 
-      expect(result).toBe('home-config');
+      assert.strictEqual(result, 'home-config');
     });
 
     it('should match first case when multiple patterns match', () => {
@@ -117,7 +119,7 @@ describe('Switch Expression Resolution', () => {
       const context = createContext({ env: 'production' });
       const result = resolveSwitchExpression(switchExpr, context);
 
-      expect(result).toBe('production');
+      assert.strictEqual(result, 'production');
     });
 
     it('should support object pattern matching', () => {
@@ -135,7 +137,7 @@ describe('Switch Expression Resolution', () => {
       const context = createContext({ config: { type: 'dev', debug: true } });
       const result = resolveSwitchExpression(switchExpr, context);
 
-      expect(result).toBe('dev-debug');
+      assert.strictEqual(result, 'dev-debug');
     });
 
     it('should throw error for undefined variable', () => {
@@ -150,7 +152,8 @@ describe('Switch Expression Resolution', () => {
 
       const context = createContext({ targetRoot: '~/' });
 
-      expect(() => resolveSwitchExpression(switchExpr, context)).toThrow(
+      assert.throws(
+        () => resolveSwitchExpression(switchExpr, context),
         /Variable 'unknownVar' not found/
       );
     });
@@ -169,7 +172,7 @@ describe('Switch Expression Resolution', () => {
       const context = createContext({});
       const result = resolveSwitchExpression(switchExpr, context);
 
-      expect(result).toBe('matched');
+      assert.strictEqual(result, 'matched');
     });
   });
 
@@ -187,8 +190,8 @@ describe('Switch Expression Resolution', () => {
 
       const result = validateSwitchExpression(switchExpr);
 
-      expect(result.valid).toBe(true);
-      expect(result.errors).toHaveLength(0);
+      assert.strictEqual(result.valid, true);
+      assert.strictEqual(result.errors.length, 0);
     });
 
     it('should reject switch expression without $switch property', () => {
@@ -196,8 +199,8 @@ describe('Switch Expression Resolution', () => {
 
       const result = validateSwitchExpression(switchExpr);
 
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain('Switch expression must have $switch property');
+      assert.strictEqual(result.valid, false);
+      assert.ok(result.errors.includes('Switch expression must have $switch property'));
     });
 
     it('should reject switch expression without field', () => {
@@ -211,8 +214,8 @@ describe('Switch Expression Resolution', () => {
 
       const result = validateSwitchExpression(switchExpr);
 
-      expect(result.valid).toBe(false);
-      expect(result.errors.some(e => e.includes('field'))).toBe(true);
+      assert.strictEqual(result.valid, false);
+      assert.strictEqual(result.errors.some(e => e.includes('field')), true);
     });
 
     it('should reject switch expression without cases', () => {
@@ -224,8 +227,8 @@ describe('Switch Expression Resolution', () => {
 
       const result = validateSwitchExpression(switchExpr);
 
-      expect(result.valid).toBe(false);
-      expect(result.errors.some(e => e.includes('cases'))).toBe(true);
+      assert.strictEqual(result.valid, false);
+      assert.strictEqual(result.errors.some(e => e.includes('cases')), true);
     });
 
     it('should reject switch expression with empty cases array', () => {
@@ -238,8 +241,8 @@ describe('Switch Expression Resolution', () => {
 
       const result = validateSwitchExpression(switchExpr);
 
-      expect(result.valid).toBe(false);
-      expect(result.errors.some(e => e.includes('at least one case'))).toBe(true);
+      assert.strictEqual(result.valid, false);
+      assert.strictEqual(result.errors.some(e => e.includes('at least one case')), true);
     });
 
     it('should reject case without pattern', () => {
@@ -254,8 +257,8 @@ describe('Switch Expression Resolution', () => {
 
       const result = validateSwitchExpression(switchExpr);
 
-      expect(result.valid).toBe(false);
-      expect(result.errors.some(e => e.includes('pattern'))).toBe(true);
+      assert.strictEqual(result.valid, false);
+      assert.strictEqual(result.errors.some(e => e.includes('pattern')), true);
     });
 
     it('should reject case without value', () => {
@@ -270,8 +273,8 @@ describe('Switch Expression Resolution', () => {
 
       const result = validateSwitchExpression(switchExpr);
 
-      expect(result.valid).toBe(false);
-      expect(result.errors.some(e => e.includes('value'))).toBe(true);
+      assert.strictEqual(result.valid, false);
+      assert.strictEqual(result.errors.some(e => e.includes('value')), true);
     });
 
     it('should reject non-string value', () => {
@@ -286,8 +289,8 @@ describe('Switch Expression Resolution', () => {
 
       const result = validateSwitchExpression(switchExpr);
 
-      expect(result.valid).toBe(false);
-      expect(result.errors.some(e => e.includes('value must be a string'))).toBe(true);
+      assert.strictEqual(result.valid, false);
+      assert.strictEqual(result.errors.some(e => e.includes('value must be a string')), true);
     });
 
     it('should reject non-string default', () => {
@@ -303,8 +306,8 @@ describe('Switch Expression Resolution', () => {
 
       const result = validateSwitchExpression(switchExpr);
 
-      expect(result.valid).toBe(false);
-      expect(result.errors.some(e => e.includes('default must be a string'))).toBe(true);
+      assert.strictEqual(result.valid, false);
+      assert.strictEqual(result.errors.some(e => e.includes('default must be a string')), true);
     });
 
     it('should accept valid default value', () => {
@@ -320,7 +323,7 @@ describe('Switch Expression Resolution', () => {
 
       const result = validateSwitchExpression(switchExpr);
 
-      expect(result.valid).toBe(true);
+      assert.strictEqual(result.valid, true);
     });
   });
 });

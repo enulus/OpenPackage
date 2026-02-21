@@ -5,7 +5,8 @@
  * verifying that all modules work together correctly.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, beforeEach, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { mkdtempSync, rmSync } from 'fs';
@@ -95,9 +96,9 @@ import { writeTextFile, ensureDir } from '../../../src/utils/fs.js';
     });
 
     // Verify candidates built correctly
-    expect(candidatesResult.localSourceRefs.length).toBeGreaterThan(0);
-    expect(candidatesResult.workspaceCandidates.length).toBeGreaterThan(0);
-    expect(candidatesResult.errors).toHaveLength(0);
+    assert.ok(candidatesResult.localSourceRefs.length > 0);
+    assert.ok(candidatesResult.workspaceCandidates.length > 0);
+    assert.strictEqual(candidatesResult.errors.length, 0);
 
     // Group candidates
     const allGroups = buildCandidateGroups(
@@ -106,30 +107,30 @@ import { writeTextFile, ensureDir } from '../../../src/utils/fs.js';
     );
 
     // Verify groups
-    expect(allGroups.length).toBeGreaterThan(0);
+    assert.ok(allGroups.length > 0);
 
     // Check specific groups
     const generalGroup = allGroups.find(g => g.registryPath === 'rules/general.md');
-    expect(generalGroup).toBeDefined();
-    expect(generalGroup!.localRef).toBeDefined();
-    expect(generalGroup!.workspace).toHaveLength(2); // cursor + claude
+    assert.notStrictEqual(generalGroup, undefined);
+    assert.notStrictEqual(generalGroup!.localRef, undefined);
+    assert.strictEqual(generalGroup!.workspace.length, 2); // cursor + claude
 
     const typescriptGroup = allGroups.find(g => g.registryPath === 'rules/typescript.md');
-    expect(typescriptGroup).toBeDefined();
-    expect(typescriptGroup!.localRef).toBeUndefined(); // New file
-    expect(typescriptGroup!.workspace).toHaveLength(1);
+    assert.notStrictEqual(typescriptGroup, undefined);
+    assert.strictEqual(typescriptGroup!.localRef, undefined); // New file
+    assert.strictEqual(typescriptGroup!.workspace.length, 1);
 
     const agentsGroup = allGroups.find(g => g.registryPath === 'AGENTS.md');
-    expect(agentsGroup).toBeDefined();
-    expect(agentsGroup!.localRef).toBeDefined();
-    expect(agentsGroup!.workspace).toHaveLength(1);
+    assert.notStrictEqual(agentsGroup, undefined);
+    assert.notStrictEqual(agentsGroup!.localRef, undefined);
+    assert.strictEqual(agentsGroup!.workspace.length, 1);
 
     // Filter to only groups with workspace candidates
     const activeGroups = filterGroupsWithWorkspace(allGroups);
     
     // All our mapped files have workspace candidates
-    expect(activeGroups).toHaveLength(3);
-    expect(activeGroups.every(g => g.workspace.length > 0)).toBe(true);
+    assert.strictEqual(activeGroups.length, 3);
+    assert.strictEqual(activeGroups.every(g => g.workspace.length > 0), true);
   });
 
   it('should handle platform inference correctly', async () => {
@@ -154,12 +155,12 @@ import { writeTextFile, ensureDir } from '../../../src/utils/fs.js';
     const activeGroups = filterGroupsWithWorkspace(groups);
 
     // Verify
-    expect(activeGroups).toHaveLength(1);
-    expect(activeGroups[0].workspace).toHaveLength(1);
+    assert.strictEqual(activeGroups.length, 1);
+    assert.strictEqual(activeGroups[0].workspace.length, 1);
     
     // Platform should be inferred (though test environment may not have full inference)
     const candidate = activeGroups[0].workspace[0];
-    expect(candidate.displayPath).toContain('.cursor');
+    assert.ok(candidate.displayPath.includes('.cursor'));
   });
 
   it('should handle markdown frontmatter in full pipeline', async () => {
@@ -193,15 +194,15 @@ This is a test rule.`;
     const activeGroups = filterGroupsWithWorkspace(groups);
 
     // Verify
-    expect(activeGroups).toHaveLength(1);
+    assert.strictEqual(activeGroups.length, 1);
     const candidate = activeGroups[0].workspace[0];
     
-    expect(candidate.isMarkdown).toBe(true);
-    expect(candidate.frontmatter).toEqual({
+    assert.strictEqual(candidate.isMarkdown, true);
+    assert.deepStrictEqual(candidate.frontmatter, {
       title: 'Test Rule',
       tags: ['test', 'integration']
     });
-    expect(candidate.markdownBody).toContain('# Test Rule');
+    assert.ok(candidate.markdownBody!.includes('# Test Rule'));
   });
 
   it('should handle directory mappings in full pipeline', async () => {
@@ -234,10 +235,10 @@ This is a test rule.`;
     const activeGroups = filterGroupsWithWorkspace(groups);
 
     // Verify
-    expect(activeGroups).toHaveLength(3);
+    assert.strictEqual(activeGroups.length, 3);
     
     const registryPaths = activeGroups.map(g => g.registryPath).sort();
-    expect(registryPaths).toEqual([
+    assert.deepStrictEqual(registryPaths, [
       'commands/create.md',
       'commands/edit.md',
       'commands/search.md'
@@ -268,12 +269,12 @@ This is a test rule.`;
     const activeGroups = filterGroupsWithWorkspace(groups);
 
     // Verify - both candidates should have same hash
-    expect(activeGroups).toHaveLength(1);
-    expect(activeGroups[0].workspace).toHaveLength(2);
+    assert.strictEqual(activeGroups.length, 1);
+    assert.strictEqual(activeGroups[0].workspace.length, 2);
     
     const hash1 = activeGroups[0].workspace[0].contentHash;
     const hash2 = activeGroups[0].workspace[1].contentHash;
-    expect(hash1).toBe(hash2);
+    assert.strictEqual(hash1, hash2);
   });
 
   describe('Phase 2 Integration: Platform Awareness & Analysis', () => {
@@ -333,15 +334,15 @@ This is a test rule.`;
       );
       const activeGroups = filterGroupsWithWorkspace(allGroups);
 
-      expect(activeGroups).toHaveLength(1);
-      expect(activeGroups[0].workspace).toHaveLength(2);
+      assert.strictEqual(activeGroups.length, 1);
+      assert.strictEqual(activeGroups[0].workspace.length, 2);
 
       // Phase 2: Prune platform candidates
       const { pruneExistingPlatformCandidates } = await import('../../../src/core/save/save-platform-handler.js');
       await pruneExistingPlatformCandidates(join(testDir, 'package-source'), activeGroups);
 
       // Both candidates should remain (no platform files exist in source)
-      expect(activeGroups[0].workspace).toHaveLength(2);
+      assert.strictEqual(activeGroups[0].workspace.length, 2);
 
       // Materialize local candidates for analysis
       for (const group of activeGroups) {
@@ -355,10 +356,10 @@ This is a test rule.`;
       const analysis = await analyzeGroup(activeGroups[0], false, join(testDir, 'workspace'));
 
       // Should be needs-resolution (multiple differing candidates)
-      expect(analysis.type).toBe('needs-resolution');
-      expect(analysis.recommendedStrategy).toBe('interactive');
-      expect(analysis.hasPlatformCandidates).toBe(true);
-      expect(analysis.uniqueWorkspaceCandidates).toHaveLength(2);
+      assert.strictEqual(analysis.type, 'needs-resolution');
+      assert.strictEqual(analysis.recommendedStrategy, 'interactive');
+      assert.strictEqual(analysis.hasPlatformCandidates, true);
+      assert.strictEqual(analysis.uniqueWorkspaceCandidates!.length, 2);
     });
 
     it('should handle platform pruning correctly', async () => {
@@ -412,13 +413,13 @@ This is a test rule.`;
       );
       const activeGroups = filterGroupsWithWorkspace(allGroups);
 
-      expect(activeGroups[0].workspace).toHaveLength(1);
+      assert.strictEqual(activeGroups[0].workspace.length, 1);
 
       // Prune should remove cursor candidate (platform file exists)
       const { pruneExistingPlatformCandidates } = await import('../../../src/core/save/save-platform-handler.js');
       await pruneExistingPlatformCandidates(join(testDir, 'package-source'), activeGroups);
 
-      expect(activeGroups[0].workspace).toHaveLength(0);
+      assert.strictEqual(activeGroups[0].workspace.length, 0);
     });
 
     it('should auto-resolve when candidates are identical', async () => {
@@ -473,9 +474,9 @@ This is a test rule.`;
       const analysis = await analyzeGroup(activeGroups[0], false, join(testDir, 'workspace'));
 
       // Should auto-resolve (all candidates identical after dedup)
-      expect(analysis.type).toBe('auto-write');
-      expect(analysis.recommendedStrategy).toBe('write-single');
-      expect(analysis.uniqueWorkspaceCandidates).toHaveLength(1);
+      assert.strictEqual(analysis.type, 'auto-write');
+      assert.strictEqual(analysis.recommendedStrategy, 'write-single');
+      assert.strictEqual(analysis.uniqueWorkspaceCandidates!.length, 1);
     });
   });
 });

@@ -5,7 +5,8 @@
  * is extracted and written to the source, not the entire merged file.
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { mkdtemp, rm } from 'fs/promises';
@@ -84,16 +85,16 @@ describe('save-write-merged-extraction', () => {
     );
     
     // Verify write succeeded
-    expect(results).toHaveLength(1);
-    expect(results[0].success).toBe(true);
-    expect(results[0].operation.operation).toBe('create');
+    assert.strictEqual(results.length, 1);
+    assert.strictEqual(results[0].success, true);
+    assert.strictEqual(results[0].operation.operation, 'create');
     
     // Read written file
     const writtenContent = await readTextFile(join(packageRoot, 'mcp.json'));
     const writtenData = JSON.parse(writtenContent);
     
     // Should only contain the github key, not existing
-    expect(writtenData).toEqual({
+    assert.deepStrictEqual(writtenData, {
       mcp: {
         github: {
           type: 'http',
@@ -106,7 +107,7 @@ describe('save-write-merged-extraction', () => {
     });
     
     // Should NOT contain the existing key
-    expect(writtenData.mcp.existing).toBeUndefined();
+    assert.strictEqual(writtenData.mcp.existing, undefined);
   });
   
   it('should extract multiple keys correctly', async () => {
@@ -141,9 +142,9 @@ describe('save-write-merged-extraction', () => {
     const writtenData = JSON.parse(writtenContent);
     
     // Should contain both github and gitlab, but not existing
-    expect(writtenData.mcp.github).toEqual({ url: 'https://github.com' });
-    expect(writtenData.mcp.gitlab).toEqual({ url: 'https://gitlab.com' });
-    expect(writtenData.mcp.existing).toBeUndefined();
+    assert.deepStrictEqual(writtenData.mcp.github, { url: 'https://github.com' });
+    assert.deepStrictEqual(writtenData.mcp.gitlab, { url: 'https://gitlab.com' });
+    assert.strictEqual(writtenData.mcp.existing, undefined);
   });
   
   it('should use full content as fallback if extraction fails', async () => {
@@ -170,7 +171,7 @@ describe('save-write-merged-extraction', () => {
     
     // Should write full content as fallback
     const writtenContent = await readTextFile(join(packageRoot, 'mcp.json'));
-    expect(writtenContent).toBe(invalidContent);
+    assert.strictEqual(writtenContent, invalidContent);
   });
   
   it('should write non-merged files normally', async () => {
@@ -196,7 +197,7 @@ describe('save-write-merged-extraction', () => {
     
     // Should write full content
     const writtenContent = await readTextFile(join(packageRoot, 'README.md'));
-    expect(writtenContent).toBe(normalContent);
+    assert.strictEqual(writtenContent, normalContent);
   });
   
   it('should extract from platform-specific merged files', async () => {
@@ -229,15 +230,15 @@ describe('save-write-merged-extraction', () => {
     const results = await writeResolution(packageRoot, 'config/servers.json', resolution);
     
     // Debug: check what was written
-    expect(results).toHaveLength(1);
-    expect(results[0].success).toBe(true);
+    assert.strictEqual(results.length, 1);
+    assert.strictEqual(results[0].success, true);
     
     // Platform-specific file should be created with extracted content
     const writtenContent = await readTextFile(join(packageRoot, 'config/servers.cursor.json'));
     const writtenData = JSON.parse(writtenContent);
     
-    expect(writtenData.servers.package).toEqual({ url: 'https://package.com' });
-    expect(writtenData.servers.base).toBeUndefined();
+    assert.deepStrictEqual(writtenData.servers.package, { url: 'https://package.com' });
+    assert.strictEqual(writtenData.servers.base, undefined);
   });
   
   it('should skip write when extracted content matches existing source', async () => {
@@ -288,8 +289,8 @@ describe('save-write-merged-extraction', () => {
     );
     
     // Should skip write since extracted content matches source
-    expect(results[0].success).toBe(true);
-    expect(results[0].operation.operation).toBe('skip');
+    assert.strictEqual(results[0].success, true);
+    assert.strictEqual(results[0].operation.operation, 'skip');
   });
   
   it('should handle composite merge strategy gracefully', async () => {
@@ -315,7 +316,7 @@ describe('save-write-merged-extraction', () => {
     
     // Composite extraction not implemented - should write full content as fallback
     const writtenContent = await readTextFile(join(packageRoot, 'README.md'));
-    expect(writtenContent).toBe(compositeContent);
+    assert.strictEqual(writtenContent, compositeContent);
   });
   
   it('should apply import transformation for OpenCode platform (mcp → mcpServers)', async () => {
@@ -363,9 +364,9 @@ describe('save-write-merged-extraction', () => {
     const writtenData = JSON.parse(writtenContent);
     
     // Key assertion: should be "mcpServers" (universal format), not "mcp" (OpenCode format)
-    expect(writtenData.mcpServers).toBeDefined();
-    expect(writtenData.mcp).toBeUndefined();
-    expect(writtenData.mcpServers.github).toEqual({
+    assert.notStrictEqual(writtenData.mcpServers, undefined);
+    assert.strictEqual(writtenData.mcp, undefined);
+    assert.deepStrictEqual(writtenData.mcpServers.github, {
       type: 'http',
       url: 'https://api.githubcopilot.com/mcp/',
       headers: {

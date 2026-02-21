@@ -10,12 +10,14 @@
  * - Both file and directory mappings
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, beforeEach, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { mkdtempSync, rmSync } from 'fs';
 import {
   buildCandidates,
+  materializeLocalCandidate,
   type CandidateBuilderOptions
 } from '../../../src/core/save/save-candidate-builder.js';
 import { writeTextFile, ensureDir } from '../../../src/utils/fs.js';
@@ -62,16 +64,21 @@ describe('save-candidate-builder', () => {
       // Execute
       const result = await buildCandidates(options);
 
-      // Verify
-      expect(result.localCandidates).toHaveLength(1);
-      const candidate = result.localCandidates[0];
-      expect(candidate.source).toBe('local');
-      expect(candidate.registryPath).toBe('test.txt');
-      expect(candidate.content).toBe(content);
-      expect(candidate.contentHash).toBeDefined();
-      expect(candidate.mtime).toBeGreaterThan(0);
-      expect(candidate.displayPath).toBeDefined();
-      expect(candidate.platform).toBeUndefined(); // Local files don't have platform
+      // Verify - buildCandidates now returns localSourceRefs instead of localCandidates
+      assert.strictEqual(result.localSourceRefs.length, 1);
+      const ref = result.localSourceRefs[0];
+      assert.strictEqual(ref.registryPath, 'test.txt');
+
+      // Materialize the ref into a full candidate
+      const candidate = await materializeLocalCandidate(ref, packageRoot);
+      assert.ok(candidate !== null);
+      assert.strictEqual(candidate!.source, 'local');
+      assert.strictEqual(candidate!.registryPath, 'test.txt');
+      assert.strictEqual(candidate!.content, content);
+      assert.notStrictEqual(candidate!.contentHash, undefined);
+      assert.ok(candidate!.mtime > 0);
+      assert.notStrictEqual(candidate!.displayPath, undefined);
+      assert.strictEqual(candidate!.platform, undefined); // Local files don't have platform
     });
 
     it('should parse markdown frontmatter', async () => {
@@ -99,16 +106,18 @@ This is the body.`;
       // Execute
       const result = await buildCandidates(options);
 
-      // Verify
-      expect(result.localCandidates).toHaveLength(1);
-      const candidate = result.localCandidates[0];
-      expect(candidate.isMarkdown).toBe(true);
-      expect(candidate.frontmatter).toEqual({
+      // Verify - use localSourceRefs + materialize
+      assert.strictEqual(result.localSourceRefs.length, 1);
+      const ref = result.localSourceRefs[0];
+      const candidate = await materializeLocalCandidate(ref, packageRoot);
+      assert.ok(candidate !== null);
+      assert.strictEqual(candidate!.isMarkdown, true);
+      assert.deepStrictEqual(candidate!.frontmatter, {
         title: 'Test Document',
         tags: ['test', 'markdown']
       });
-      expect(candidate.rawFrontmatter).toBeDefined();
-      expect(candidate.markdownBody).toContain('# Content');
+      assert.notStrictEqual(candidate!.rawFrontmatter, undefined);
+      assert.ok(candidate!.markdownBody!.includes('# Content'));
     });
 
     it('should handle markdown without frontmatter', async () => {
@@ -128,12 +137,14 @@ This is the body.`;
       // Execute
       const result = await buildCandidates(options);
 
-      // Verify
-      expect(result.localCandidates).toHaveLength(1);
-      const candidate = result.localCandidates[0];
-      expect(candidate.isMarkdown).toBe(true);
-      expect(candidate.frontmatter).toBeUndefined();
-      expect(candidate.markdownBody).toBeUndefined();
+      // Verify - use localSourceRefs + materialize
+      assert.strictEqual(result.localSourceRefs.length, 1);
+      const ref = result.localSourceRefs[0];
+      const candidate = await materializeLocalCandidate(ref, packageRoot);
+      assert.ok(candidate !== null);
+      assert.strictEqual(candidate!.isMarkdown, true);
+      assert.strictEqual(candidate!.frontmatter, undefined);
+      assert.strictEqual(candidate!.markdownBody, undefined);
     });
   });
 
@@ -157,10 +168,10 @@ This is the body.`;
       const result = await buildCandidates(options);
 
       // Verify
-      expect(result.workspaceCandidates).toHaveLength(1);
+      assert.strictEqual(result.workspaceCandidates.length, 1);
       const candidate = result.workspaceCandidates[0];
-      expect(candidate.source).toBe('workspace');
-      expect(candidate.platform).toBe('cursor');
+      assert.strictEqual(candidate.source, 'workspace');
+      assert.strictEqual(candidate.platform, 'cursor');
     });
 
     it('should not infer platform for local files', async () => {
@@ -179,9 +190,11 @@ This is the body.`;
       // Execute
       const result = await buildCandidates(options);
 
-      // Verify
-      expect(result.localCandidates).toHaveLength(1);
-      expect(result.localCandidates[0].platform).toBeUndefined();
+      // Verify - use localSourceRefs + materialize
+      assert.strictEqual(result.localSourceRefs.length, 1);
+      const candidate = await materializeLocalCandidate(result.localSourceRefs[0], packageRoot);
+      assert.ok(candidate !== null);
+      assert.strictEqual(candidate!.platform, undefined);
     });
   });
 
@@ -205,9 +218,9 @@ This is the body.`;
       const result = await buildCandidates(options);
 
       // Verify
-      expect(result.workspaceCandidates).toHaveLength(2);
+      assert.strictEqual(result.workspaceCandidates.length, 2);
       const registryPaths = result.workspaceCandidates.map(c => c.registryPath).sort();
-      expect(registryPaths).toEqual(['tools/edit.md', 'tools/search.md']);
+      assert.deepStrictEqual(registryPaths, ['tools/edit.md', 'tools/search.md']);
     });
 
     it('should handle nested directories in directory mapping', async () => {
@@ -230,10 +243,10 @@ This is the body.`;
       const result = await buildCandidates(options);
 
       // Verify
-      expect(result.workspaceCandidates).toHaveLength(2);
+      assert.strictEqual(result.workspaceCandidates.length, 2);
       const registryPaths = result.workspaceCandidates.map(c => c.registryPath).sort();
-      expect(registryPaths).toContain('rules/general.md');
-      expect(registryPaths).toContain('rules/typescript/strict.md');
+      assert.ok(registryPaths.includes('rules/general.md'));
+      assert.ok(registryPaths.includes('rules/typescript/strict.md'));
     });
 
     it('should handle missing directory gracefully', async () => {
@@ -250,8 +263,8 @@ This is the body.`;
       const result = await buildCandidates(options);
 
       // Verify - should not error, just no candidates
-      expect(result.workspaceCandidates).toHaveLength(0);
-      expect(result.errors).toHaveLength(0);
+      assert.strictEqual(result.workspaceCandidates.length, 0);
+      assert.strictEqual(result.errors.length, 0);
     });
   });
 
@@ -274,8 +287,8 @@ This is the body.`;
       const result = await buildCandidates(options);
 
       // Verify
-      expect(result.workspaceCandidates).toHaveLength(1);
-      expect(result.workspaceCandidates[0].registryPath).toBe('AGENTS.md');
+      assert.strictEqual(result.workspaceCandidates.length, 1);
+      assert.strictEqual(result.workspaceCandidates[0].registryPath, 'AGENTS.md');
     });
 
     it('should skip missing workspace files', async () => {
@@ -292,8 +305,8 @@ This is the body.`;
       const result = await buildCandidates(options);
 
       // Verify - should not error, just no candidates
-      expect(result.workspaceCandidates).toHaveLength(0);
-      expect(result.errors).toHaveLength(0);
+      assert.strictEqual(result.workspaceCandidates.length, 0);
+      assert.strictEqual(result.errors.length, 0);
     });
   });
 
@@ -320,17 +333,17 @@ This is the body.`;
       const result = await buildCandidates(options);
 
       // Verify
-      expect(result.workspaceCandidates).toHaveLength(2);
-      expect(result.workspaceCandidates[0].registryPath).toBe('test.md');
-      expect(result.workspaceCandidates[1].registryPath).toBe('test.md');
+      assert.strictEqual(result.workspaceCandidates.length, 2);
+      assert.strictEqual(result.workspaceCandidates[0].registryPath, 'test.md');
+      assert.strictEqual(result.workspaceCandidates[1].registryPath, 'test.md');
       
       // Check platforms are inferred
       const platforms = result.workspaceCandidates.map(c => c.platform).sort();
       // Note: platform inference might not work perfectly in tests without full workspace context
       // At minimum, we should have two candidates
-      expect(platforms.length).toBe(2);
+      assert.strictEqual(platforms.length, 2);
       // At least one should have a platform inferred
-      expect(platforms.some(p => p !== undefined)).toBe(true);
+      assert.strictEqual(platforms.some(p => p !== undefined), true);
     });
   });
 
@@ -355,11 +368,11 @@ This is the body.`;
       // Execute
       const result = await buildCandidates(options);
 
-      // Verify
-      expect(result.localCandidates).toHaveLength(1);
-      expect(result.workspaceCandidates).toHaveLength(1);
-      expect(result.localCandidates[0].registryPath).toBe('README.md');
-      expect(result.workspaceCandidates[0].registryPath).toBe('README.md');
+      // Verify - localSourceRefs instead of localCandidates
+      assert.strictEqual(result.localSourceRefs.length, 1);
+      assert.strictEqual(result.localSourceRefs[0].registryPath, 'README.md');
+      assert.strictEqual(result.workspaceCandidates.length, 1);
+      assert.strictEqual(result.workspaceCandidates[0].registryPath, 'README.md');
     });
 
     it('should handle new files (no local candidate)', async () => {
@@ -379,9 +392,9 @@ This is the body.`;
       // Execute
       const result = await buildCandidates(options);
 
-      // Verify
-      expect(result.localCandidates).toHaveLength(0);
-      expect(result.workspaceCandidates).toHaveLength(1);
+      // Verify - localSourceRefs will be 0 since no files in packageRoot
+      assert.strictEqual(result.localSourceRefs.length, 0);
+      assert.strictEqual(result.workspaceCandidates.length, 1);
     });
   });
 
@@ -403,7 +416,7 @@ This is the body.`;
       const result = await buildCandidates(options);
 
       // Verify - errors should be empty for missing directory
-      expect(result.errors).toHaveLength(0);
+      assert.strictEqual(result.errors.length, 0);
     });
   });
 
@@ -430,10 +443,10 @@ This is the body.`;
       const result = await buildCandidates(options);
 
       // Verify
-      expect(result.workspaceCandidates).toHaveLength(2);
+      assert.strictEqual(result.workspaceCandidates.length, 2);
       const hash1 = result.workspaceCandidates[0].contentHash;
       const hash2 = result.workspaceCandidates[1].contentHash;
-      expect(hash1).not.toBe(hash2);
+      assert.notStrictEqual(hash1, hash2);
     });
 
     it('should calculate same hash for identical content', async () => {
@@ -460,10 +473,10 @@ This is the body.`;
       const result = await buildCandidates(options);
 
       // Verify
-      expect(result.workspaceCandidates).toHaveLength(2);
+      assert.strictEqual(result.workspaceCandidates.length, 2);
       const hash1 = result.workspaceCandidates[0].contentHash;
       const hash2 = result.workspaceCandidates[1].contentHash;
-      expect(hash1).toBe(hash2);
+      assert.strictEqual(hash1, hash2);
     });
   });
 });

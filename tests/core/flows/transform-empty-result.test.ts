@@ -9,8 +9,8 @@ import { describe, it } from 'node:test';
 import {
   applyMapPipeline,
   createMapContext,
-} from '../../src/core/flows/map-pipeline/index.js';
-import type { MapPipeline } from '../../src/core/flows/map-pipeline/types.js';
+} from '../../../src/core/flows/map-pipeline/index.js';
+import type { MapPipeline } from '../../../src/core/flows/map-pipeline/types.js';
 
 function createTestContext() {
   return createMapContext({

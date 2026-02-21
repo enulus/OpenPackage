@@ -5,7 +5,8 @@
  * from their frontmatter, and that the fallback chain works correctly.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import { describe, it, beforeEach, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
 import { mkdtemp, rm, mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -49,13 +50,11 @@ This is a test agent.
         { agents: ['test-agent'] }
       );
 
-      expect(result.errors).toHaveLength(0);
-      expect(result.resources).toHaveLength(1);
-      expect(result.resources[0]).toMatchObject({
-        name: 'test-agent',
-        resourceType: 'agent',
-        resourceVersion: '1.2.3'
-      });
+      assert.strictEqual(result.errors.length, 0);
+      assert.strictEqual(result.resources.length, 1);
+      assert.strictEqual(result.resources[0].name, 'test-agent');
+      assert.strictEqual(result.resources[0].resourceType, 'agent');
+      assert.strictEqual(result.resources[0].resourceVersion, '1.2.3');
     });
 
     it('should return undefined version when agent has no version in frontmatter', async () => {
@@ -79,13 +78,11 @@ No version specified.
         { agents: ['no-version-agent'] }
       );
 
-      expect(result.errors).toHaveLength(0);
-      expect(result.resources).toHaveLength(1);
-      expect(result.resources[0]).toMatchObject({
-        name: 'no-version-agent',
-        resourceType: 'agent',
-        resourceVersion: undefined
-      });
+      assert.strictEqual(result.errors.length, 0);
+      assert.strictEqual(result.resources.length, 1);
+      assert.strictEqual(result.resources[0].name, 'no-version-agent');
+      assert.strictEqual(result.resources[0].resourceType, 'agent');
+      assert.strictEqual(result.resources[0].resourceVersion, undefined);
     });
 
     it('should extract version from filename-matched agent', async () => {
@@ -109,14 +106,12 @@ Matched by filename.
         { agents: ['filename-agent'] }
       );
 
-      expect(result.errors).toHaveLength(0);
-      expect(result.resources).toHaveLength(1);
-      expect(result.resources[0]).toMatchObject({
-        name: 'filename-agent',
-        resourceType: 'agent',
-        matchedBy: 'filename',
-        resourceVersion: '2.0.0'
-      });
+      assert.strictEqual(result.errors.length, 0);
+      assert.strictEqual(result.resources.length, 1);
+      assert.strictEqual(result.resources[0].name, 'filename-agent');
+      assert.strictEqual(result.resources[0].resourceType, 'agent');
+      assert.strictEqual(result.resources[0].matchedBy, 'filename');
+      assert.strictEqual(result.resources[0].resourceVersion, '2.0.0');
     });
 
     it('should trim whitespace from version', async () => {
@@ -140,9 +135,9 @@ Version with whitespace.
         { agents: ['whitespace-agent'] }
       );
 
-      expect(result.errors).toHaveLength(0);
-      expect(result.resources).toHaveLength(1);
-      expect(result.resources[0].resourceVersion).toBe('3.0.0');
+      assert.strictEqual(result.errors.length, 0);
+      assert.strictEqual(result.resources.length, 1);
+      assert.strictEqual(result.resources[0].resourceVersion, '3.0.0');
     });
   });
 
@@ -169,13 +164,11 @@ This is a test skill.
         { skills: ['test-skill'] }
       );
 
-      expect(result.errors).toHaveLength(0);
-      expect(result.resources).toHaveLength(1);
-      expect(result.resources[0]).toMatchObject({
-        name: 'test-skill',
-        resourceType: 'skill',
-        resourceVersion: '4.5.6'
-      });
+      assert.strictEqual(result.errors.length, 0);
+      assert.strictEqual(result.resources.length, 1);
+      assert.strictEqual(result.resources[0].name, 'test-skill');
+      assert.strictEqual(result.resources[0].resourceType, 'skill');
+      assert.strictEqual(result.resources[0].resourceVersion, '4.5.6');
     });
 
     it('should return undefined version when skill has no version in frontmatter', async () => {
@@ -199,13 +192,11 @@ No version specified.
         { skills: ['no-version-skill'] }
       );
 
-      expect(result.errors).toHaveLength(0);
-      expect(result.resources).toHaveLength(1);
-      expect(result.resources[0]).toMatchObject({
-        name: 'no-version-skill',
-        resourceType: 'skill',
-        resourceVersion: undefined
-      });
+      assert.strictEqual(result.errors.length, 0);
+      assert.strictEqual(result.resources.length, 1);
+      assert.strictEqual(result.resources[0].name, 'no-version-skill');
+      assert.strictEqual(result.resources[0].resourceType, 'skill');
+      assert.strictEqual(result.resources[0].resourceVersion, undefined);
     });
 
     it('should extract version from directory-matched skill', async () => {
@@ -229,14 +220,12 @@ Matched by directory name.
         { skills: ['dirname-skill'] }
       );
 
-      expect(result.errors).toHaveLength(0);
-      expect(result.resources).toHaveLength(1);
-      expect(result.resources[0]).toMatchObject({
-        name: 'dirname-skill',
-        resourceType: 'skill',
-        matchedBy: 'dirname',
-        resourceVersion: '7.8.9'
-      });
+      assert.strictEqual(result.errors.length, 0);
+      assert.strictEqual(result.resources.length, 1);
+      assert.strictEqual(result.resources[0].name, 'dirname-skill');
+      assert.strictEqual(result.resources[0].resourceType, 'skill');
+      assert.strictEqual(result.resources[0].matchedBy, 'dirname');
+      assert.strictEqual(result.resources[0].resourceVersion, '7.8.9');
     });
   });
 
@@ -273,21 +262,19 @@ version: 2.0.0
         }
       );
 
-      expect(result.errors).toHaveLength(0);
-      expect(result.resources).toHaveLength(2);
+      assert.strictEqual(result.errors.length, 0);
+      assert.strictEqual(result.resources.length, 2);
       
       const agent = result.resources.find(r => r.resourceType === 'agent');
       const skill = result.resources.find(r => r.resourceType === 'skill');
 
-      expect(agent).toMatchObject({
-        name: 'mixed-agent',
-        resourceVersion: '1.0.0'
-      });
+      assert.ok(agent);
+      assert.strictEqual(agent.name, 'mixed-agent');
+      assert.strictEqual(agent.resourceVersion, '1.0.0');
 
-      expect(skill).toMatchObject({
-        name: 'mixed-skill',
-        resourceVersion: '2.0.0'
-      });
+      assert.ok(skill);
+      assert.strictEqual(skill.name, 'mixed-skill');
+      assert.strictEqual(skill.resourceVersion, '2.0.0');
     });
   });
 });

@@ -18,7 +18,7 @@ import type { InstallOptions } from '../../src/types/index.js';
 console.log('install-plugins-flag type tests passed');
 
 // Test: normalizePluginsOption handles array input
-import { normalizePluginsOption } from '../../src/commands/install.js';
+import { normalizePluginsOption } from '../../src/core/install/preprocessing/options-normalizer.js';
 
 {
   const result = normalizePluginsOption(['plugin-1', 'plugin-2', 'plugin-3']);

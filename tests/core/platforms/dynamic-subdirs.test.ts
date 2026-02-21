@@ -38,9 +38,10 @@ describe('Dynamic Subdirectories Feature', () => {
   it('getPlatformDirectoryPaths builds dynamic subdirs map with full paths', () => {
     const paths = getPlatformDirectoryPaths(process.cwd());
     assert.ok(Object.keys(paths).length > 0);
-    const examplePlat = Object.keys(paths)[0] as any;
-    const platPaths = paths[examplePlat];
-    assert.ok(platPaths.rootDir.endsWith('.cursor') || platPaths.rootDir.endsWith('.claude') || true); // Some root
+    // Use cursor specifically since it's known to have rules subdirs
+    const platPaths = paths['cursor' as any];
+    assert.ok(platPaths, 'cursor platform should exist');
+    assert.ok(platPaths.rootDir.endsWith('.cursor'));
     assert.ok(platPaths.subdirs && typeof platPaths.subdirs === 'object' && Object.keys(platPaths.subdirs).length > 0);
     assert.ok(platPaths.subdirs.rules, 'Should include "rules" path');
     assert.ok(platPaths.subdirs.rules.startsWith(process.cwd()), 'Full absolute path');

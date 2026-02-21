@@ -4,7 +4,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { isPatternMatch, matchesAnyPattern, extractFirstComponent, isSubdirectoryPattern, extractSubdirectoriesFromPatterns } from '../../../src/core/universal-patterns.js';
+import { isPatternMatch, matchesAnyPattern, extractFirstComponent, isSubdirectoryPattern, extractSubdirectoriesFromPatterns } from '../../src/core/universal-patterns.js';
 
 // Test exact file matching
 assert.equal(isPatternMatch('mcp.jsonc', 'mcp.jsonc'), true, 'exact match: mcp.jsonc');

@@ -2,7 +2,7 @@
  * Recursive Glob Pattern Tests
  * 
  * Tests ** recursive glob pattern support in flow execution.
- * Verifies that **/* patterns correctly handle nested directory structures.
+ * Verifies that ** glob patterns correctly handle nested directory structures.
  */
 
 import { describe, it, before, after } from 'node:test';
@@ -10,8 +10,8 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { DefaultFlowExecutor } from '../../src/core/flows/flow-executor.js';
-import type { Flow, FlowContext } from '../../src/types/flows.js';
+import { DefaultFlowExecutor } from '../../../src/core/flows/flow-executor.js';
+import type { Flow, FlowContext } from '../../../src/types/flows.js';
 
 // ============================================================================
 // Test Setup

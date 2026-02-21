@@ -9,8 +9,8 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import { mkdir, mkdtemp, rm, writeFile as fsWriteFile, readFile } from 'node:fs/promises';
 import path from 'path';
 import os from 'os';
-import { createFlowExecutor } from '../../../../../src/core/flows/flow-executor.js';
-import type { Flow, FlowContext } from '../../../../../src/types/flows.js';
+import { createFlowExecutor } from '../../../../src/core/flows/flow-executor.js';
+import type { Flow, FlowContext } from '../../../../src/types/flows.js';
 
 // Helper functions
 async function writeFile(filePath: string, content: string): Promise<void> {

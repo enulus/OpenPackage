@@ -2,8 +2,9 @@
  * Tests for conditional flows based on $$targetRoot variable
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { tmpdir } from 'os';
+import { describe, it, beforeEach, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
+import { tmpdir, homedir } from 'os';
 import { mkdtemp, rm, mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { DefaultFlowExecutor } from '../../../src/core/flows/flow-executor.js';
@@ -60,8 +61,8 @@ describe('conditional-targetroot', () => {
 
       const result = await executor.executeFlow(flow, context);
       
-      expect(result.success).toBe(true);
-      expect(result.transformed).toBe(false); // No transformation, just copy
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.transformed, false); // No transformation, just copy
     });
 
     it('should skip flow when $$targetRoot condition does not match', async () => {
@@ -91,14 +92,14 @@ describe('conditional-targetroot', () => {
 
       const result = await executor.executeFlow(flow, context);
       
-      expect(result.success).toBe(true);
-      expect(result.warnings).toContain('Flow skipped due to condition');
+      assert.strictEqual(result.success, true);
+      assert.ok(result.warnings.includes('Flow skipped due to condition'));
     });
   });
 
   describe('tilde expansion in conditions', () => {
     it('should match home directory with ~/', async () => {
-      const homeDir = require('os').homedir();
+      const homeDir = homedir();
       
       // Create source file
       const sourceFile = join(packageRoot, 'config.json');
@@ -127,12 +128,12 @@ describe('conditional-targetroot', () => {
       const result = await executor.executeFlow(flow, context);
       
       // Should match because workspaceRoot equals expanded ~/
-      expect(result.success).toBe(true);
-      expect(result.warnings).toBeUndefined();
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.warnings, undefined);
     });
 
     it('should not match workspace directory with ~/', async () => {
-      const homeDir = require('os').homedir();
+      const homeDir = homedir();
       
       // Create source file
       const sourceFile = join(packageRoot, 'config.json');
@@ -161,14 +162,14 @@ describe('conditional-targetroot', () => {
       const result = await executor.executeFlow(flow, context);
       
       // Should skip because workspaceRoot is not home directory
-      expect(result.success).toBe(true);
-      expect(result.warnings).toContain('Flow skipped due to condition');
+      assert.strictEqual(result.success, true);
+      assert.ok(result.warnings.includes('Flow skipped due to condition'));
     });
   });
 
   describe('$ne (not equals) conditions', () => {
     it('should execute flow when $$targetRoot is NOT home directory', async () => {
-      const homeDir = require('os').homedir();
+      const homeDir = homedir();
       
       // Create source file
       const sourceFile = join(packageRoot, 'config.json');
@@ -197,12 +198,12 @@ describe('conditional-targetroot', () => {
       const result = await executor.executeFlow(flow, context);
       
       // Should execute because workspaceRoot is not home directory
-      expect(result.success).toBe(true);
-      expect(result.warnings).toBeUndefined();
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.warnings, undefined);
     });
 
     it('should skip flow when $ne condition matches', async () => {
-      const homeDir = require('os').homedir();
+      const homeDir = homedir();
       
       // Create source file
       const sourceFile = join(packageRoot, 'config.json');
@@ -231,8 +232,8 @@ describe('conditional-targetroot', () => {
       const result = await executor.executeFlow(flow, context);
       
       // Should skip because workspaceRoot IS home directory
-      expect(result.success).toBe(true);
-      expect(result.warnings).toContain('Flow skipped due to condition');
+      assert.strictEqual(result.success, true);
+      assert.ok(result.warnings.includes('Flow skipped due to condition'));
     });
   });
 
@@ -264,14 +265,14 @@ describe('conditional-targetroot', () => {
 
       const result = await executor.executeFlow(flow, context);
       
-      expect(result.success).toBe(true);
-      expect(result.warnings).toBeUndefined();
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.warnings, undefined);
     });
   });
 
   describe('multi-target flows with conditions', () => {
     it('should route to different targets based on $$targetRoot', async () => {
-      const homeDir = require('os').homedir();
+      const homeDir = homedir();
       
       // Create source file
       const sourceFile = join(packageRoot, 'mcp.json');
@@ -302,8 +303,8 @@ describe('conditional-targetroot', () => {
       };
 
       const workspaceResult = await executor.executeFlow(workspaceFlow, workspaceContext);
-      expect(workspaceResult.success).toBe(true);
-      expect(workspaceResult.warnings).toBeUndefined();
+      assert.strictEqual(workspaceResult.success, true);
+      assert.strictEqual(workspaceResult.warnings, undefined);
 
       // Test global installation
       const globalFlow: Flow = {
@@ -326,8 +327,8 @@ describe('conditional-targetroot', () => {
       };
 
       const globalResult = await executor.executeFlow(globalFlow, globalContext);
-      expect(globalResult.success).toBe(true);
-      expect(globalResult.warnings).toBeUndefined();
+      assert.strictEqual(globalResult.success, true);
+      assert.strictEqual(globalResult.warnings, undefined);
     });
   });
 });

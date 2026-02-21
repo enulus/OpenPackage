@@ -4,7 +4,8 @@
  * These tests verify conflict detection, deduplication, and resolution strategy logic.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 import {
   analyzeGroup,
   deduplicateCandidates,
@@ -16,6 +17,9 @@ import {
 import type { SaveCandidate, SaveCandidateGroup } from '../../../src/core/save/save-types.js';
 
 describe('save-conflict-analyzer', () => {
+  // Dummy workspace root for analyzeGroup (required third parameter)
+  const dummyWorkspaceRoot = '/tmp/test-workspace';
+
   /**
    * Helper to create a mock SaveCandidate
    */
@@ -48,16 +52,16 @@ describe('save-conflict-analyzer', () => {
   }
 
   describe('analyzeGroup', () => {
-    it('should return no-action-needed when no workspace candidates', () => {
+    it('should return no-action-needed when no workspace candidates', async () => {
       const group = createGroup('tools/search.md', undefined, []);
-      const analysis = analyzeGroup(group, false);
+      const analysis = await analyzeGroup(group, false, dummyWorkspaceRoot);
 
-      expect(analysis.type).toBe('no-action-needed');
-      expect(analysis.workspaceCandidateCount).toBe(0);
-      expect(analysis.recommendedStrategy).toBe('skip');
+      assert.strictEqual(analysis.type, 'no-action-needed');
+      assert.strictEqual(analysis.workspaceCandidateCount, 0);
+      assert.strictEqual(analysis.recommendedStrategy, 'skip');
     });
 
-    it('should return no-change-needed when workspace matches local', () => {
+    it('should return no-change-needed when workspace matches local', async () => {
       const localCandidate = createCandidate({
         source: 'local',
         contentHash: 'same-hash',
@@ -75,14 +79,14 @@ describe('save-conflict-analyzer', () => {
         [workspaceCandidate]
       );
 
-      const analysis = analyzeGroup(group, false);
+      const analysis = await analyzeGroup(group, false, dummyWorkspaceRoot);
 
-      expect(analysis.type).toBe('no-change-needed');
-      expect(analysis.localMatchesWorkspace).toBe(true);
-      expect(analysis.recommendedStrategy).toBe('skip');
+      assert.strictEqual(analysis.type, 'no-change-needed');
+      assert.strictEqual(analysis.localMatchesWorkspace, true);
+      assert.strictEqual(analysis.recommendedStrategy, 'skip');
     });
 
-    it('should return auto-write for single workspace candidate', () => {
+    it('should return auto-write for single workspace candidate', async () => {
       const localCandidate = createCandidate({
         source: 'local',
         contentHash: 'local-hash',
@@ -100,14 +104,14 @@ describe('save-conflict-analyzer', () => {
         [workspaceCandidate]
       );
 
-      const analysis = analyzeGroup(group, false);
+      const analysis = await analyzeGroup(group, false, dummyWorkspaceRoot);
 
-      expect(analysis.type).toBe('auto-write');
-      expect(analysis.workspaceCandidateCount).toBe(1);
-      expect(analysis.recommendedStrategy).toBe('write-single');
+      assert.strictEqual(analysis.type, 'auto-write');
+      assert.strictEqual(analysis.workspaceCandidateCount, 1);
+      assert.strictEqual(analysis.recommendedStrategy, 'write-single');
     });
 
-    it('should return auto-write for multiple identical workspace candidates', () => {
+    it('should return auto-write for multiple identical workspace candidates', async () => {
       const candidates = [
         createCandidate({
           contentHash: 'same-hash',
@@ -130,15 +134,15 @@ describe('save-conflict-analyzer', () => {
       ];
 
       const group = createGroup('tools/search.md', undefined, candidates);
-      const analysis = analyzeGroup(group, false);
+      const analysis = await analyzeGroup(group, false, dummyWorkspaceRoot);
 
-      expect(analysis.type).toBe('auto-write');
-      expect(analysis.workspaceCandidateCount).toBe(3);
-      expect(analysis.uniqueWorkspaceCandidates).toHaveLength(1);
-      expect(analysis.recommendedStrategy).toBe('write-single');
+      assert.strictEqual(analysis.type, 'auto-write');
+      assert.strictEqual(analysis.workspaceCandidateCount, 3);
+      assert.strictEqual(analysis.uniqueWorkspaceCandidates!.length, 1);
+      assert.strictEqual(analysis.recommendedStrategy, 'write-single');
     });
 
-    it('should return needs-resolution for multiple differing candidates (interactive)', () => {
+    it('should return needs-resolution for multiple differing candidates (interactive)', async () => {
       const candidates = [
         createCandidate({
           contentHash: 'hash-a',
@@ -153,15 +157,15 @@ describe('save-conflict-analyzer', () => {
       ];
 
       const group = createGroup('tools/search.md', undefined, candidates);
-      const analysis = analyzeGroup(group, false); // force = false
+      const analysis = await analyzeGroup(group, false, dummyWorkspaceRoot); // force = false
 
-      expect(analysis.type).toBe('needs-resolution');
-      expect(analysis.workspaceCandidateCount).toBe(2);
-      expect(analysis.uniqueWorkspaceCandidates).toHaveLength(2);
-      expect(analysis.recommendedStrategy).toBe('interactive');
+      assert.strictEqual(analysis.type, 'needs-resolution');
+      assert.strictEqual(analysis.workspaceCandidateCount, 2);
+      assert.strictEqual(analysis.uniqueWorkspaceCandidates!.length, 2);
+      assert.strictEqual(analysis.recommendedStrategy, 'interactive');
     });
 
-    it('should return needs-resolution with force-newest for multiple differing (force)', () => {
+    it('should return needs-resolution with force-newest for multiple differing (force)', async () => {
       const candidates = [
         createCandidate({
           contentHash: 'hash-a',
@@ -176,25 +180,25 @@ describe('save-conflict-analyzer', () => {
       ];
 
       const group = createGroup('tools/search.md', undefined, candidates);
-      const analysis = analyzeGroup(group, true); // force = true
+      const analysis = await analyzeGroup(group, true, dummyWorkspaceRoot); // force = true
 
-      expect(analysis.type).toBe('needs-resolution');
-      expect(analysis.recommendedStrategy).toBe('force-newest');
+      assert.strictEqual(analysis.type, 'needs-resolution');
+      assert.strictEqual(analysis.recommendedStrategy, 'force-newest');
     });
 
-    it('should detect root files', () => {
+    it('should detect root files', async () => {
       const candidate = createCandidate({
         registryPath: 'AGENTS.md',
         isRootFile: true
       });
 
       const group = createGroup('AGENTS.md', undefined, [candidate]);
-      const analysis = analyzeGroup(group, false);
+      const analysis = await analyzeGroup(group, false, dummyWorkspaceRoot);
 
-      expect(analysis.isRootFile).toBe(true);
+      assert.strictEqual(analysis.isRootFile, true);
     });
 
-    it('should detect platform candidates', () => {
+    it('should detect platform candidates', async () => {
       const candidates = [
         createCandidate({
           platform: 'cursor'
@@ -205,20 +209,20 @@ describe('save-conflict-analyzer', () => {
       ];
 
       const group = createGroup('tools/search.md', undefined, candidates);
-      const analysis = analyzeGroup(group, false);
+      const analysis = await analyzeGroup(group, false, dummyWorkspaceRoot);
 
-      expect(analysis.hasPlatformCandidates).toBe(true);
+      assert.strictEqual(analysis.hasPlatformCandidates, true);
     });
 
-    it('should not consider "ai" as platform candidate', () => {
+    it('should not consider "ai" as platform candidate', async () => {
       const candidate = createCandidate({
         platform: 'ai'
       });
 
       const group = createGroup('tools/search.md', undefined, [candidate]);
-      const analysis = analyzeGroup(group, false);
+      const analysis = await analyzeGroup(group, false, dummyWorkspaceRoot);
 
-      expect(analysis.hasPlatformCandidates).toBe(false);
+      assert.strictEqual(analysis.hasPlatformCandidates, false);
     });
   });
 
@@ -241,10 +245,10 @@ describe('save-conflict-analyzer', () => {
 
       const unique = deduplicateCandidates(candidates);
 
-      expect(unique).toHaveLength(2);
-      expect(unique[0].contentHash).toBe('hash-a');
-      expect(unique[0].displayPath).toBe('path1'); // First occurrence
-      expect(unique[1].contentHash).toBe('hash-b');
+      assert.strictEqual(unique.length, 2);
+      assert.strictEqual(unique[0].contentHash, 'hash-a');
+      assert.strictEqual(unique[0].displayPath, 'path1'); // First occurrence
+      assert.strictEqual(unique[1].contentHash, 'hash-b');
     });
 
     it('should preserve order of first occurrence', () => {
@@ -257,15 +261,15 @@ describe('save-conflict-analyzer', () => {
 
       const unique = deduplicateCandidates(candidates);
 
-      expect(unique).toHaveLength(3);
-      expect(unique[0].displayPath).toBe('first');
-      expect(unique[1].displayPath).toBe('second');
-      expect(unique[2].displayPath).toBe('third');
+      assert.strictEqual(unique.length, 3);
+      assert.strictEqual(unique[0].displayPath, 'first');
+      assert.strictEqual(unique[1].displayPath, 'second');
+      assert.strictEqual(unique[2].displayPath, 'third');
     });
 
     it('should handle empty array', () => {
       const unique = deduplicateCandidates([]);
-      expect(unique).toHaveLength(0);
+      assert.strictEqual(unique.length, 0);
     });
 
     it('should handle all unique candidates', () => {
@@ -276,7 +280,7 @@ describe('save-conflict-analyzer', () => {
       ];
 
       const unique = deduplicateCandidates(candidates);
-      expect(unique).toHaveLength(3);
+      assert.strictEqual(unique.length, 3);
     });
 
     it('should handle all identical candidates', () => {
@@ -287,32 +291,32 @@ describe('save-conflict-analyzer', () => {
       ];
 
       const unique = deduplicateCandidates(candidates);
-      expect(unique).toHaveLength(1);
-      expect(unique[0].displayPath).toBe('a'); // First one
+      assert.strictEqual(unique.length, 1);
+      assert.strictEqual(unique[0].displayPath, 'a'); // First one
     });
   });
 
   describe('hasContentDifference', () => {
     it('should return true when no local candidate', () => {
       const workspace = [createCandidate({ contentHash: 'abc' })];
-      expect(hasContentDifference(undefined, workspace)).toBe(true);
+      assert.strictEqual(hasContentDifference(undefined, workspace), true);
     });
 
     it('should return false when no workspace candidates', () => {
       const local = createCandidate({ contentHash: 'abc' });
-      expect(hasContentDifference(local, [])).toBe(false);
+      assert.strictEqual(hasContentDifference(local, []), false);
     });
 
     it('should return true when workspace differs from local', () => {
       const local = createCandidate({ contentHash: 'local-hash' });
       const workspace = [createCandidate({ contentHash: 'workspace-hash' })];
-      expect(hasContentDifference(local, workspace)).toBe(true);
+      assert.strictEqual(hasContentDifference(local, workspace), true);
     });
 
     it('should return false when workspace matches local', () => {
       const local = createCandidate({ contentHash: 'same-hash' });
       const workspace = [createCandidate({ contentHash: 'same-hash' })];
-      expect(hasContentDifference(local, workspace)).toBe(false);
+      assert.strictEqual(hasContentDifference(local, workspace), false);
     });
 
     it('should return true when any workspace candidate differs', () => {
@@ -321,7 +325,7 @@ describe('save-conflict-analyzer', () => {
         createCandidate({ contentHash: 'local-hash' }), // matches
         createCandidate({ contentHash: 'different-hash' }) // differs
       ];
-      expect(hasContentDifference(local, workspace)).toBe(true);
+      assert.strictEqual(hasContentDifference(local, workspace), true);
     });
   });
 
@@ -329,7 +333,7 @@ describe('save-conflict-analyzer', () => {
     it('should return single candidate', () => {
       const candidate = createCandidate({ mtime: 1000 });
       const newest = getNewestCandidate([candidate]);
-      expect(newest).toBe(candidate);
+      assert.strictEqual(newest, candidate);
     });
 
     it('should return candidate with highest mtime', () => {
@@ -340,8 +344,8 @@ describe('save-conflict-analyzer', () => {
       ];
 
       const newest = getNewestCandidate(candidates);
-      expect(newest.displayPath).toBe('newest');
-      expect(newest.mtime).toBe(3000);
+      assert.strictEqual(newest.displayPath, 'newest');
+      assert.strictEqual(newest.mtime, 3000);
     });
 
     it('should use displayPath as tie-breaker when mtime equal', () => {
@@ -352,11 +356,11 @@ describe('save-conflict-analyzer', () => {
       ];
 
       const newest = getNewestCandidate(candidates);
-      expect(newest.displayPath).toBe('a-first'); // Alphabetically first
+      assert.strictEqual(newest.displayPath, 'a-first'); // Alphabetically first
     });
 
     it('should throw error for empty array', () => {
-      expect(() => getNewestCandidate([])).toThrow('Cannot get newest candidate from empty array');
+      assert.throws(() => getNewestCandidate([]), { message: 'Cannot get newest candidate from empty array' });
     });
   });
 
@@ -370,9 +374,9 @@ describe('save-conflict-analyzer', () => {
 
       const sorted = sortCandidatesByMtime(candidates);
 
-      expect(sorted[0].mtime).toBe(3000);
-      expect(sorted[1].mtime).toBe(2000);
-      expect(sorted[2].mtime).toBe(1000);
+      assert.strictEqual(sorted[0].mtime, 3000);
+      assert.strictEqual(sorted[1].mtime, 2000);
+      assert.strictEqual(sorted[2].mtime, 1000);
     });
 
     it('should use displayPath as tie-breaker', () => {
@@ -384,9 +388,9 @@ describe('save-conflict-analyzer', () => {
 
       const sorted = sortCandidatesByMtime(candidates);
 
-      expect(sorted[0].displayPath).toBe('a');
-      expect(sorted[1].displayPath).toBe('m');
-      expect(sorted[2].displayPath).toBe('z');
+      assert.strictEqual(sorted[0].displayPath, 'a');
+      assert.strictEqual(sorted[1].displayPath, 'm');
+      assert.strictEqual(sorted[2].displayPath, 'z');
     });
 
     it('should not mutate original array', () => {
@@ -399,29 +403,29 @@ describe('save-conflict-analyzer', () => {
       sortCandidatesByMtime(candidates);
 
       // Original should be unchanged
-      expect(candidates[0].mtime).toBe(1000);
-      expect(candidates[1].mtime).toBe(2000);
+      assert.strictEqual(candidates[0].mtime, 1000);
+      assert.strictEqual(candidates[1].mtime, 2000);
     });
 
     it('should handle empty array', () => {
       const sorted = sortCandidatesByMtime([]);
-      expect(sorted).toHaveLength(0);
+      assert.strictEqual(sorted.length, 0);
     });
 
     it('should handle single candidate', () => {
       const candidate = createCandidate({ mtime: 1000 });
       const sorted = sortCandidatesByMtime([candidate]);
-      expect(sorted).toHaveLength(1);
-      expect(sorted[0]).toBe(candidate);
+      assert.strictEqual(sorted.length, 1);
+      assert.strictEqual(sorted[0], candidate);
     });
   });
 
   describe('integration: full analysis workflow', () => {
-    it('should handle complex scenario with multiple groups', () => {
+    it('should handle complex scenario with multiple groups', async () => {
       // Scenario 1: No workspace candidates
       const group1 = createGroup('file1.md', undefined, []);
-      const analysis1 = analyzeGroup(group1, false);
-      expect(analysis1.type).toBe('no-action-needed');
+      const analysis1 = await analyzeGroup(group1, false, dummyWorkspaceRoot);
+      assert.strictEqual(analysis1.type, 'no-action-needed');
 
       // Scenario 2: Workspace matches local
       const group2 = createGroup(
@@ -429,8 +433,8 @@ describe('save-conflict-analyzer', () => {
         createCandidate({ contentHash: 'same' }),
         [createCandidate({ contentHash: 'same' })]
       );
-      const analysis2 = analyzeGroup(group2, false);
-      expect(analysis2.type).toBe('no-change-needed');
+      const analysis2 = await analyzeGroup(group2, false, dummyWorkspaceRoot);
+      assert.strictEqual(analysis2.type, 'no-change-needed');
 
       // Scenario 3: Multiple identical workspace
       const group3 = createGroup(
@@ -441,9 +445,9 @@ describe('save-conflict-analyzer', () => {
           createCandidate({ contentHash: 'same', platform: 'claude' })
         ]
       );
-      const analysis3 = analyzeGroup(group3, false);
-      expect(analysis3.type).toBe('auto-write');
-      expect(analysis3.uniqueWorkspaceCandidates).toHaveLength(1);
+      const analysis3 = await analyzeGroup(group3, false, dummyWorkspaceRoot);
+      assert.strictEqual(analysis3.type, 'auto-write');
+      assert.strictEqual(analysis3.uniqueWorkspaceCandidates!.length, 1);
 
       // Scenario 4: Multiple differing workspace
       const group4 = createGroup(
@@ -454,13 +458,13 @@ describe('save-conflict-analyzer', () => {
           createCandidate({ contentHash: 'hash-b', mtime: 2000 })
         ]
       );
-      const analysis4 = analyzeGroup(group4, false);
-      expect(analysis4.type).toBe('needs-resolution');
-      expect(analysis4.recommendedStrategy).toBe('interactive');
+      const analysis4 = await analyzeGroup(group4, false, dummyWorkspaceRoot);
+      assert.strictEqual(analysis4.type, 'needs-resolution');
+      assert.strictEqual(analysis4.recommendedStrategy, 'interactive');
 
       // Same scenario with force mode
-      const analysis4Force = analyzeGroup(group4, true);
-      expect(analysis4Force.recommendedStrategy).toBe('force-newest');
+      const analysis4Force = await analyzeGroup(group4, true, dummyWorkspaceRoot);
+      assert.strictEqual(analysis4Force.recommendedStrategy, 'force-newest');
     });
   });
 });

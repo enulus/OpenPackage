@@ -5,7 +5,8 @@
  * in the $map operation, as used in the claude-plugin import flows.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 import { executePipeline, validatePipeline } from '../../../src/core/flows/map-pipeline/operations/transform.js';
 
 describe('$map operation - replace mode', () => {
@@ -33,7 +34,7 @@ describe('$map operation - replace mode', () => {
 
     const result = executePipeline(document, operation, { variables: {} });
 
-    expect(result.tools).toEqual([
+    assert.deepStrictEqual(result.tools, [
       'read',
       'write',
       'question',
@@ -65,7 +66,7 @@ describe('$map operation - replace mode', () => {
 
     const result = executePipeline(document, operation, { variables: {} });
 
-    expect(result.items).toEqual(['apple', 'plantain', 'cherry']);
+    assert.deepStrictEqual(result.items, ['apple', 'plantain', 'cherry']);
   });
 
   it('should validate replace mapping as valid', () => {
@@ -86,8 +87,8 @@ describe('$map operation - replace mode', () => {
     };
 
     const validation = validatePipeline(operation);
-    expect(validation.valid).toBe(true);
-    expect(validation.errors).toEqual([]);
+    assert.strictEqual(validation.valid, true);
+    assert.deepStrictEqual(validation.errors, []);
   });
 
   it('should still support string transformations (capitalize)', () => {
@@ -109,7 +110,7 @@ describe('$map operation - replace mode', () => {
     };
 
     const result = executePipeline(document, operation, { variables: {} });
-    expect(result.tools).toEqual(['Read', 'Write', 'Bash']);
+    assert.deepStrictEqual(result.tools, ['Read', 'Write', 'Bash']);
   });
 
   it('should still support string transformations (uppercase)', () => {
@@ -131,7 +132,7 @@ describe('$map operation - replace mode', () => {
     };
 
     const result = executePipeline(document, operation, { variables: {} });
-    expect(result.tools).toEqual(['READ', 'WRITE', 'BASH']);
+    assert.deepStrictEqual(result.tools, ['READ', 'WRITE', 'BASH']);
   });
 
   it('should still support string transformations (lowercase)', () => {
@@ -153,7 +154,7 @@ describe('$map operation - replace mode', () => {
     };
 
     const result = executePipeline(document, operation, { variables: {} });
-    expect(result.tools).toEqual(['read', 'write', 'bash']);
+    assert.deepStrictEqual(result.tools, ['read', 'write', 'bash']);
   });
 
   it('should reject invalid $map configurations', () => {
@@ -171,8 +172,8 @@ describe('$map operation - replace mode', () => {
     };
 
     const validation = validatePipeline(operation);
-    expect(validation.valid).toBe(false);
-    expect(validation.errors.length).toBeGreaterThan(0);
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.length > 0);
   });
 
   it('should reject $map with both each and replace', () => {
@@ -191,10 +192,10 @@ describe('$map operation - replace mode', () => {
     };
 
     const validation = validatePipeline(operation);
-    expect(validation.valid).toBe(false);
-    expect(validation.errors).toContain(
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes(
       '$pipeline.operations[0].$map cannot have both \'each\' and \'replace\' properties'
-    );
+    ));
   });
 
   it('should reject $map with neither each nor replace', () => {
@@ -210,10 +211,10 @@ describe('$map operation - replace mode', () => {
     };
 
     const validation = validatePipeline(operation);
-    expect(validation.valid).toBe(false);
-    expect(validation.errors).toContain(
+    assert.strictEqual(validation.valid, false);
+    assert.ok(validation.errors.includes(
       '$pipeline.operations[0].$map must have either \'each\' or \'replace\' property'
-    );
+    ));
   });
 
   it('should work in a complete claude-plugin import flow scenario', () => {
@@ -246,7 +247,7 @@ describe('$map operation - replace mode', () => {
 
     const result = executePipeline(document, operation, { variables: {} });
 
-    expect(result.tools).toEqual([
+    assert.deepStrictEqual(result.tools, [
       'read',
       'write',
       'question',

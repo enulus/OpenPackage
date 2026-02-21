@@ -8,8 +8,8 @@ import { mkdir, mkdtemp, rm, writeFile as fsWriteFile, readFile } from 'node:fs/
 import { existsSync } from 'node:fs';
 import path from 'path';
 import os from 'os';
-import { createFlowExecutor } from '../../../src/core/flows/flow-executor.js';
-import type { Flow, FlowContext } from '../../../src/types/flows.js';
+import { createFlowExecutor } from '../../../../src/core/flows/flow-executor.js';
+import type { Flow, FlowContext } from '../../../../src/types/flows.js';
 
 // Helper functions
 async function writeJSON(filePath: string, data: any): Promise<void> {

@@ -54,7 +54,7 @@ import {
   omitKeysTransform,
   // Validation
   validateTransform,
-} from '../../../src/core/flows/flow-transforms.js';
+} from '../../../../src/core/flows/flow-transforms.js';
 
 describe('Transform Registry', () => {
   it('should register and retrieve transforms', () => {

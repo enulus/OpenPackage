@@ -44,7 +44,7 @@ describe('opkg set command', () => {
 
         // Verify file was updated
         const content = await readFile(manifestPath, 'utf-8');
-        assert.match(content, /ver: 2\.0\.0/);
+        assert.match(content, /version: 2\.0\.0/);
       } finally {
         process.chdir(originalCwd);
       }
@@ -72,7 +72,7 @@ describe('opkg set command', () => {
         assert.strictEqual(result.data?.updatedFields.length, 3);
 
         const content = await readFile(manifestPath, 'utf-8');
-        assert.match(content, /ver: 1\.1\.0/);
+        assert.match(content, /version: 1\.1\.0/);
         assert.match(content, /description: New description/);
         assert.match(content, /author: Test Author/);
       } finally {
@@ -148,7 +148,7 @@ describe('opkg set command', () => {
         assert.strictEqual(result.data?.sourceType, 'workspace');
 
         const content = await readFile(manifestPath, 'utf-8');
-        assert.match(content, /ver: 1\.5\.0/);
+        assert.match(content, /version: 1\.5\.0/);
         assert.match(content, /description: Workspace package/);
       } finally {
         process.chdir(originalCwd);
@@ -240,7 +240,7 @@ describe('opkg set command', () => {
   describe('No-op scenarios', () => {
     it('should detect when no changes are made', async () => {
       const manifestPath = join(testDir, 'openpackage.yml');
-      await writeFile(manifestPath, 'name: test-package\nver: 1.0.0\n');
+      await writeFile(manifestPath, 'name: test-package\nversion: 1.0.0\n');
 
       const originalCwd = process.cwd();
       process.chdir(testDir);

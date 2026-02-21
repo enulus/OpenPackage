@@ -19,8 +19,8 @@ import {
   setNestedValue,
   deleteNestedValue,
   validateKeyMap,
-} from '../../../src/core/flows/flow-key-mapper.js';
-import type { KeyMap, FlowContext } from '../../../src/types/flows.js';
+} from '../../../../src/core/flows/flow-key-mapper.js';
+import type { KeyMap, FlowContext } from '../../../../src/types/flows.js';
 
 // Helper to create a mock FlowContext
 function createMockContext(overrides?: Partial<FlowContext>): FlowContext {

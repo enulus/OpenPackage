@@ -6,6 +6,7 @@ import { tmpdir } from 'os';
 import { parsePackageYml, writePackageYml } from '../../../src/utils/package-yml.js';
 import { writeTextFile, readTextFile } from '../../../src/utils/fs.js';
 import { buildInstallContext } from '../../../src/core/install/unified/context-builders.js';
+import type { ExecutionContext } from '../../../src/types/execution-context.js';
 
 describe('Phase 2 Integration: Schema Migration', () => {
   it('should handle complete workflow: old format → parse → context build', async () => {
@@ -51,10 +52,11 @@ dependencies:
       assert.strictEqual(parsed.dependencies[2].url, undefined);
       
       // Build contexts (this is what install command does with no packageInput)
-      const contexts = await buildInstallContext(tmpDir, undefined, {});
+      const execContext: ExecutionContext = { sourceCwd: tmpDir, targetDir: tmpDir, isGlobal: false };
+      const contexts = await buildInstallContext(execContext, undefined, {});
       
-      // Verify contexts were built correctly (bulk install returns array)
-      assert.ok(Array.isArray(contexts));
+      // buildInstallContext returns a workspace context object (not an array) for bulk install
+      assert.ok(contexts != null && typeof contexts === 'object');
       // Note: actual count may vary based on workspace files, so we just verify it's an array
       
     } finally {
@@ -117,8 +119,9 @@ dependencies: []
       await writeTextFile(manifestPath, manifest);
       
       // Test with GitHub shorthand (from Phase 1)
+      const execContext: ExecutionContext = { sourceCwd: tmpDir, targetDir: tmpDir, isGlobal: false };
       const context = await buildInstallContext(
-        tmpDir,
+        execContext,
         'gh@user/repo',
         {}
       );
@@ -169,5 +172,3 @@ dependencies:
     }
   });
 });
-
-console.log('✓ All Phase 2 integration tests passed');

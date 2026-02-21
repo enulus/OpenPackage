@@ -4,7 +4,8 @@
  * Verifies extraction of package contributions from merged files.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 import { extractPackageContribution } from '../../../src/core/save/save-merge-extractor.js';
 import type { SaveCandidate } from '../../../src/core/save/save-types.js';
 
@@ -40,14 +41,14 @@ describe('save-merge-extractor', () => {
       
       const result = await extractPackageContribution(candidate);
       
-      expect(result.success).toBe(true);
-      expect(result.extractedContent).toBeDefined();
+      assert.strictEqual(result.success, true);
+      assert.notStrictEqual(result.extractedContent, undefined);
       
       const extracted = JSON.parse(result.extractedContent!);
-      expect(extracted).toEqual({
+      assert.deepStrictEqual(extracted, {
         github: { value: 'new' }
       });
-      expect(extracted.existing).toBeUndefined();
+      assert.strictEqual(extracted.existing, undefined);
     });
 
     it('should extract nested keys using dot notation', async () => {
@@ -72,11 +73,11 @@ describe('save-merge-extractor', () => {
       
       const result = await extractPackageContribution(candidate);
       
-      expect(result.success).toBe(true);
-      expect(result.extractedContent).toBeDefined();
+      assert.strictEqual(result.success, true);
+      assert.notStrictEqual(result.extractedContent, undefined);
       
       const extracted = JSON.parse(result.extractedContent!);
-      expect(extracted).toEqual({
+      assert.deepStrictEqual(extracted, {
         mcp: {
           github: {
             type: 'http',
@@ -84,7 +85,7 @@ describe('save-merge-extractor', () => {
           }
         }
       });
-      expect(extracted.mcp.existing).toBeUndefined();
+      assert.strictEqual(extracted.mcp.existing, undefined);
     });
 
     it('should extract multiple keys at same level', async () => {
@@ -104,17 +105,17 @@ describe('save-merge-extractor', () => {
       
       const result = await extractPackageContribution(candidate);
       
-      expect(result.success).toBe(true);
-      expect(result.extractedContent).toBeDefined();
+      assert.strictEqual(result.success, true);
+      assert.notStrictEqual(result.extractedContent, undefined);
       
       const extracted = JSON.parse(result.extractedContent!);
-      expect(extracted).toEqual({
+      assert.deepStrictEqual(extracted, {
         mcp: {
           github: { value: 'new1' },
           gitlab: { value: 'new2' }
         }
       });
-      expect(extracted.mcp.existing).toBeUndefined();
+      assert.strictEqual(extracted.mcp.existing, undefined);
     });
 
     it('should handle deeply nested keys', async () => {
@@ -138,9 +139,9 @@ describe('save-merge-extractor', () => {
       
       const result = await extractPackageContribution(candidate);
       
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       const extracted = JSON.parse(result.extractedContent!);
-      expect(extracted.config.servers.production.mcp.github).toEqual({
+      assert.deepStrictEqual(extracted.config.servers.production.mcp.github, {
         endpoint: 'https://prod.github.com'
       });
     });
@@ -159,9 +160,9 @@ describe('save-merge-extractor', () => {
       const result = await extractPackageContribution(candidate);
       
       // Should succeed but extract empty object
-      expect(result.success).toBe(true);
+      assert.strictEqual(result.success, true);
       const extracted = JSON.parse(result.extractedContent!);
-      expect(extracted).toEqual({});
+      assert.deepStrictEqual(extracted, {});
     });
 
     it('should return error for local candidates', async () => {
@@ -173,8 +174,8 @@ describe('save-merge-extractor', () => {
       
       const result = await extractPackageContribution(candidate);
       
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('workspace candidates');
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error!.includes('workspace candidates'));
     });
 
     it('should return error when no merge metadata', async () => {
@@ -185,8 +186,8 @@ describe('save-merge-extractor', () => {
       
       const result = await extractPackageContribution(candidate);
       
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('No merge metadata');
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error!.includes('No merge metadata'));
     });
 
     it('should return error for composite merge strategy', async () => {
@@ -197,8 +198,8 @@ describe('save-merge-extractor', () => {
       
       const result = await extractPackageContribution(candidate);
       
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Composite merge extraction not yet implemented');
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error!.includes('Composite merge extraction not yet implemented'));
     });
 
     it('should return error for replace strategy', async () => {
@@ -209,8 +210,8 @@ describe('save-merge-extractor', () => {
       
       const result = await extractPackageContribution(candidate);
       
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Replace strategy does not require extraction');
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error!.includes('Replace strategy does not require extraction'));
     });
 
     it('should handle invalid JSON gracefully', async () => {
@@ -222,8 +223,8 @@ describe('save-merge-extractor', () => {
       
       const result = await extractPackageContribution(candidate);
       
-      expect(result.success).toBe(false);
-      expect(result.error).toBeDefined();
+      assert.strictEqual(result.success, false);
+      assert.notStrictEqual(result.error, undefined);
     });
 
     it('should produce consistent hash for extracted content', async () => {
@@ -243,7 +244,7 @@ describe('save-merge-extractor', () => {
       const result1 = await extractPackageContribution(candidate);
       const result2 = await extractPackageContribution(candidate);
       
-      expect(result1.extractedHash).toBe(result2.extractedHash);
+      assert.strictEqual(result1.extractedHash, result2.extractedHash);
     });
   });
 });

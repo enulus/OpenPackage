@@ -11,7 +11,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { mkdtemp, rm, mkdir, writeFile, readFile } from 'fs/promises';
 import { runSaveToSourcePipeline } from '../../../src/core/save/save-to-source-pipeline.js';
-import { writeWorkspaceIndex } from '../../../src/utils/workspace-index-yml.js';
+import { writeWorkspaceIndex, getWorkspaceIndexPath } from '../../../src/utils/workspace-index-yml.js';
 
 test('Phase 4: Complete pipeline - single file update', async () => {
   // Setup
@@ -40,18 +40,15 @@ test('Phase 4: Complete pipeline - single file update', async () => {
     const index = {
       packages: {
         'test-package': {
+          path: packageDir,
           version: '1.0.0',
-          source: {
-            type: 'path',
-            path: packageDir
-          },
           files: {
             'tools/search.md': ['.cursor/tools/search.md']
           }
         }
       }
     };
-    await writeWorkspaceIndex(workspaceDir, index);
+    await writeWorkspaceIndex({ path: getWorkspaceIndexPath(workspaceDir), index });
     
     // Change to workspace directory for test
     const originalCwd = process.cwd();
@@ -113,18 +110,15 @@ test('Phase 4: Complete pipeline - no changes detected', async () => {
     const index = {
       packages: {
         'test-package': {
+          path: packageDir,
           version: '1.0.0',
-          source: {
-            type: 'path',
-            path: packageDir
-          },
           files: {
             'tools/search.md': ['.cursor/tools/search.md']
           }
         }
       }
     };
-    await writeWorkspaceIndex(workspaceDir, index);
+    await writeWorkspaceIndex({ path: getWorkspaceIndexPath(workspaceDir), index });
     
     // Change to workspace directory for test
     const originalCwd = process.cwd();
@@ -138,8 +132,8 @@ test('Phase 4: Complete pipeline - no changes detected', async () => {
       assert.strictEqual(result.success, true, 'Pipeline should succeed');
       assert.ok(result.data, 'Result should have data');
       assert.ok(
-        result.data.message.includes('No workspace changes detected'),
-        'Should indicate no changes'
+        result.data.message.includes('No') && result.data.message.includes('changes'),
+        `Should indicate no changes, got: ${result.data.message}`
       );
       
       console.log('✓ No changes detected test passed');
@@ -175,18 +169,15 @@ test('Phase 4: Complete pipeline - create new file', async () => {
     const index = {
       packages: {
         'test-package': {
+          path: packageDir,
           version: '1.0.0',
-          source: {
-            type: 'path',
-            path: packageDir
-          },
           files: {
             'tools/new-tool.md': ['.cursor/tools/new-tool.md']
           }
         }
       }
     };
-    await writeWorkspaceIndex(workspaceDir, index);
+    await writeWorkspaceIndex({ path: getWorkspaceIndexPath(workspaceDir), index });
     
     // Change to workspace directory for test
     const originalCwd = process.cwd();

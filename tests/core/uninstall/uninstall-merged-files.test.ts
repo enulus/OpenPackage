@@ -3,7 +3,8 @@
  * Verifies that key tracking enables precise removal
  */
 
-import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
+import { describe, test, beforeEach, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -20,7 +21,7 @@ describe('Key Extraction', () => {
     };
 
     const keys = extractAllKeys(data);
-    expect(keys).toEqual(['mcp.server1.url', 'mcp.server2.url']);
+    assert.deepStrictEqual(keys, ['mcp.server1.url', 'mcp.server2.url']);
   });
 
   test('handles arrays as leaf nodes', () => {
@@ -31,7 +32,7 @@ describe('Key Extraction', () => {
     };
 
     const keys = extractAllKeys(data);
-    expect(keys).toEqual(['mcp.servers']);
+    assert.deepStrictEqual(keys, ['mcp.servers']);
   });
 
   test('handles primitives', () => {
@@ -41,7 +42,7 @@ describe('Key Extraction', () => {
     };
 
     const keys = extractAllKeys(data);
-    expect(keys).toEqual(['name', 'version']);
+    assert.deepStrictEqual(keys, ['name', 'version']);
   });
 });
 
@@ -55,7 +56,7 @@ describe('Key Deletion', () => {
     };
 
     deleteNestedKey(data, 'mcp.server1');
-    expect(data).toEqual({
+    assert.deepStrictEqual(data, {
       mcp: {
         server2: { url: 'http://example.com' }
       }
@@ -71,7 +72,7 @@ describe('Key Deletion', () => {
 
     deleteNestedKey(data, 'mcp.server1.url');
     // Should remove server1 and mcp since they're now empty
-    expect(data).toEqual({});
+    assert.deepStrictEqual(data, {});
   });
 
   test('preserves other keys', () => {
@@ -86,7 +87,7 @@ describe('Key Deletion', () => {
     };
 
     deleteNestedKey(data, 'mcp.server1.url');
-    expect(data).toEqual({
+    assert.deepStrictEqual(data, {
       mcp: {
         server2: { url: 'http://example.com' }
       },
@@ -99,25 +100,25 @@ describe('Key Deletion', () => {
 
 describe('Empty Detection', () => {
   test('detects empty object', () => {
-    expect(isEffectivelyEmpty({})).toBe(true);
+    assert.strictEqual(isEffectivelyEmpty({}), true);
   });
 
   test('detects empty array', () => {
-    expect(isEffectivelyEmpty([])).toBe(true);
+    assert.strictEqual(isEffectivelyEmpty([]), true);
   });
 
   test('detects nested empty objects', () => {
-    expect(isEffectivelyEmpty({ a: {}, b: { c: {} } })).toBe(true);
+    assert.strictEqual(isEffectivelyEmpty({ a: {}, b: { c: {} } }), true);
   });
 
   test('detects non-empty objects', () => {
-    expect(isEffectivelyEmpty({ a: 'value' })).toBe(false);
+    assert.strictEqual(isEffectivelyEmpty({ a: 'value' }), false);
   });
 
   test('detects primitives as non-empty', () => {
-    expect(isEffectivelyEmpty('string')).toBe(false);
-    expect(isEffectivelyEmpty(123)).toBe(false);
-    expect(isEffectivelyEmpty(true)).toBe(false);
+    assert.strictEqual(isEffectivelyEmpty('string'), false);
+    assert.strictEqual(isEffectivelyEmpty(123), false);
+    assert.strictEqual(isEffectivelyEmpty(true), false);
   });
 });
 
@@ -156,12 +157,12 @@ describe('File-based Key Removal', () => {
       ['mcp.server1', 'mcp.server2']
     );
 
-    expect(result.deleted).toBe(false);
-    expect(result.updated).toBe(true);
+    assert.strictEqual(result.deleted, false);
+    assert.strictEqual(result.updated, true);
 
     // Verify file was updated correctly
     const updatedContent = JSON.parse(await fs.readFile(absPath, 'utf-8'));
-    expect(updatedContent).toEqual({
+    assert.deepStrictEqual(updatedContent, {
       mcp: {
         server3: { url: 'http://localhost:5000' }
       }
@@ -188,17 +189,14 @@ describe('File-based Key Removal', () => {
       ['mcp.server1']
     );
 
-    expect(result.deleted).toBe(true);
-    expect(result.updated).toBe(false);
+    assert.strictEqual(result.deleted, true);
+    assert.strictEqual(result.updated, false);
 
     // Verify file was deleted
-    try {
-      await fs.access(absPath);
-      fail('File should have been deleted');
-    } catch (error) {
-      // Expected - file should not exist
-      expect(error).toBeDefined();
-    }
+    await assert.rejects(
+      fs.access(absPath),
+      'File should have been deleted'
+    );
   });
 
   test('handles YAML files', async () => {
@@ -222,11 +220,11 @@ mcp:
       ['mcp.server1']
     );
 
-    expect(result.updated).toBe(true);
+    assert.strictEqual(result.updated, true);
 
     const updatedContent = await fs.readFile(absPath, 'utf-8');
-    expect(updatedContent).toContain('server2');
-    expect(updatedContent).not.toContain('server1');
+    assert.ok(updatedContent.includes('server2'));
+    assert.ok(!updatedContent.includes('server1'));
   });
 });
 
@@ -256,12 +254,12 @@ describe('Workspace Index Integration', () => {
 
     // Verify structure
     const pkg = workspaceIndex.packages['my-mcp-package'];
-    expect(pkg.files['mcp.jsonc']).toHaveLength(1);
+    assert.strictEqual(pkg.files['mcp.jsonc'].length, 1);
 
     const mcpMapping = pkg.files['mcp.jsonc'][0];
     if (typeof mcpMapping !== 'string') {
-      expect(mcpMapping.keys).toEqual(['mcp.server1', 'mcp.server2']);
-      expect(mcpMapping.merge).toBe('deep');
+      assert.deepStrictEqual(mcpMapping.keys, ['mcp.server1', 'mcp.server2']);
+      assert.strictEqual(mcpMapping.merge, 'deep');
     }
   });
 });

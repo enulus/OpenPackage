@@ -5,7 +5,8 @@
  * running save immediately should detect no conflicts.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { mkdtemp, rm } from 'fs/promises';
@@ -85,14 +86,14 @@ describe('save-merged-file-parity', () => {
         filesMapping
       });
       
-      expect(candidateResult.errors).toHaveLength(0);
-      expect(candidateResult.localSourceRefs).toHaveLength(1);
-      expect(candidateResult.workspaceCandidates).toHaveLength(1);
+      assert.strictEqual(candidateResult.errors.length, 0);
+      assert.strictEqual(candidateResult.localSourceRefs.length, 1);
+      assert.strictEqual(candidateResult.workspaceCandidates.length, 1);
       
       // Verify merge metadata was extracted
       const workspaceCandidate = candidateResult.workspaceCandidates[0];
-      expect(workspaceCandidate.mergeStrategy).toBe('deep');
-      expect(workspaceCandidate.mergeKeys).toEqual(['mcp.github']);
+      assert.strictEqual(workspaceCandidate.mergeStrategy, 'deep');
+      assert.deepStrictEqual(workspaceCandidate.mergeKeys, ['mcp.github']);
       
       // Build groups
       const groups = buildCandidateGroups(
@@ -101,11 +102,11 @@ describe('save-merged-file-parity', () => {
         workspaceRoot
       );
       
-      expect(groups).toHaveLength(1);
+      assert.strictEqual(groups.length, 1);
       const group = groups[0];
-      expect(group.registryPath).toBe('mcp.json');
-      expect(group.localRef).toBeDefined();
-      expect(group.workspace).toHaveLength(1);
+      assert.strictEqual(group.registryPath, 'mcp.json');
+      assert.notStrictEqual(group.localRef, undefined);
+      assert.strictEqual(group.workspace.length, 1);
       
       // Materialize local candidate for analysis
       if (group.localRef) {
@@ -117,9 +118,9 @@ describe('save-merged-file-parity', () => {
       
       // The key assertion: Should detect no change needed because
       // the extracted package contribution matches the source
-      expect(analysis.type).toBe('no-change-needed');
-      expect(analysis.localMatchesWorkspace).toBe(true);
-      expect(analysis.recommendedStrategy).toBe('skip');
+      assert.strictEqual(analysis.type, 'no-change-needed');
+      assert.strictEqual(analysis.localMatchesWorkspace, true);
+      assert.strictEqual(analysis.recommendedStrategy, 'skip');
       
     } finally {
       // Cleanup
@@ -207,9 +208,9 @@ describe('save-merged-file-parity', () => {
       const analysis = await analyzeGroup(group, false, workspaceRoot);
       
       // Should detect that workspace has changes (auto-write single candidate)
-      expect(analysis.type).toBe('auto-write');
-      expect(analysis.localMatchesWorkspace).toBe(false);
-      expect(analysis.recommendedStrategy).toBe('write-single');
+      assert.strictEqual(analysis.type, 'auto-write');
+      assert.strictEqual(analysis.localMatchesWorkspace, false);
+      assert.strictEqual(analysis.recommendedStrategy, 'write-single');
       
     } finally {
       // Cleanup
@@ -287,8 +288,8 @@ describe('save-merged-file-parity', () => {
       const analysis = await analyzeGroup(group, false, workspaceRoot);
       
       // Should detect no change - both keys match
-      expect(analysis.type).toBe('no-change-needed');
-      expect(analysis.localMatchesWorkspace).toBe(true);
+      assert.strictEqual(analysis.type, 'no-change-needed');
+      assert.strictEqual(analysis.localMatchesWorkspace, true);
       
     } finally {
       if (tempDir) {

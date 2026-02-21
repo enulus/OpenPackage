@@ -4,7 +4,8 @@
  * Tests for Phase 3: Format Group Merging
  */
 
-import { describe, it, expect } from '@jest/globals';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 import {
   mergeFormatGroups,
   deduplicatePaths,
@@ -31,11 +32,11 @@ describe('Format Group Merger', () => {
 
       const merged = mergeFormatGroups(groups);
 
-      expect(merged.length).toBe(4);
-      expect(merged.some(f => f.path === 'agents/claude-agent.md')).toBe(true);
-      expect(merged.some(f => f.path === 'agents/opencode-agent.md')).toBe(true);
-      expect(merged.some(f => f.path === 'rules/claude-rule.md')).toBe(true);
-      expect(merged.some(f => f.path === 'commands/build.md')).toBe(true);
+      assert.strictEqual(merged.length, 4);
+      assert.strictEqual(merged.some(f => f.path === 'agents/claude-agent.md'), true);
+      assert.strictEqual(merged.some(f => f.path === 'agents/opencode-agent.md'), true);
+      assert.strictEqual(merged.some(f => f.path === 'rules/claude-rule.md'), true);
+      assert.strictEqual(merged.some(f => f.path === 'commands/build.md'), true);
     });
 
     it('should handle empty groups', () => {
@@ -48,8 +49,8 @@ describe('Format Group Merger', () => {
 
       const merged = mergeFormatGroups(groups);
 
-      expect(merged.length).toBe(1);
-      expect(merged[0].path).toBe('agents/agent.md');
+      assert.strictEqual(merged.length, 1);
+      assert.strictEqual(merged[0].path, 'agents/agent.md');
     });
 
     it('should handle single group', () => {
@@ -62,7 +63,7 @@ describe('Format Group Merger', () => {
 
       const merged = mergeFormatGroups(groups);
 
-      expect(merged.length).toBe(2);
+      assert.strictEqual(merged.length, 2);
     });
   });
 
@@ -76,9 +77,9 @@ describe('Format Group Merger', () => {
 
       const deduplicated = deduplicatePaths(files);
 
-      expect(deduplicated.length).toBe(2);
-      expect(deduplicated.find(f => f.path === 'agents/agent.md')?.frontmatter?.version).toBe(1);
-      expect(deduplicated.find(f => f.path === 'rules/rule.md')).toBeDefined();
+      assert.strictEqual(deduplicated.length, 2);
+      assert.strictEqual(deduplicated.find(f => f.path === 'agents/agent.md')?.frontmatter?.version, 1);
+      assert.ok(deduplicated.find(f => f.path === 'rules/rule.md'));
     });
 
     it('should prioritize universal format over platform-specific', () => {
@@ -105,9 +106,9 @@ describe('Format Group Merger', () => {
 
       const deduplicated = deduplicatePaths(files);
 
-      expect(deduplicated.length).toBe(1);
+      assert.strictEqual(deduplicated.length, 1);
       // Should keep universal format (array tools)
-      expect(Array.isArray(deduplicated[0].frontmatter?.tools)).toBe(true);
+      assert.strictEqual(Array.isArray(deduplicated[0].frontmatter?.tools), true);
     });
 
     it('should handle files with no frontmatter', () => {
@@ -119,8 +120,8 @@ describe('Format Group Merger', () => {
 
       const deduplicated = deduplicatePaths(files);
 
-      expect(deduplicated.length).toBe(2);
-      expect(deduplicated.find(f => f.path === 'skills/typescript/SKILL.md')?.content).toBe('First');
+      assert.strictEqual(deduplicated.length, 2);
+      assert.strictEqual(deduplicated.find(f => f.path === 'skills/typescript/SKILL.md')?.content, 'First');
     });
 
     it('should handle no duplicates', () => {
@@ -132,8 +133,8 @@ describe('Format Group Merger', () => {
 
       const deduplicated = deduplicatePaths(files);
 
-      expect(deduplicated.length).toBe(3);
-      expect(deduplicated).toEqual(files);
+      assert.strictEqual(deduplicated.length, 3);
+      assert.deepStrictEqual(deduplicated, files);
     });
 
     it('should handle multiple duplicates of same path', () => {
@@ -145,8 +146,8 @@ describe('Format Group Merger', () => {
 
       const deduplicated = deduplicatePaths(files);
 
-      expect(deduplicated.length).toBe(1);
-      expect(deduplicated[0].frontmatter?.version).toBe(1);
+      assert.strictEqual(deduplicated.length, 1);
+      assert.strictEqual(deduplicated[0].frontmatter?.version, 1);
     });
   });
 
@@ -160,8 +161,8 @@ describe('Format Group Merger', () => {
 
       const result = validateMergedPackage(files);
 
-      expect(result.valid).toBe(true);
-      expect(result.errors).toEqual([]);
+      assert.strictEqual(result.valid, true);
+      assert.deepStrictEqual(result.errors, []);
     });
 
     it('should detect duplicate paths', () => {
@@ -172,8 +173,8 @@ describe('Format Group Merger', () => {
 
       const result = validateMergedPackage(files);
 
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain('Duplicate path after merge: agents/agent.md');
+      assert.strictEqual(result.valid, false);
+      assert.ok(result.errors.includes('Duplicate path after merge: agents/agent.md'));
     });
 
     it('should detect empty paths', () => {
@@ -184,8 +185,8 @@ describe('Format Group Merger', () => {
 
       const result = validateMergedPackage(files);
 
-      expect(result.valid).toBe(false);
-      expect(result.errors.some(e => e.includes('empty path'))).toBe(true);
+      assert.strictEqual(result.valid, false);
+      assert.strictEqual(result.errors.some(e => e.includes('empty path')), true);
     });
 
     it('should warn about files with no content', () => {
@@ -196,8 +197,8 @@ describe('Format Group Merger', () => {
 
       const result = validateMergedPackage(files);
 
-      expect(result.valid).toBe(true);
-      expect(result.warnings.some(w => w.includes('no content'))).toBe(true);
+      assert.strictEqual(result.valid, true);
+      assert.strictEqual(result.warnings.some(w => w.includes('no content')), true);
     });
 
     it('should warn about absolute paths', () => {
@@ -208,8 +209,8 @@ describe('Format Group Merger', () => {
 
       const result = validateMergedPackage(files);
 
-      expect(result.valid).toBe(true);
-      expect(result.warnings.some(w => w.includes('absolute path'))).toBe(true);
+      assert.strictEqual(result.valid, true);
+      assert.strictEqual(result.warnings.some(w => w.includes('absolute path')), true);
     });
   });
 
@@ -240,10 +241,10 @@ describe('Format Group Merger', () => {
 
       const stats = getMergedPackageStats(files);
 
-      expect(stats.totalFiles).toBe(4);
-      expect(stats.filesWithFrontmatter).toBe(1); // Only agent1 has non-empty frontmatter
-      expect(stats.filesWithContent).toBe(3); // agent1, agent2, typescript (empty.md excluded)
-      expect(stats.uniquePaths).toBe(4);
+      assert.strictEqual(stats.totalFiles, 4);
+      assert.strictEqual(stats.filesWithFrontmatter, 1); // Only agent1 has non-empty frontmatter
+      assert.strictEqual(stats.filesWithContent, 3); // agent1, agent2, typescript (empty.md excluded)
+      assert.strictEqual(stats.uniquePaths, 4);
     });
 
     it('should handle empty file array', () => {
@@ -251,10 +252,10 @@ describe('Format Group Merger', () => {
 
       const stats = getMergedPackageStats(files);
 
-      expect(stats.totalFiles).toBe(0);
-      expect(stats.filesWithFrontmatter).toBe(0);
-      expect(stats.filesWithContent).toBe(0);
-      expect(stats.uniquePaths).toBe(0);
+      assert.strictEqual(stats.totalFiles, 0);
+      assert.strictEqual(stats.filesWithFrontmatter, 0);
+      assert.strictEqual(stats.filesWithContent, 0);
+      assert.strictEqual(stats.uniquePaths, 0);
     });
 
     it('should detect duplicate paths in stats', () => {
@@ -266,8 +267,8 @@ describe('Format Group Merger', () => {
 
       const stats = getMergedPackageStats(files);
 
-      expect(stats.totalFiles).toBe(3);
-      expect(stats.uniquePaths).toBe(2); // Only 2 unique paths
+      assert.strictEqual(stats.totalFiles, 3);
+      assert.strictEqual(stats.uniquePaths, 2); // Only 2 unique paths
     });
   });
 
@@ -285,8 +286,8 @@ describe('Format Group Merger', () => {
       const merged = mergeFormatGroups(groups);
       const validation = validateMergedPackage(merged);
 
-      expect(validation.valid).toBe(true);
-      expect(merged.length).toBe(2);
+      assert.strictEqual(validation.valid, true);
+      assert.strictEqual(merged.length, 2);
     });
 
     it('should handle conflicts during merge', () => {
@@ -303,11 +304,11 @@ describe('Format Group Merger', () => {
       const validation = validateMergedPackage(merged);
 
       // Should deduplicate automatically
-      expect(validation.valid).toBe(true);
-      expect(merged.length).toBe(1);
+      assert.strictEqual(validation.valid, true);
+      assert.strictEqual(merged.length, 1);
       
       // Should prefer universal format
-      expect(Array.isArray(merged[0].frontmatter?.tools)).toBe(true);
+      assert.strictEqual(Array.isArray(merged[0].frontmatter?.tools), true);
     });
   });
 });

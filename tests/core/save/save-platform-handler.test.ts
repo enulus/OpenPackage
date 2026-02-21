@@ -4,7 +4,8 @@
  * These tests verify platform-specific candidate pruning logic.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, beforeEach, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm, mkdir } from 'fs/promises';
 import { join, dirname } from 'path';
 import { tmpdir } from 'os';
@@ -99,8 +100,8 @@ describe('save-platform-handler', () => {
 
       // cursor candidate should be pruned (platform file exists)
       // claude candidate should be kept (no platform file)
-      expect(groups[0].workspace).toHaveLength(1);
-      expect(groups[0].workspace[0].platform).toBe('claude');
+      assert.strictEqual(groups[0].workspace.length, 1);
+      assert.strictEqual(groups[0].workspace[0].platform, 'claude');
     });
 
     it('should keep candidates without existing platform files', async () => {
@@ -135,9 +136,9 @@ describe('save-platform-handler', () => {
       await pruneExistingPlatformCandidates(packageRoot, groups);
 
       // Both candidates should be kept (no platform files exist)
-      expect(groups[0].workspace).toHaveLength(2);
-      expect(groups[0].workspace[0].platform).toBe('cursor');
-      expect(groups[0].workspace[1].platform).toBe('windsurf');
+      assert.strictEqual(groups[0].workspace.length, 2);
+      assert.strictEqual(groups[0].workspace[0].platform, 'cursor');
+      assert.strictEqual(groups[0].workspace[1].platform, 'windsurf');
     });
 
     it('should keep non-platform candidates', async () => {
@@ -165,8 +166,8 @@ describe('save-platform-handler', () => {
       await pruneExistingPlatformCandidates(packageRoot, groups);
 
       // Universal candidate should always be kept
-      expect(groups[0].workspace).toHaveLength(1);
-      expect(groups[0].workspace[0].platform).toBeUndefined();
+      assert.strictEqual(groups[0].workspace.length, 1);
+      assert.strictEqual(groups[0].workspace[0].platform, undefined);
     });
 
     it('should keep "ai" platform candidates', async () => {
@@ -194,8 +195,8 @@ describe('save-platform-handler', () => {
       await pruneExistingPlatformCandidates(packageRoot, groups);
 
       // 'ai' platform should be kept (treated as universal)
-      expect(groups[0].workspace).toHaveLength(1);
-      expect(groups[0].workspace[0].platform).toBe('ai');
+      assert.strictEqual(groups[0].workspace.length, 1);
+      assert.strictEqual(groups[0].workspace[0].platform, 'ai');
     });
 
     it('should skip groups without local candidate', async () => {
@@ -217,7 +218,7 @@ describe('save-platform-handler', () => {
       await pruneExistingPlatformCandidates(packageRoot, groups);
 
       // Should keep all candidates (no local file to check against)
-      expect(groups[0].workspace).toHaveLength(1);
+      assert.strictEqual(groups[0].workspace.length, 1);
     });
 
     it('should handle multiple groups', async () => {
@@ -262,10 +263,10 @@ describe('save-platform-handler', () => {
       await pruneExistingPlatformCandidates(packageRoot, groups);
 
       // First group: cursor pruned (platform file exists)
-      expect(groups[0].workspace).toHaveLength(0);
+      assert.strictEqual(groups[0].workspace.length, 0);
       
       // Second group: cursor kept (no platform file)
-      expect(groups[1].workspace).toHaveLength(1);
+      assert.strictEqual(groups[1].workspace.length, 1);
     });
 
     it('should handle root files with platform variants', async () => {
@@ -298,7 +299,7 @@ describe('save-platform-handler', () => {
 
       // claude candidate should be pruned if CLAUDE.md exists
       // (createPlatformSpecificRegistryPath should return "CLAUDE.md" for root files)
-      expect(groups[0].workspace.length).toBeLessThanOrEqual(1);
+      assert.ok(groups[0].workspace.length <= 1);
     });
   });
 
