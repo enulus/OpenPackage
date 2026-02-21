@@ -92,19 +92,19 @@ export function setupNewCommand(program: Command): void {
       // Additional success messaging based on scope or custom path
       if (customPath) {
         console.log(`\n💡 Next steps:`);
-        console.log(`   1. Add files to your package at: ${customPath}`);
+        console.log(`   1. Add files to your package: opkg add <file-or-dir> --to ${actualPackageName}`);
         console.log(`   2. Install to workspace: opkg install ${customPath}`);
       } else if (scope === 'project') {
         console.log(`\n💡 Next steps:`);
-        console.log(`   1. Add files to your package: cd .openpackage/packages/${actualPackageName}/`);
+        console.log(`   1. Add files to your package: opkg add <file-or-dir> --to ${actualPackageName}`);
         console.log(`   2. Install to this workspace: opkg install ${actualPackageName}`);
       } else if (scope === 'global') {
         console.log(`\n💡 Next steps:`);
-        console.log(`   1. Add files to your package: cd ~/.openpackage/packages/${actualPackageName}/`);
+        console.log(`   1. Add files to your package: opkg add <file-or-dir> --to ${actualPackageName}`);
         console.log(`   2. Install to any workspace: opkg install ${actualPackageName}`);
       } else if (scope === 'root') {
         console.log(`\n💡 Next steps:`);
-        console.log(`   1. Add files to your package in current directory`);
+        console.log(`   1. Add files to your package: opkg add <file-or-dir>`);
         console.log(`   2. Install to other workspaces: opkg install ${actualPackageName}`);
       }
     }));

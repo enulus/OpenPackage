@@ -84,7 +84,6 @@ If `./.openpackage/packages/<name>/` exists and is a valid package:
 **User Feedback**:
 ```
 ✓ Found <name> in workspace packages
-💡 Workspace packages always override global/registry
 ```
 
 ### 3. Compare Global Packages vs Registry (Version-Aware)
@@ -106,7 +105,6 @@ Resolving <name>...
   • Registry: 0.5.0 (stable)
 ✓ Using <name>@0.5.0 from registry (newer version)
 ⚠️  Global packages has older version (0.2.0)
-💡 To update global: edit ~/.openpackage/packages/<name>/ and re-install
 ```
 
 **User Feedback** (tie-breaker):

@@ -385,9 +385,6 @@ Validate all preconditions
    ├── AGENTS.md (universal)
    └── README.md (universal)
 
-💡 Changes saved to package source.
-   To sync changes to workspace, run:
-     opkg install my-package
 ```
 
 ---

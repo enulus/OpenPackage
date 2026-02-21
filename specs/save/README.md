@@ -58,9 +58,6 @@ opkg save my-pkg
 # ✓ Updated 1 file(s) in my-pkg
 #    Package: /path/to/.openpackage/packages/my-pkg
 #    ├── .cursor/commands/deploy.md
-# 💡 Changes saved to package source.
-#    To sync changes to workspace, run:
-#      opkg install my-pkg
 
 # 4. Re-install to sync to other platforms (optional)
 opkg install my-pkg

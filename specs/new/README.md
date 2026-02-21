@@ -227,11 +227,6 @@ $ opkg new
 ✓ my-custom-location/openpackage.yml created
 
 📍 Location: Custom path (./my-custom-location)
-💡 This package is at a custom location you specified
-
-💡 Next steps:
-   1. Add files to your package at: ./my-custom-location
-   2. Install to workspace with path: opkg install --path ./my-custom-location
 ```
 
 **Non-Interactive Example:**
@@ -241,7 +236,6 @@ $ opkg new my-package --path ./custom-location
   - Name: my-package
 
 📍 Location: Custom path (./custom-location)
-💡 This package is at a custom location you specified
 ```
 
 **Error Examples:**
@@ -275,12 +269,9 @@ $ opkg new my-package --scope project
 ✓ .openpackage/packages/my-package/openpackage.yml created
   - Name: my-package
 
-💡 Next steps:
-   1. Add files to your package: cd .openpackage/packages/my-package/
-   2. Install to this workspace: opkg install my-package
-```
+📍 Scope: Project-scoped (.openpackage/packages/)
 
-### Conflict Handling
+```
 
 #### Existing Package Without Force
 
@@ -382,12 +373,6 @@ Error: Path cannot be empty
   [- Description: <desc>]     # If specified
 
 📍 Scope: <scope-description>
-💡 <scope-specific-tip>
-
-💡 Next steps:
-   1. <step-1>
-   2. <step-2>
-   3. <step-3>
 ```
 
 ### Error Output
@@ -419,10 +404,6 @@ $ opkg new my-tools
   - Keywords: tools, utils
 
 📍 Scope: Current directory (root package)
-
-💡 Next steps:
-   1. Add files to your package in current directory
-   2. Install in other workspaces: opkg install my-tools
 ```
 
 ### Create Local Package (Explicit Scope)
@@ -432,11 +413,6 @@ $ opkg new my-tools --scope project
   - Name: my-tools
 
 📍 Scope: Project-scoped (.openpackage/packages/)
-💡 This package is project-scoped to the current workspace
-
-💡 Next steps:
-   1. Add files to your package: cd .openpackage/packages/my-tools/
-   2. Install to this workspace: opkg install my-tools
 ```
 
 ### Create Global Package
@@ -446,12 +422,6 @@ $ opkg new shared-prompts --scope global
   - Name: shared-prompts
 
 📍 Scope: Global shared (~/.openpackage/packages/)
-💡 This package can be used across all workspaces
-
-💡 Next steps:
-   1. Add files to your package: cd ~/.openpackage/packages/shared-prompts/
-   2. Install to any workspace: opkg install shared-prompts
-   3. Or use explicit path: opkg install ~/.openpackage/packages/shared-prompts/
 ```
 
 ### Create Root Package
@@ -461,10 +431,6 @@ $ opkg new my-package --scope root
   - Name: my-package
 
 📍 Scope: Current directory (root package)
-
-💡 Next steps:
-   1. Add files to your package in current directory
-   2. Install in other workspaces: opkg install my-package
 ```
 
 ### Create with Force Overwrite
@@ -474,7 +440,6 @@ $ opkg new existing-package --scope project --force
   - Name: existing-package
 
 📍 Scope: Project-scoped (.openpackage/packages/)
-💡 This package is project-scoped to the current workspace
 ```
 
 ### Create Scoped Package
@@ -484,7 +449,6 @@ $ opkg new @myorg/utils
   - Name: @myorg/utils
 
 📍 Scope: Project-scoped (.openpackage/packages/)
-💡 This package is project-scoped to the current workspace
 ```
 
 ### Create Package at Custom Path
@@ -494,11 +458,6 @@ $ opkg new my-package --path ./custom-location
   - Name: my-package
 
 📍 Location: Custom path (./custom-location)
-💡 This package is at a custom location you specified
-
-💡 Next steps:
-   1. Add files to your package at: ./custom-location
-   2. Install to workspace: opkg install ./custom-location
 ```
 
 ### Create Package at Custom Path (Relative)
@@ -508,11 +467,6 @@ $ opkg new my-package --path ./custom-location
   - Name: my-package
 
 📍 Location: Custom path (./custom-location)
-💡 This package is at a custom location you specified
-
-💡 Next steps:
-   1. Add files to your package at: ./custom-location
-   2. Install to workspace with path: opkg install --path ./custom-location
 ```
 
 ### Create Package at Custom Path (Absolute)
@@ -522,11 +476,6 @@ $ opkg new my-package --path /opt/packages/my-package
   - Name: my-package
 
 📍 Location: Custom path (/opt/packages/my-package)
-💡 This package is at a custom location you specified
-
-💡 Next steps:
-   1. Add files to your package at: /opt/packages/my-package
-   2. Install to workspace with path: opkg install --path /opt/packages/my-package
 ```
 
 ### Create Package at Custom Path (Tilde)
@@ -536,11 +485,6 @@ $ opkg new my-package --path ~/projects/my-package
   - Name: my-package
 
 📍 Location: Custom path (~/projects/my-package)
-💡 This package is at a custom location you specified
-
-💡 Next steps:
-   1. Add files to your package at: ~/projects/my-package
-   2. Install to workspace with path: opkg install --path ~/projects/my-package
 ```
 
 ### Custom Path with Monorepo Structure
@@ -551,7 +495,6 @@ $ opkg new shared-components --path ../packages/shared-components
   - Name: shared-components
 
 📍 Location: Custom path (../packages/shared-components)
-💡 This package is at a custom location you specified
 
 # Resulting structure:
 # project-root/

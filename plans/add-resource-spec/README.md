@@ -257,9 +257,6 @@ export function setupAddCommand(program: Command): void {
 ```
 ✓ Added @hyericlee/essentials@^1.0.0 to dependencies
   in .openpackage/openpackage.yml
-
-💡 To install, run:
-     opkg install
 ```
 
 Or with `--to`:
@@ -267,17 +264,11 @@ Or with `--to`:
 ```
 ✓ Added @hyericlee/essentials@^1.0.0 to dependencies
   in .openpackage/packages/my-pkg/openpackage.yml
-
-💡 To install, run:
-     opkg install @hyericlee/essentials
 ```
 
 #### Display: Copy Mode (local path auto-detected)
 
 ```
-💡 Detected local files at ./some-dir — copying to package.
-   To add as a dependency instead, ensure the directory contains openpackage.yml.
-
 ✓ Added to workspace package
 ✓ Added files: 3
    ├── agents/foo.md
@@ -288,9 +279,6 @@ Or with `--to`:
 #### Display: Dependency Mode (local package auto-detected)
 
 ```
-💡 Detected package at ./my-pkg — adding as dependency.
-   To copy files instead, use --copy.
-
 ✓ Added my-pkg to dependencies
   in .openpackage/openpackage.yml
 ```

@@ -199,14 +199,8 @@ export async function createPackage(
     // Step 8: Show scope info
     if (isCustomPath) {
       console.log(`\n📍 Location: Custom path (${displayPath})`);
-      console.log(`💡 This package is at a custom location you specified`);
     } else if (scope) {
       console.log(`\n📍 Scope: ${getScopeDescription(scope)}`);
-      if (scope === 'global') {
-        console.log(`💡 This package can be used across all workspaces`);
-      } else if (scope === 'project') {
-        console.log(`💡 This package is project-scoped to the current workspace`);
-      }
     }
 
     // Step 9: Return success with context

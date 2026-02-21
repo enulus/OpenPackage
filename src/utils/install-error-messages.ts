@@ -75,8 +75,6 @@ export function formatNoPatternMatchError(
   if (suggestions.length > 0) {
     message += `\n💡 Suggestions:\n`;
     message += suggestions.join('\n');
-  } else {
-    message += `\n💡 Tip: Ensure your resource path contains one of these directory structures.`;
   }
   
   return message;
@@ -115,8 +113,6 @@ export function formatResourceNotFoundError(
         message += `  • ${name}\n`;
       }
     }
-  } else {
-    message += `\n💡 No ${resourceType}s found in this package.`;
   }
   
   return message;
@@ -172,32 +168,6 @@ function calculateSimilarity(a: string, b: string): number {
   const total = Math.max(aChars.size, bChars.size);
   
   return overlap / total;
-}
-
-/**
- * Format an error message for empty directory installations.
- * Provides guidance on what happens and next steps.
- * 
- * @param packageName - Name of the package
- * @param resourcePath - Path to the empty resource
- * @returns Formatted informational message
- */
-export function formatEmptyDirectoryMessage(
-  packageName: string,
-  resourcePath?: string
-): string {
-  let message = `Package '${packageName}' installed successfully with 0 files.\n\n`;
-  
-  if (resourcePath) {
-    message += `The resource at '${resourcePath}' exists but contains no matching files.\n`;
-  }
-  
-  message += `💡 This is expected behavior:\n`;
-  message += `  • The dependency has been recorded in your manifest\n`;
-  message += `  • Content may be added to this package later\n`;
-  message += `  • The package structure is now tracked for future updates\n`;
-  
-  return message;
 }
 
 /**

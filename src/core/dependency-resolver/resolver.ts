@@ -520,8 +520,7 @@ export async function resolveDependencies(
 
               warningMessage += `💡 To resolve this issue:\n`;
               warningMessage += `   • Install the available version: opkg install ${packageName}@latest\n`;
-              warningMessage += `   • Update the dependency to use an available version\n`;
-              warningMessage += `   • Create the required version locally: opkg new <package-name>\n`;
+              warningMessage += `   • Update the dependency in openpackage.yml to use an available version\n`;
 
               // Surface as warning but do NOT abort the entire install – mark as missing instead.
               logger.warn(warningMessage);
