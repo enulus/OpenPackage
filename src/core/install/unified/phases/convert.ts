@@ -22,8 +22,7 @@ import {
   createTempPackageDirectory, 
   writeTempPackageFiles,
   createConversionCacheDirectory,
-  hasConversionCache,
-  getConversionCacheDirectory
+  cleanupTempDirectory
 } from '../../strategies/helpers/temp-directory.js';
 
 /**
@@ -112,32 +111,26 @@ export async function convertPhase(ctx: InstallationContext): Promise<void> {
         const gitCacheMatch = originalContentRoot.match(/(.+\.openpackage\/cache\/git\/[^\/]+\/[^\/]+)/);
         const gitCacheRoot = gitCacheMatch ? gitCacheMatch[1] : originalContentRoot;
         
-        // When matchedPattern is set (resource-scoped install), patch the conversion cache
-        // with our scoped conversion output. Source files come from the git cache (no repull).
-        // This incrementally builds the cache: existing content is preserved, we add what's missing.
         const isResourceScoped = Boolean(ctx.matchedPattern);
         
-        if (isResourceScoped) {
-          // Resource-scoped: use .opkg-converted, patching in our scoped files
-          conversionRoot = await createConversionCacheDirectory(gitCacheRoot);
-          await writeTempPackageFiles(conversionResult.files, conversionRoot);
-          shouldCleanup = false;
-          logger.info('Patched conversion cache with resource-scoped files', {
-            conversionRoot,
-            fileCount: conversionResult.files.length
-          });
-        } else if (await hasConversionCache(gitCacheRoot)) {
-          // Full install: use existing conversion cache if available
-          conversionRoot = getConversionCacheDirectory(gitCacheRoot);
-          logger.info('Using existing conversion cache', { conversionRoot });
-          shouldCleanup = false;
-        } else {
-          // Full install: create new conversion cache
-          conversionRoot = await createConversionCacheDirectory(gitCacheRoot);
-          await writeTempPackageFiles(conversionResult.files, conversionRoot);
-          logger.info('Created conversion cache in git cache directory', { conversionRoot });
-          shouldCleanup = false;
+        if (!isResourceScoped) {
+          // Full install: wipe any existing conversion cache first.
+          // A prior resource-scoped install (e.g. --agents code-reviewer) may have
+          // populated the cache with only a subset of files. Stale files that no
+          // longer exist in the source would survive a write-over and get installed.
+          const existingCache = join(gitCacheRoot, '.opkg-converted');
+          await cleanupTempDirectory(existingCache);
         }
+
+        conversionRoot = await createConversionCacheDirectory(gitCacheRoot);
+        await writeTempPackageFiles(conversionResult.files, conversionRoot);
+        shouldCleanup = false;
+        logger.info(isResourceScoped
+          ? 'Patched conversion cache with resource-scoped files'
+          : 'Created fresh conversion cache for full install', {
+          conversionRoot,
+          fileCount: conversionResult.files.length
+        });
       } else {
         // Local path or other source: Use temporary directory
         conversionRoot = await createTempPackageDirectory('opkg-preconverted-');
