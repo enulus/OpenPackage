@@ -104,12 +104,17 @@ opkg install https://github.com/vercel-labs/agent-skills/tree/main/skills/react-
 
 | Option | Description |
 | --- | --- |
-| `-g, --global`               | Install to user directory instead of project |
-| `-a, --agents <agents...>`   | Install specific agents by name |
+| `-g, --global`               | Install to home directory (~/) instead of current workspace |
 | `-s, --skills <skills...>`   | Install specific skills by name |
+| `-a, --agents <agents...>`   | Install specific agents by name |
+| `-c, --commands <commands...>` | Install specific commands by name |
+| `-r, --rules <rules...>`     | Install specific rules by name |
 | `--plugins <plugins...>`     | Install specific plugins by name |
-| `--platforms`                | Install to only specified platforms |
-| `--remote`                   | Install from remote source / skip cache |
+| `--platforms <platforms...>` | Install to specific platforms (e.g., cursor claudecode opencode) |
+| `-i, --interactive`          | Interactively select resources to install |
+| `--dev`                      | Add resource to dev-dependencies |
+| `--remote`                   | Pull and install from remote registry, ignoring local versions |
+| `--local`                    | Resolve and install using only local registry versions |
 
 ### List installed resources
 ```bash title="Terminal"
@@ -122,12 +127,12 @@ Use the list command to show an overview of packages and files installed.
 
 | Option | Description |
 | --- | --- |
-| `-p, --project`              | Lists only project scoped packages & resource file count |
-| `-g, --global`               | Lists only user scoped packages & resource file count |
-| `-f, --files`                | Lists all resource files |
-| `-t, --tracked`              | Lists all packages & resources tracked by OpenPackage |
-| `-u, --untracked`            | Lists all resources not tracked by OpenPackage |
-| `--platforms`                | Lists packages & files from specified platforms |
+| `-s, --scope <scope>`        | Workspace scope: project or global (default: both) |
+| `-d, --deps`                 | Show dependency tree (full tree including transitive dependencies) |
+| `-f, --files`                | Show individual file paths |
+| `-t, --tracked`              | Show only tracked resources (skip untracked scan) |
+| `-u, --untracked`            | Show only untracked resources |
+| `--platforms <platforms...>` | Filter by specific platforms (e.g., cursor, claude) |
 
 ### Uninstall packages
 ```bash title="Terminal"
@@ -139,7 +144,8 @@ Removes all files for a package from the codebase at cwd.
 
 | Option | Description |
 | --- | --- |
-| `-g, --global`               | Uninstall from user directory |
+| `-g, --global`               | Uninstall from home directory (~/) instead of current workspace |
+| `-i, --interactive`          | Interactively select items to uninstall |
 
 > [!TIP]  
 > Learn more by heading over to the [official docs](https://openpackage.dev/docs).
@@ -149,6 +155,13 @@ Removes all files for a package from the codebase at cwd.
 ```bash title="Terminal"
 opkg new <package>
 ```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--scope <scope>`            | Package scope: root, project, or global (default: global) |
+| `--path <path>`              | Custom path for package directory (overrides scope) |
 
 Then manually add/update/remove files to and from the package following this structure:
 
@@ -175,9 +188,26 @@ Then manually add/update/remove files to and from the package following this str
 You can also use the `add` and `remove` commands to add/remove files to/from a package.
 
 ```bash title="Terminal"
+opkg add --to <package>                              # Interactively select files from cwd to add to package
 opkg add .cursor/commands/clean.md --to <package>    # Adds workspace file or dir to package
+opkg remove --from <package>                         # Interactively select files from package to remove
 opkg remove commands/clean.md --from <package>       # Removes file or dir from package
 ```  
+
+#### `add` options
+
+| Option | Description |
+| --- | --- |
+| `--to <package-name>`       | Target package (for dependency: which manifest; for copy: which package source) |
+| `--dev`                      | Add to dev-dependencies instead of dependencies |
+| `--copy`                     | Force copy mode (copy files instead of recording dependency) |
+| `--platform-specific`        | Save platform-specific variants for platform subdir inputs |
+
+#### `remove` options
+
+| Option | Description |
+| --- | --- |
+| `--from <package-name>`     | Source package name (defaults to workspace package) |
 
 > [!TIP]  
 > Learn more about packages from the [packages doc](https://openpackage.dev/docs/packages) on our official docs.
@@ -188,20 +218,46 @@ OpenPackage performs installation and platform sync of files for supported AI co
 
 | Platform | Directory | Root file | Rules | Commands | Agents | Skills | MCP |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| AdaL | .adal/ | | | | | skills/ | settings.json |
+| Amp | .agents/ | | checks/ | | | skills/ | .amp/settings.json |
 | Antigravity | .agent/ | | rules/ | workflows/ | | skills/ | |
-| Augment Code | .augment/ | | rules/ | commands/ | | | |
+| Augment Code | .augment/ | | rules/ | commands/ | | skills/ | |
 | Claude Code | .claude/ | CLAUDE.md | rules/ | commands/ | agents/ | skills/ | .mcp.json (root) |
-| Codex | .codex/ | AGENTS.md | | prompts/ | | skills/ | config.toml |
-| Cursor | .cursor/ | AGENTS.md | rules/ | commands/ | agents/ | skills/ | mcp.json |
-| Factory | .factory/ | AGENTS.md | | commands/ | droids/ | skills/ | mcp.json |
-| Kilo Code | .kilocode/ | AGENTS.md | rules/ | workflows/ | | skills/ | mcp.json |
-| Kiro | .kiro/ | | steering/ | | | | settings/mcp.json |
-| OpenCode | .opencode/ | AGENTS.md | | command/ | agent/ | skills/ | opencode.json |
-| Pi-Mono | .pi/ | AGENTS.md | | agent/prompts/ | | agent/skills/ | |
+| Claude Code Plugin | .claude-plugin/ | | rules/ | commands/ | agents/ | skills/ | .mcp.json (root) |
+| Cline | .cline/ | | | | | skills/ | cline_mcp_settings.json |
+| CodeBuddy | .codebuddy/ | | rules/ | | | skills/ | |
+| Codex CLI | .codex/ | | | prompts/ | | skills/ | config.toml |
+| Command Code | .commandcode/ | | | commands/ | agents/ | skills/ | |
+| Continue | .continue/ | | rules/ | prompts/ | | skills/ | |
+| Crush | .config/crush/ | | | | | skills/ | crush.json (root) |
+| Cursor | .cursor/ | | rules/ | commands/ | agents/ | skills/ | mcp.json |
+| Factory AI | .factory/ | | | commands/ | droids/ | skills/ | settings/mcp.json |
+| GitHub Copilot | .github/ | | | | agents/ | skills/ | |
+| Goose | .goose/ | | | | | skills/ | config.yaml |
+| iFlow CLI | .iflow/ | IFLOW.md | | commands/ | agents/ | skills/ | settings.json |
+| Junie | .junie/ | | | | | skills/ | |
+| Kilo Code | .kilocode/ | | rules/ | workflows/ | | skills/ | mcp.json |
+| Kimi Code CLI | .agents/ | | | | | skills/ | .kimi/mcp.json |
+| Kiro | .kiro/ | | steering/ | | | skills/ | settings/mcp.json |
+| Kode | .kode/ | | | | | skills/ | |
+| MCPJam | .mcpjam/ | | | | | skills/ | |
+| Mistral Vibe | .vibe/ | | | | | skills/ | |
+| Mux | .mux/ | | | | | skills/ | |
+| Neovate | .neovate/ | | | | | skills/ | mcp.json |
+| OpenClaw | .openclaw/ | | | | | skills/ | |
+| OpenCode | .opencode/ | | | commands/ | agents/ | skills/ | opencode.json |
+| OpenHands | .openhands/ | | | | | skills/ | mcp.json |
+| Pi-Mono | .pi/ | | | agent/prompts/ | | agent/skills/ | |
+| Pochi | .pochi/ | | | | | skills/ | |
+| Qoder | .qoder/ | | rules/ | commands/ | agents/ | skills/ | |
 | Qwen Code | .qwen/ | QWEN.md | | | agents/ | skills/ | settings.json |
-| Roo | .roo/ | AGENTS.md | | commands/ | | skills/ | mcp.json |
-| Warp | .warp/ | WARP.md | | | | |
+| Replit | .agents/ | replit.md | | | | skills/ | |
+| Roo Code | .roo/ | | | commands/ | | skills/ | mcp.json |
+| Trae | .trae/ | | rules/ | | | skills/ | |
+| Trae CN | .trae-cn/ | | rules/ | | | skills/ | |
+| Warp | .warp/ | WARP.md | | | | | |
 | Windsurf | .windsurf/ | | rules/ | | | skills/ | |
+| Zencoder | .zencoder/ | | | | | skills/ | |
 
 The built-in `platforms.jsonc` defines supported platforms, but can be overridden by user configs:
 - Global: `~/.openpackage/platforms.jsonc` (`.json`)
