@@ -19,6 +19,7 @@ import {
   isCommitCached
 } from './git-cache.js';
 import { createCacheManager } from '../core/cache-manager.js';
+import { hasPluginContent } from '../core/install/plugin-detector.js';
 
 const execFileAsync = promisify(execFile);
 const cacheManager = createCacheManager();
@@ -300,11 +301,16 @@ export async function cloneRepoToCache(options: GitCloneOptions): Promise<GitClo
     const hasMarketplaceManifest = await exists(marketplaceManifestPath);
     
     if (!hasManifest && !hasPluginManifest && !hasMarketplaceManifest) {
-      throw new ValidationError(
-        `Cloned repository is not an OpenPackage or Claude Code plugin ` +
-        `(missing ${FILE_PATTERNS.OPENPACKAGE_YML}, ${DIR_PATTERNS.CLAUDE_PLUGIN}/${FILE_PATTERNS.PLUGIN_JSON}, or ${DIR_PATTERNS.CLAUDE_PLUGIN}/${FILE_PATTERNS.MARKETPLACE_JSON} ` +
-        `at ${subdir ? `subdir '${subdir}'` : 'repository root'})`
-      );
+      // Allow repos that have plugin content directories (agents/, skills/, commands/, hooks/)
+      // even without a formal manifest -- enables interactive selection of individual resources
+      const hasContent = await hasPluginContent(finalPath);
+      if (!hasContent) {
+        throw new ValidationError(
+          `Cloned repository is not an OpenPackage or Claude Code plugin ` +
+          `(missing ${FILE_PATTERNS.OPENPACKAGE_YML}, ${DIR_PATTERNS.CLAUDE_PLUGIN}/${FILE_PATTERNS.PLUGIN_JSON}, or ${DIR_PATTERNS.CLAUDE_PLUGIN}/${FILE_PATTERNS.MARKETPLACE_JSON} ` +
+          `at ${subdir ? `subdir '${subdir}'` : 'repository root'})`
+        );
+      }
     }
     
     spinner.stop();
