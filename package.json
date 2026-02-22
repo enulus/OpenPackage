@@ -62,7 +62,7 @@
     "nanoid": "^5.0.7",
     "semver": "^7.7.2",
     "smol-toml": "^1.6.0",
-    "tar": "^6.2.0"
+    "tar": "^7.5.9"
   },
   "devDependencies": {
     "@types/commander": "^2.12.0",
