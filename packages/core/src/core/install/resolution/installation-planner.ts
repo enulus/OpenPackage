@@ -15,8 +15,7 @@ import type {
   InstallationPlannerOptions
 } from './types.js';
 import { getInstalledPackageVersion } from '../../openpackage.js';
-import { join, relative } from 'node:path';
-import { existsSync, statSync } from 'node:fs';
+import { resolveResourceScoping } from '../preprocessing/base-resolver.js';
 
 /**
  * Map resolution source type to ResolvedPackage source.
@@ -121,7 +120,7 @@ export class InstallationPlanner {
         continue;
       }
 
-      const context = this.buildContext(node);
+      const context = await this.buildContext(node);
       contexts.push(context);
       node.installContext = context;
     }
@@ -138,7 +137,7 @@ export class InstallationPlanner {
    * Build InstallationContext for the unified pipeline.
    * Caller must ensure node.loaded is set. Pre-populates source and resolvedPackages so pipeline skips load and resolve.
    */
-  buildContext(node: ResolutionDependencyNode): InstallationContext {
+  async buildContext(node: ResolutionDependencyNode): Promise<InstallationContext> {
     const source = buildPackageSource(node);
     const platforms = this.options.platforms ?? [];
     const installOptions = this.options.installOptions ?? {};
@@ -167,28 +166,13 @@ export class InstallationPlanner {
     const baseAbs = ctx.detectedBase ?? ctx.source.contentRoot;
     if (resourcePath && repoRoot && baseAbs) {
       try {
-        const absResourcePath = join(repoRoot, resourcePath);
-        const relToBaseRaw = relative(baseAbs, absResourcePath)
-          .replace(/\\/g, '/')
-          .replace(/^\.\/?/, '');
-        if (relToBaseRaw && !relToBaseRaw.startsWith('..')) {
-          let isDirectory = false;
-          try {
-            if (existsSync(absResourcePath)) {
-              const s = statSync(absResourcePath);
-              isDirectory = s.isDirectory();
-            }
-          } catch {
-            // best-effort only
-          }
-          
-          const specificPattern = isDirectory ? `${relToBaseRaw.replace(/\/$/, '')}/**` : relToBaseRaw;
-          
+        const result = await resolveResourceScoping(repoRoot, baseAbs, resourcePath);
+        if (result) {
           // Phase 4: If we have a broad pattern from base detection (e.g. "skills/**/*"),
           // but we are installing a specific resource (e.g. "skills/react-best-practices"),
           // we must narrow the pattern to ensure only the requested resource is installed.
-          if (!ctx.matchedPattern || (ctx.matchedPattern.includes('**') && specificPattern.length > ctx.matchedPattern.replace('/**', '').length)) {
-            ctx.matchedPattern = specificPattern;
+          if (!ctx.matchedPattern || (ctx.matchedPattern.includes('**') && result.pattern.length > ctx.matchedPattern.replace('/**', '').length)) {
+            ctx.matchedPattern = result.pattern;
           }
         }
       } catch {

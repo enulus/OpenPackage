@@ -15,6 +15,7 @@ const testFiles: string[] = [
   'tests/core/install/workspace-level-install.test.ts',
   'tests/core/install/recursive-resolution.test.ts',
   'tests/core/install/subsumption-resolver.test.ts',
+  'tests/core/install/resource-scoping.test.ts',
 
   // Core - Platforms
   'tests/core/platforms/platform-extension-filter.test.ts',
