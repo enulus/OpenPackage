@@ -21,7 +21,7 @@ export async function loadPackagePhase(ctx: InstallationContext, output?: Output
     return;
   }
   
-  const out = output ?? resolveOutput();
+  const out = output ?? resolveOutput(ctx.execution);
   const spinner = out.spinner();
   
   try {
@@ -30,12 +30,15 @@ export async function loadPackagePhase(ctx: InstallationContext, output?: Output
     
     // Display loading message with spinner
     const displayName = getSourceDisplayName(ctx);
-    spinner.start(`Loading ${displayName}`);
+    const spinnerMsg = `Loading ${displayName}`;
+    spinner.start(spinnerMsg);
     
     // Load package
     const loaded = await loader.load(ctx.source, ctx.options, ctx.execution);
     
-    spinner.stop();
+    // Stop spinner with the resolved package identity
+    const version = loaded.version ? `@${loaded.version}` : '';
+    spinner.stop(`Installed ${loaded.packageName}${version}`);
 
     // Update context
     ctx.source.packageName = loaded.packageName;

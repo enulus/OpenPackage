@@ -3,6 +3,7 @@ import type { InstallationContext } from '../context.js';
 import type { ExecutionResult } from './execute.js';
 import { displayInstallationResults } from '../../install-reporting.js';
 import { getInstallRootDir } from '../../../../utils/paths.js';
+import { resolveOutput } from '../../../ports/resolve.js';
 
 /**
  * Report results phase
@@ -31,7 +32,8 @@ export async function reportResultsPhase(
     isDependencyInstall,
     namespaced: installResult.namespaced,
     relocatedFiles: installResult.relocatedFiles,
-  });
+    interactive: ctx.execution.interactionPolicy?.isTTY ?? false,
+  }, resolveOutput(ctx.execution));
   
   // Build result data
   return {

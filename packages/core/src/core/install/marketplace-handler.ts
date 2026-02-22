@@ -158,8 +158,7 @@ export async function promptPluginSelection(
 ): Promise<string> {
   const out = resolveOutput(execContext);
   const prompt = resolvePrompt(execContext);
-  // Display marketplace info
-  out.info(`Marketplace: ${marketplace.name}`);
+  // Display marketplace description (header is shown by the spinner stop in orchestrator)
   if (marketplace.description) {
     out.message(marketplace.description);
   }
@@ -555,10 +554,6 @@ async function installRelativePathPlugin(
     path: pluginSubdir
   });
 
-  // Show validation/install spinner for full mode only
-  const installSpinner = out.spinner();
-  installSpinner.start(`Installing ${pluginEntry.name}`);
-
   // Validate plugin structure with marketplace context
   const detection = await detectPluginWithMarketplace(pluginDir, pluginEntry);
   
@@ -572,7 +567,6 @@ async function installRelativePathPlugin(
       path: pluginSubdir,
       strict: pluginEntry.strict
     });
-    installSpinner.stop();
     out.error(`${pluginEntry.name}: ${error}`);
     return { success: false, error };
   }
@@ -582,7 +576,6 @@ async function installRelativePathPlugin(
     if (!(await validatePluginManifest(detection.manifestPath))) {
       const error = `Invalid plugin manifest in '${pluginSubdir}' (cannot parse JSON)`;
       logger.error('Invalid plugin manifest', { plugin: pluginEntry.name });
-      installSpinner.stop();
       out.error(`${pluginEntry.name}: ${error}`);
       return { success: false, error };
     }
@@ -595,16 +588,11 @@ async function installRelativePathPlugin(
     manifestPath: detection.manifestPath
   };
   
+  // Run the unified pipeline — it handles its own spinner and reports results
   const pipelineResult = await runUnifiedInstallPipeline(ctx);
   
-  // Get the actual generated name from the loaded package
-  const installedName = ctx.source.packageName || pluginEntry.name;
-  
-  if (pipelineResult.success) {
-    installSpinner.stop();
-    out.success(installedName);
-  } else {
-    installSpinner.stop();
+  if (!pipelineResult.success) {
+    const installedName = ctx.source.packageName || pluginEntry.name;
     out.error(`${installedName}: ${pipelineResult.error || 'Unknown error'}`);
   }
   
@@ -722,24 +710,15 @@ async function installGitPlugin(
     return await installPluginPartial(basePath, pluginEntry, ctx, repoRoot);
   }
   
-  // Full install: run unified pipeline
+  // Full install: run unified pipeline — it handles its own spinner and reports results
   logger.info('Using full install mode for git plugin', {
     plugin: pluginEntry.name
   });
 
-  const installSpinner = out.spinner();
-  installSpinner.start(`Installing ${pluginEntry.name}`);
-
   const pipelineResult = await runUnifiedInstallPipeline(ctx);
   
-  // Get the actual generated name from the loaded package
-  const installedName = ctx.source.packageName || pluginEntry.name;
-  
-  installSpinner.stop();
-  
-  if (pipelineResult.success) {
-    out.success(installedName);
-  } else {
+  if (!pipelineResult.success) {
+    const installedName = ctx.source.packageName || pluginEntry.name;
     out.error(`${installedName}: ${pipelineResult.error || 'Unknown error'}`);
   }
   

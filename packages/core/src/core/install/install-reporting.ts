@@ -30,6 +30,8 @@ export interface InstallReportData {
   namespaced?: boolean;
   /** Files that were physically relocated on disk during namespace resolution */
   relocatedFiles?: RelocatedFile[];
+  /** When true, use compact note-based display for file lists (interactive mode) */
+  interactive?: boolean;
 }
 
 // ============================================================================
@@ -40,6 +42,27 @@ function renderTreeList(items: string[], output: OutputPort, indent: string = ' 
   for (let i = 0; i < items.length; i++) {
     const connector = getTreeConnector(i === items.length - 1);
     output.info(`${indent}${connector}${items[i]}`);
+  }
+}
+
+/**
+ * Render a file list as a note box (interactive) or tree list (non-interactive).
+ * Matches the pattern used in add.ts and remove.ts.
+ */
+function renderFileList(
+  items: string[],
+  title: string,
+  output: OutputPort,
+  interactive: boolean
+): void {
+  if (interactive) {
+    const maxDisplay = 10;
+    const displayItems = items.slice(0, maxDisplay);
+    const more = items.length > maxDisplay ? `\n... and ${items.length - maxDisplay} more` : '';
+    output.note(displayItems.join('\n') + more, title);
+  } else {
+    output.success(title);
+    renderTreeList(items, output);
   }
 }
 
@@ -63,6 +86,7 @@ export function displayInstallationResults(data: InstallReportData, output: Outp
     isDependencyInstall = true,
     namespaced,
     relocatedFiles,
+    interactive = false,
   } = data;
 
   // Check if installation actually succeeded
@@ -99,11 +123,15 @@ export function displayInstallationResults(data: InstallReportData, output: Outp
   }
 
   // ── Main success header ───────────────────────────────────────────────
-  let summaryText = `Installed ${packageName}`;
-  if (mainPackage) {
-    summaryText += `@${mainPackage.version}`;
+  // In interactive mode, the load-package spinner already displays "Installed <name>@<version>"
+  // so skip the duplicate header.
+  if (!interactive) {
+    let summaryText = `Installed ${packageName}`;
+    if (mainPackage) {
+      summaryText += `@${mainPackage.version}`;
+    }
+    output.success(`${summaryText}`);
   }
-  output.success(`${summaryText}`);
 
   // ── Dependency packages ───────────────────────────────────────────────
   const dependencyPackages = resolvedPackages.filter(f => !f.isRoot);
@@ -125,9 +153,8 @@ export function displayInstallationResults(data: InstallReportData, output: Outp
     const header = namespaced
       ? `Installed files: ${installedFiles.length} (namespaced)`
       : `Installed files: ${installedFiles.length}`;
-    output.success(header);
     const sortedFiles = [...installedFiles].sort((a, b) => a.localeCompare(b));
-    renderTreeList(sortedFiles.map(f => formatPathForDisplay(f)), output);
+    renderFileList(sortedFiles.map(f => formatPathForDisplay(f)), header, output, interactive);
   }
 
   // ── Updated files ─────────────────────────────────────────────────────
@@ -135,26 +162,22 @@ export function displayInstallationResults(data: InstallReportData, output: Outp
     const header = namespaced
       ? `Updated files: ${updatedFiles.length} (namespaced)`
       : `Updated files: ${updatedFiles.length}`;
-    output.success(header);
     const sortedFiles = [...updatedFiles].sort((a, b) => a.localeCompare(b));
-    renderTreeList(sortedFiles.map(f => formatPathForDisplay(f)), output);
+    renderFileList(sortedFiles.map(f => formatPathForDisplay(f)), header, output, interactive);
   }
 
   // ── Relocated files (namespace-triggered moves) ───────────────────────
   if (relocatedFiles && relocatedFiles.length > 0) {
-    output.success(`Relocated files: ${relocatedFiles.length}`);
     const lines = relocatedFiles.map(
       r => `${formatPathForDisplay(r.from)} → ${formatPathForDisplay(r.to)}`
     );
-    renderTreeList(lines, output);
+    renderFileList(lines, `Relocated files: ${relocatedFiles.length}`, output, interactive);
   }
 
   // ── Root files ────────────────────────────────────────────────────────
   if (rootFileResults) {
     const totalRootFiles = rootFileResults.installed.length + rootFileResults.updated.length;
     if (totalRootFiles > 0) {
-      output.success(`Root files: ${totalRootFiles} file(s)`);
-
       const rootLines: string[] = [];
       if (rootFileResults.installed.length > 0) {
         const sortedInstalled = [...rootFileResults.installed].sort((a, b) => a.localeCompare(b));
@@ -168,7 +191,7 @@ export function displayInstallationResults(data: InstallReportData, output: Outp
           rootLines.push(`${formatPathForDisplay(file)} (updated)`);
         }
       }
-      renderTreeList(rootLines, output);
+      renderFileList(rootLines, `Root files: ${totalRootFiles} file(s)`, output, interactive);
     }
   }
 

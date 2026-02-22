@@ -70,6 +70,12 @@ export function getSourceDisplayName(ctx: InstallationContext): string {
         : source.packageName;
     
     case 'path':
+      // For marketplace plugins loaded from cache, show the plugin name
+      // instead of exposing the internal cache path
+      if (source.pluginMetadata?.marketplaceSource || source.pluginMetadata?.marketplaceEntry) {
+        const entryName = source.pluginMetadata.marketplaceEntry?.name;
+        return source.packageName || entryName || 'plugin';
+      }
       return `${source.packageName} (from ${source.localPath})`;
     
     case 'git':

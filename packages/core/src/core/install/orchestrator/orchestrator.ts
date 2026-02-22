@@ -326,7 +326,7 @@ export class InstallOrchestrator {
      { repoPath: context.source.contentRoot }
    );
    
-   spinner.stop();
+    spinner.stop(`Marketplace: ${marketplace.name}`);
    
    // Marketplace already has interactive plugin selection (promptPluginSelection, promptInstallMode).
    // Per InstallOptions.interactive: "Ignored for marketplace sources (which already have plugin selection)."
