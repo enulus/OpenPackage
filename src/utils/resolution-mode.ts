@@ -1,5 +1,5 @@
 import type { InstallOptions } from '../types/index.js';
-import type { InstallResolutionMode } from '../core/install/types.js';
+import type { InstallResolutionMode } from '../types/install.js';
 
 /**
  * Determine the resolution mode based on CLI flags

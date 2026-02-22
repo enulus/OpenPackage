@@ -3,8 +3,8 @@
  */
 
 import type { RemotePullFailureReason } from '../remote-pull.js';
-
-export type InstallResolutionMode = 'default' | 'remote-primary' | 'local-only';
+import type { InstallResolutionMode } from '../../types/install.js';
+export type { InstallResolutionMode };
 
 export interface PackageRemoteResolutionOutcome {
   name: string;

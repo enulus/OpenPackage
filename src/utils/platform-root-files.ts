@@ -4,7 +4,8 @@
  */
 
 import { FILE_PATTERNS, PACKAGE_ROOT_DIRS } from '../constants/index.js';
-import { getPlatformDefinition, type Platform } from '../core/platforms.js';
+import type { Platform } from '../types/platform.js';
+import { getPlatformDefinition } from '../core/platforms.js';
 
 /**
  * Get all platform root file names (including universal AGENTS.md) for the given platforms.

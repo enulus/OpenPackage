@@ -1,6 +1,5 @@
-import { Command } from 'commander';
+import type { Command } from 'commander';
 
-import { withErrorHandling } from '../utils/errors.js';
 import { runRemoveFromSourcePipeline, runRemoveFromSourcePipelineBatch, type RemoveFromSourceOptions } from '../core/remove/remove-from-source-pipeline.js';
 import { resolveMutableSource } from '../core/source-resolution/resolve-mutable-source.js';
 import { readWorkspaceIndex } from '../utils/workspace-index-yml.js';
@@ -15,136 +14,125 @@ import { createInteractionPolicy, PromptTier } from '../core/interaction-policy.
 import { setOutputMode, output, isInteractive } from '../utils/output.js';
 import type { ExecutionContext } from '../types/execution-context.js';
 
-export function setupRemoveCommand(program: Command): void {
-  program
-    .command('remove')
-    .alias('rm')
-    .argument('[resource-spec]', 'file, directory, or dependency to remove. If omitted, shows interactive file selector.')
-    .description('Remove files or dependencies from a mutable package source or workspace package')
-    .option('--from <package-name>', 'source package name (defaults to workspace package)')
-    .option('--force', 'Skip confirmation prompts')
-    .option('--dry-run', 'Preview what would be removed without actually deleting')
-    .action(
-        withErrorHandling(async (resource: string | undefined, options: RemoveFromSourceOptions & { from?: string }, command: Command) => {
-        const cwd = process.cwd();
-        const programOpts = command.parent?.opts() || {};
+export async function setupRemoveCommand(args: any[]): Promise<void> {
+  const [resource, options, command] = args as [string | undefined, RemoveFromSourceOptions & { from?: string }, Command];
+  const cwd = process.cwd();
+  const programOpts = command.parent?.opts() || {};
 
-        const execContext = await createExecutionContext({
-          global: false,
-          cwd: programOpts.cwd,
-        });
+  const execContext = await createExecutionContext({
+    global: false,
+    cwd: programOpts.cwd,
+  });
 
-        const policy = createInteractionPolicy({
-          interactive: !resource,
-          force: options.force,
-        });
-        execContext.interactionPolicy = policy;
+  const policy = createInteractionPolicy({
+    interactive: !resource,
+    force: options.force,
+  });
+  execContext.interactionPolicy = policy;
 
-        // Set output mode: interactive (clack UI) when no resource provided, plain console otherwise
-        setOutputMode(!resource);
+  // Set output mode: interactive (clack UI) when no resource provided, plain console otherwise
+  setOutputMode(!resource);
 
-        // If no resource provided, show interactive selector
-        if (!resource) {
-          if (!policy.canPrompt(PromptTier.OptionalMenu)) {
-            throw new Error(
-              '<resource> argument is required in non-interactive mode.\n' +
-              'Usage: opkg remove <resource> [options]\n\n' +
-              'Examples:\n' +
-              '  opkg remove file.txt                        # Remove file from workspace package\n' +
-              '  opkg remove file.txt --from package-name    # Remove from specific package\n' +
-              '  opkg remove essential-agent --from essentials  # Remove dependency from package\n' +
-              '  opkg remove                                 # Interactive mode (TTY only)'
-            );
-          }
-          
-          // Step 1: Select package (if not specified via --from)
-          let selectedPackage: string | null = null;
-          let packageDir: string;
-          
-          if (options.from) {
-            // Package specified via --from option - resolve from workspace or global
-            try {
-              const source = await resolveMutableSource({ cwd, packageName: options.from });
-              selectedPackage = source.packageName;
-              packageDir = source.absolutePath;
-            } catch (error) {
-              throw new Error(error instanceof Error ? error.message : String(error));
-            }
-          } else {
-            // Show interactive package selector
-            const selection = await interactivePackageSelect({
-              cwd,
-              message: 'Select package to remove files from',
-              allowWorkspace: true
-            });
-            
-            if (!selection) {
-              return;
-            }
-            
-            const resolved = resolvePackageSelection(cwd, selection);
-            if (!resolved) {
-              return;
-            }
-            
-            selectedPackage = resolved.packageName;
-            packageDir = resolved.packageDir;
-          }
-          
-          // Show package/source before file selection
-          const packageLabel = selectedPackage || 'workspace package';
-          const displayPath = formatPathForDisplay(packageDir, cwd);
-          output.step(`From: ${packageLabel} (${displayPath})`);
-          output.connector();
-          
-          // Step 2: Select files from package
-          const selectedFiles = await interactiveFileSelect({
-            cwd,
-            basePath: packageDir,
-            message: `Select files or directories to remove from ${packageLabel}`,
-            placeholder: 'Type to search...',
-            includeDirs: true
-          });
-          
-          // Handle cancellation or empty selection
-          if (!selectedFiles || selectedFiles.length === 0) {
-            return;
-          }
-          
-          // Expand any directory selections to individual files
-          let filesToProcess: string[];
-          if (hasDirectorySelections(selectedFiles)) {
-            filesToProcess = await expandDirectorySelections(selectedFiles, packageDir);
-            output.info(`Found ${filesToProcess.length} total file${filesToProcess.length === 1 ? '' : 's'} to remove`);
-          } else {
-            filesToProcess = selectedFiles;
-          }
+  // If no resource provided, show interactive selector
+  if (!resource) {
+    if (!policy.canPrompt(PromptTier.OptionalMenu)) {
+      throw new Error(
+        '<resource> argument is required in non-interactive mode.\n' +
+        'Usage: opkg remove <resource> [options]\n\n' +
+        'Examples:\n' +
+        '  opkg remove file.txt                        # Remove file from workspace package\n' +
+        '  opkg remove file.txt --from package-name    # Remove from specific package\n' +
+        '  opkg remove essential-agent --from essentials  # Remove dependency from package\n' +
+        '  opkg remove                                 # Interactive mode (TTY only)'
+      );
+    }
+    
+    // Step 1: Select package (if not specified via --from)
+    let selectedPackage: string | null = null;
+    let packageDir: string;
+    
+    if (options.from) {
+      // Package specified via --from option - resolve from workspace or global
+      try {
+        const source = await resolveMutableSource({ cwd, packageName: options.from });
+        selectedPackage = source.packageName;
+        packageDir = source.absolutePath;
+      } catch (error) {
+        throw new Error(error instanceof Error ? error.message : String(error));
+      }
+    } else {
+      // Show interactive package selector
+      const selection = await interactivePackageSelect({
+        cwd,
+        message: 'Select package to remove files from',
+        allowWorkspace: true
+      });
+      
+      if (!selection) {
+        return;
+      }
+      
+      const resolved = resolvePackageSelection(cwd, selection);
+      if (!resolved) {
+        return;
+      }
+      
+      selectedPackage = resolved.packageName;
+      packageDir = resolved.packageDir;
+    }
+    
+    // Show package/source before file selection
+    const packageLabel = selectedPackage || 'workspace package';
+    const displayPath = formatPathForDisplay(packageDir, cwd);
+    output.step(`From: ${packageLabel} (${displayPath})`);
+    output.connector();
+    
+    // Step 2: Select files from package
+    const selectedFiles = await interactiveFileSelect({
+      cwd,
+      basePath: packageDir,
+      message: `Select files or directories to remove from ${packageLabel}`,
+      placeholder: 'Type to search...',
+      includeDirs: true
+    });
+    
+    // Handle cancellation or empty selection
+    if (!selectedFiles || selectedFiles.length === 0) {
+      return;
+    }
+    
+    // Expand any directory selections to individual files
+    let filesToProcess: string[];
+    if (hasDirectorySelections(selectedFiles)) {
+      filesToProcess = await expandDirectorySelections(selectedFiles, packageDir);
+      output.info(`Found ${filesToProcess.length} total file${filesToProcess.length === 1 ? '' : 's'} to remove`);
+    } else {
+      filesToProcess = selectedFiles;
+    }
 
-          const resolvedName = selectedPackage ?? (await buildWorkspacePackageContext(cwd)).name;
+    const resolvedName = selectedPackage ?? (await buildWorkspacePackageContext(cwd)).name;
 
-          // Batch remove: one confirmation, one removal pass
-          try {
-            const result = await runRemoveFromSourcePipelineBatch(
-              selectedPackage,
-              packageDir,
-              resolvedName,
-              filesToProcess,
-              { ...options, execContext }
-            );
-            if (!result.success) throw new Error(result.error || 'Remove operation failed');
-            if (result.data) await handleRemoveResult(result.data, options, cwd, true);
-          } catch (error) {
-            if (error instanceof UserCancellationError) return;
-            throw error;
-          }
+    // Batch remove: one confirmation, one removal pass
+    try {
+      const result = await runRemoveFromSourcePipelineBatch(
+        selectedPackage,
+        packageDir,
+        resolvedName,
+        filesToProcess,
+        { ...options, execContext }
+      );
+      if (!result.success) throw new Error(result.error || 'Remove operation failed');
+      if (result.data) await handleRemoveResult(result.data, options, cwd, true);
+    } catch (error) {
+      if (error instanceof UserCancellationError) return;
+      throw error;
+    }
 
-          return;
-        }
-        
-        // Process single resource (existing behavior)
-        await processRemoveResource(options.from, resource, options, cwd, execContext);
-      })
-    );
+    return;
+  }
+  
+  // Process single resource (existing behavior)
+  await processRemoveResource(options.from, resource, options, cwd, execContext);
 }
 
 /** Shared result handling for single-path and batch removal.

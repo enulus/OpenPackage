@@ -2,13 +2,20 @@
  * Common types and interfaces for the OpenPackage CLI application
  */
 
-import type { Platform } from '../core/platforms.js';
-
 // Re-export flow types
 export * from './flows.js';
 export * from './platform-flows.js';
 export * from './conversion-context.js';
 export * from './execution-context.js';
+
+// Re-export shared types for cross-layer imports
+// Note: PlatformDetectionResult is excluded from platform.ts re-export
+// because platform-flows.ts already exports a richer version with that name.
+// Consumers needing the simpler core version should import directly from './platform.js'.
+import type { Platform, PlatformDefinition, PlatformPaths, PlatformDirectoryPaths } from './platform.js';
+export type { Platform, PlatformDefinition, PlatformPaths, PlatformDirectoryPaths };
+export * from './resources.js';
+export * from './install.js';
 
 // Core application types
 export interface OpenPackageDirectories {

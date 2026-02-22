@@ -341,6 +341,9 @@ public
 # data/
 # uploads/
 
+# Auto-generated source files
+src/generated/
+
 # Workspace specific directories
 .openpackage/
 .cursor/

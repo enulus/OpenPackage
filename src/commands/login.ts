@@ -1,5 +1,3 @@
-import { Command } from 'commander';
-import { withErrorHandling } from '../utils/errors.js';
 import { authManager } from '../core/auth.js';
 import {
 	startDeviceAuthorization,
@@ -15,55 +13,49 @@ type LoginOptions = {
 	profile?: string;
 };
 
-export function setupLoginCommand(program: Command): void {
-	program
-		.command('login')
-               .description('Authenticate with OpenPackage')
-		.option('--profile <profile>', 'profile to use for authentication')
-		.action(
-			withErrorHandling(async (options: LoginOptions) => {
-				const profileName = authManager.getCurrentProfile({
-					profile: options.profile,
-				});
+export async function setupLoginCommand(args: any[]): Promise<void> {
+	const [options] = args as [LoginOptions];
 
-				console.log(`Using profile: ${profileName}`);
+	const profileName = authManager.getCurrentProfile({
+		profile: options.profile,
+	});
 
-				const authorization = await startDeviceAuthorization();
+	console.log(`Using profile: ${profileName}`);
 
-				console.log('A browser will open for you to confirm sign-in.');
-				console.log(`User code: ${authorization.userCode}`);
-				console.log(`Verification URL: ${authorization.verificationUri}`);
-				console.log('');
-				console.log('If the browser does not open, visit the URL and enter the code above.');
+	const authorization = await startDeviceAuthorization();
 
-				openBrowser(authorization.verificationUriComplete);
+	console.log('A browser will open for you to confirm sign-in.');
+	console.log(`User code: ${authorization.userCode}`);
+	console.log(`Verification URL: ${authorization.verificationUri}`);
+	console.log('');
+	console.log('If the browser does not open, visit the URL and enter the code above.');
 
-				try {
-					const tokens = await pollForDeviceToken({
-						deviceCode: authorization.deviceCode,
-						intervalSeconds: authorization.interval,
-						expiresInSeconds: authorization.expiresIn,
-					});
+	openBrowser(authorization.verificationUriComplete);
 
-					await persistTokens(profileName, tokens);
+	try {
+		const tokens = await pollForDeviceToken({
+			deviceCode: authorization.deviceCode,
+			intervalSeconds: authorization.interval,
+			expiresInSeconds: authorization.expiresIn,
+		});
 
-					const username = tokens.username ?? (await resolveUsername(profileName));
-					if (username) {
-						await profileManager.setProfileDefaultScope(profileName, `@${username}`);
-						console.log(`✓ Default scope set to @${username} for profile "${profileName}".`);
-					} else {
-						logger.debug('Could not derive username from API key; default scope not set');
-					}
+		await persistTokens(profileName, tokens);
 
-					console.log('');
-					console.log('✓ Login successful.');
-					console.log(`✓ API key stored for profile "${profileName}".`);
-				} catch (error: any) {
-					logger.debug('Device login failed', { error });
-					throw error;
-				}
-			})
-		);
+		const username = tokens.username ?? (await resolveUsername(profileName));
+		if (username) {
+			await profileManager.setProfileDefaultScope(profileName, `@${username}`);
+			console.log(`✓ Default scope set to @${username} for profile "${profileName}".`);
+		} else {
+			logger.debug('Could not derive username from API key; default scope not set');
+		}
+
+		console.log('');
+		console.log('✓ Login successful.');
+		console.log(`✓ API key stored for profile "${profileName}".`);
+	} catch (error: any) {
+		logger.debug('Device login failed', { error });
+		throw error;
+	}
 }
 
 async function resolveUsername(profileName: string): Promise<string | undefined> {
@@ -74,4 +66,3 @@ async function resolveUsername(profileName: string): Promise<string | undefined>
 		return undefined;
 	}
 }
-

@@ -1,9 +1,8 @@
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import { join, relative, resolve } from 'path';
 
 import type { ExecutionContext } from '../types/execution-context.js';
 
-import { withErrorHandling } from '../utils/errors.js';
 import { runAddToSourcePipeline, runAddToSourcePipelineBatch, type AddToSourceResult } from '../core/add/add-to-source-pipeline.js';
 import { classifyAddInput, type AddInputClassification } from '../core/add/add-input-classifier.js';
 import { runAddDependencyFlow, type AddDependencyResult } from '../core/add/add-dependency-flow.js';
@@ -156,92 +155,79 @@ async function processAddResource(
   }
 }
 
-export function setupAddCommand(program: Command): void {
-  program
-    .command('add')
-    .argument('[resource-spec]',
-      'resource to add (package[@version], gh@owner/repo, https://github.com/owner/repo, or /path/to/file). If omitted, shows interactive file selector.')
-    .description('Add a dependency to openpackage.yml or copy files to a package')
-    .option('--to <package-name>', 'target package (for dependency: which manifest; for copy: which package source)')
-    .option('--dev', 'add to dev-dependencies instead of dependencies')
-    .option('--copy', 'force copy mode (copy files instead of recording dependency)')
-    .option('--platform-specific', 'save platform-specific variants for platform subdir inputs')
-    .option('--force', 'overwrite existing files without prompting')
-    .action(
-      withErrorHandling(async (resource: string | undefined, options, command: Command) => {
-        const cwd = process.cwd();
-        const programOpts = command.parent?.opts() || {};
+export async function setupAddCommand(args: any[]): Promise<void> {
+  const [resource, options, command] = args as [string | undefined, any, Command];
+  const cwd = process.cwd();
+  const programOpts = command.parent?.opts() || {};
 
-        const execContext = await createExecutionContext({
-          global: false,
-          cwd: programOpts.cwd,
-        });
+  const execContext = await createExecutionContext({
+    global: false,
+    cwd: programOpts.cwd,
+  });
 
-        const policy = createInteractionPolicy({
-          interactive: !resource,
-          force: options.force,
-        });
-        execContext.interactionPolicy = policy;
+  const policy = createInteractionPolicy({
+    interactive: !resource,
+    force: options.force,
+  });
+  execContext.interactionPolicy = policy;
 
-        // Set output mode: interactive (clack UI) when no resource, plain console otherwise
-        setOutputMode(!resource);
+  // Set output mode: interactive (clack UI) when no resource, plain console otherwise
+  setOutputMode(!resource);
 
-        // If no resource provided, show interactive file selector
-        if (!resource) {
-          if (!policy.canPrompt(PromptTier.OptionalMenu)) {
-            throw new Error(
-              '<resource-spec> argument is required in non-interactive mode.\n' +
-              'Usage: opkg add <resource-spec> [options]\n\n' +
-              'Examples:\n' +
-              '  opkg add ./path/to/file.txt              # Add local file\n' +
-              '  opkg add gh@owner/repo                   # Add from GitHub\n' +
-              '  opkg add package@version                 # Add package dependency'
-            );
-          }
+  // If no resource provided, show interactive file selector
+  if (!resource) {
+    if (!policy.canPrompt(PromptTier.OptionalMenu)) {
+      throw new Error(
+        '<resource-spec> argument is required in non-interactive mode.\n' +
+        'Usage: opkg add <resource-spec> [options]\n\n' +
+        'Examples:\n' +
+        '  opkg add ./path/to/file.txt              # Add local file\n' +
+        '  opkg add gh@owner/repo                   # Add from GitHub\n' +
+        '  opkg add package@version                 # Add package dependency'
+      );
+    }
 
-          // Resolve target package and show header before file selection
-          let pkgLabel: string;
-          let sourcePath: string;
-          if (options.to) {
-            const source = await resolveMutableSource({ cwd, packageName: options.to });
-            pkgLabel = source.packageName;
-            sourcePath = source.absolutePath;
-          } else {
-            const context = await buildWorkspacePackageContext(cwd);
-            pkgLabel = 'workspace package';
-            sourcePath = context.packageRootDir;
-          }
-          const displayPath = formatPathForDisplay(sourcePath, cwd);
-          output.step(`To: ${pkgLabel} (${displayPath})`);
-          output.connector();
+    // Resolve target package and show header before file selection
+    let pkgLabel: string;
+    let sourcePath: string;
+    if (options.to) {
+      const source = await resolveMutableSource({ cwd, packageName: options.to });
+      pkgLabel = source.packageName;
+      sourcePath = source.absolutePath;
+    } else {
+      const context = await buildWorkspacePackageContext(cwd);
+      pkgLabel = 'workspace package';
+      sourcePath = context.packageRootDir;
+    }
+    const displayPath = formatPathForDisplay(sourcePath, cwd);
+    output.step(`To: ${pkgLabel} (${displayPath})`);
+    output.connector();
 
-          // Show interactive file selector
-          const selectedFiles = await interactiveFileSelect({ cwd, includeDirs: true });
-          
-          // Handle cancellation or empty selection
-          if (!selectedFiles || selectedFiles.length === 0) {
-            return;
-          }
-          
-          // Expand any directory selections to individual files
-          let filesToProcess: string[];
-          if (hasDirectorySelections(selectedFiles)) {
-            filesToProcess = await expandDirectorySelections(selectedFiles, cwd);
-            output.info(`Found ${filesToProcess.length} total file${filesToProcess.length === 1 ? '' : 's'} to add`);
-          } else {
-            filesToProcess = selectedFiles;
-          }
+    // Show interactive file selector
+    const selectedFiles = await interactiveFileSelect({ cwd, includeDirs: true });
+    
+    // Handle cancellation or empty selection
+    if (!selectedFiles || selectedFiles.length === 0) {
+      return;
+    }
+    
+    // Expand any directory selections to individual files
+    let filesToProcess: string[];
+    if (hasDirectorySelections(selectedFiles)) {
+      filesToProcess = await expandDirectorySelections(selectedFiles, cwd);
+      output.info(`Found ${filesToProcess.length} total file${filesToProcess.length === 1 ? '' : 's'} to add`);
+    } else {
+      filesToProcess = selectedFiles;
+    }
 
-          const absPaths = filesToProcess.map((f) => join(cwd, f));
-          const result = await runAddToSourcePipelineBatch(options.to, absPaths, cwd, { ...options, execContext });
-          if (!result.success) throw new Error(result.error || 'Add operation failed');
-          if (result.data) displayAddResults(result.data, true);
+    const absPaths = filesToProcess.map((f) => join(cwd, f));
+    const result = await runAddToSourcePipelineBatch(options.to, absPaths, cwd, { ...options, execContext });
+    if (!result.success) throw new Error(result.error || 'Add operation failed');
+    if (result.data) displayAddResults(result.data, true);
 
-          return;
-        }
-        
-        // Process single resource (existing behavior)
-        await processAddResource(resource, options, cwd, execContext);
-      })
-    );
+    return;
+  }
+  
+  // Process single resource (existing behavior)
+  await processAddResource(resource, options, cwd, execContext);
 }

@@ -1,15 +1,5 @@
-export type ResourceTypeId = 'rule' | 'agent' | 'command' | 'skill' | 'hook' | 'mcp' | 'other';
-
-export type InstallableResourceTypeId = Exclude<ResourceTypeId, 'other'>;
-
-export interface ResourceTypeDef {
-  id: ResourceTypeId;
-  dirName: string | null;
-  labelPlural: string;
-  pluralKey: string;
-  order: number;
-  installable: boolean;
-}
+import type { ResourceTypeId, InstallableResourceTypeId, ResourceTypeDef } from '../../types/resources.js';
+export type { ResourceTypeId, InstallableResourceTypeId, ResourceTypeDef };
 
 const DEFINITIONS: readonly ResourceTypeDef[] = [
   { id: 'rule',    dirName: 'rules',    labelPlural: 'Rules',              pluralKey: 'rules',    order: 0, installable: true  },

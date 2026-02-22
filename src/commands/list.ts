@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 
 import { CommandResult } from '../types/index.js';
-import { withErrorHandling, ValidationError } from '../utils/errors.js';
+import { ValidationError } from '../utils/errors.js';
 import { parseWorkspaceScope } from '../utils/scope-resolution.js';
 import { createExecutionContext } from '../core/execution-context.js';
 import {
@@ -178,22 +178,10 @@ async function listCommand(
 }
 
 // ---------------------------------------------------------------------------
-// Commander setup
+// Command setup
 // ---------------------------------------------------------------------------
 
-export function setupListCommand(program: Command): void {
-  program
-    .command('list')
-    .alias('ls')
-    .description('List installed resources and packages')
-    .argument('[resource-spec]', 'filter by a specific installed package')
-    .option('-s, --scope <scope>', 'workspace scope: project or global (default: both)')
-    .option('-d, --deps', 'show dependency tree (full tree including transitive dependencies)')
-    .option('-f, --files', 'show individual file paths')
-    .option('-t, --tracked', 'show only tracked resources (skip untracked scan)')
-    .option('-u, --untracked', 'show only untracked resources')
-    .option('--platforms <platforms...>', 'filter by specific platforms (e.g., cursor, claude)')
-    .action(withErrorHandling(async (packageName: string | undefined, options: ListOptions, command: Command) => {
-      await listCommand(packageName, options, command);
-    }));
+export async function setupListCommand(args: any[]): Promise<void> {
+  const [packageName, options, command] = args as [string | undefined, ListOptions, Command];
+  await listCommand(packageName, options, command);
 }

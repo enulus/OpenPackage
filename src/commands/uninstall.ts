@@ -1,9 +1,9 @@
 import path from 'path';
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import { note, spinner, outro, cancel, taskLog } from '@clack/prompts';
 
 import type { UninstallOptions, ExecutionContext } from '../types/index.js';
-import { withErrorHandling, ValidationError } from '../utils/errors.js';
+import { ValidationError } from '../utils/errors.js';
 import { runUninstallPipeline, runSelectiveUninstallPipeline } from '../core/uninstall/uninstall-pipeline.js';
 import { reportUninstallResult, reportResourceUninstallResult } from '../core/uninstall/uninstall-reporter.js';
 import { createExecutionContext } from '../core/execution-context.js';
@@ -539,16 +539,7 @@ function formatFileListHint(files: string[], maxFiles: number = 2): string {
 // Command setup
 // ---------------------------------------------------------------------------
 
-export function setupUninstallCommand(program: Command): void {
-  program
-    .command('uninstall')
-    .alias('un')
-    .description('Remove installed resources or packages')
-    .argument('[resource-spec]', 'name of the resource or package to uninstall')
-    .option('-g, --global', 'uninstall from home directory (~/) instead of current workspace')
-    .option('--dry-run', 'preview changes without applying them')
-    .option('-i, --interactive', 'interactively select items to uninstall')
-    .action(withErrorHandling(async (nameArg: string | undefined, options: UninstallCommandOptions, command: Command) => {
-      await uninstallCommand(nameArg, options, command);
-    }));
+export async function setupUninstallCommand(args: any[]): Promise<void> {
+  const [nameArg, options, command] = args as [string | undefined, UninstallCommandOptions, Command];
+  await uninstallCommand(nameArg, options, command);
 }

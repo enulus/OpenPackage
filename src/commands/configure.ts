@@ -1,9 +1,8 @@
-import { Command } from 'commander';
 import { CommandResult } from '../types/index.js';
 import { profileManager } from '../core/profiles.js';
 import { ensureOpenPackageDirectories } from '../core/directory.js';
 import { logger } from '../utils/logger.js';
-import { withErrorHandling, UserCancellationError } from '../utils/errors.js';
+import { UserCancellationError } from '../utils/errors.js';
 import { safePrompts } from '../utils/prompts.js';
 import { showApiKeySignupMessage } from '../utils/messages.js';
 
@@ -59,14 +58,14 @@ async function setupProfile(profileName: string): Promise<CommandResult> {
       api_key: response.apiKey
     });
 
-    console.log(`✅ Profile '${profileName}' configured successfully`);
+    console.log(`\u2705 Profile '${profileName}' configured successfully`);
     
     if (profileName === 'default') {
       console.log('');
-      console.log('💡 You can now use remote registry features with this profile.');
+      console.log('\uD83D\uDCA1 You can now use remote registry features with this profile.');
     } else {
       console.log('');
-      console.log(`💡 You can now use remote registry features with --profile ${profileName}`);
+      console.log(`\uD83D\uDCA1 You can now use remote registry features with --profile ${profileName}`);
     }
 
     return {
@@ -111,7 +110,7 @@ async function listProfiles(): Promise<CommandResult> {
       
       console.log(`  ${profileName}`);
       console.log(`    Description: ${description}`);
-      console.log(`    Credentials: ${hasCredentials ? '✅ Configured' : '❌ Missing'}`);
+      console.log(`    Credentials: ${hasCredentials ? '\u2705 Configured' : '\u274C Missing'}`);
       console.log('');
     }
 
@@ -152,7 +151,7 @@ async function deleteProfile(profileName: string): Promise<CommandResult> {
     }
 
     await profileManager.deleteProfile(profileName);
-    console.log(`✅ Profile '${profileName}' deleted successfully`);
+    console.log(`\u2705 Profile '${profileName}' deleted successfully`);
 
     return {
       success: true,
@@ -206,18 +205,10 @@ async function configureCommand(options: ConfigureOptions): Promise<CommandResul
 /**
  * Setup the configure command
  */
-export function setupConfigureCommand(program: Command): void {
-  program
-    .command('configure')
-    .alias('config')
-    .description('Configure default profile and authentication')
-    .option('--profile <name>', 'profile name to configure')
-    .option('--list', 'list all configured profiles')
-    .option('--delete <name>', 'delete the specified profile')
-    .action(withErrorHandling(async (options: ConfigureOptions) => {
-      const result = await configureCommand(options);
-      if (!result.success) {
-        throw new Error(result.error || 'Configure operation failed');
-      }
-    }));
+export async function setupConfigureCommand(args: any[]): Promise<void> {
+  const [options] = args as [ConfigureOptions];
+  const result = await configureCommand(options);
+  if (!result.success) {
+    throw new Error(result.error || 'Configure operation failed');
+  }
 }

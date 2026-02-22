@@ -1,5 +1,5 @@
 import { FILE_PATTERNS } from '../constants/index.js';
-import type { Platform } from '../core/platforms.js';
+import type { Platform } from '../types/platform.js';
 import {
   deepEqualYaml,
   deepMerge,

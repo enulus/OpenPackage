@@ -20,28 +20,15 @@ import { readJsoncFileSync, readJsoncOrJson } from "../utils/jsonc.js"
 import * as os from "os"
 import type { Flow, SwitchExpression } from "../types/flows.js"
 import type { GlobalFlowsConfig } from "../types/platform-flows.js"
+import type { Platform, PlatformDefinition, PlatformDetectionResult, PlatformPaths, PlatformDirectoryPaths } from "../types/platform.js"
+export type { Platform, PlatformDefinition, PlatformDetectionResult, PlatformPaths, PlatformDirectoryPaths }
 import { validateSwitchExpression } from "./flows/switch-resolver.js"
 import { 
   matchesAnyPattern, 
   extractSubdirectoriesFromPatterns 
 } from "./universal-patterns.js"
 
-export type Platform = string
-
-// Platform definition structure - export/import flows (no legacy subdirs)
-export interface PlatformDefinition {
-  id: Platform
-  name: string
-  rootDir?: string  // Optional now, use detection instead
-  rootFile?: string  // Optional now, use detection instead
-  detection?: string[]  // Array of glob patterns for detection
-  export: Flow[]  // Export flows: Package → Workspace (install, apply)
-  import: Flow[]  // Import flows: Workspace → Package (save)
-  aliases?: string[]
-  enabled: boolean
-  description?: string
-  variables?: Record<string, any>
-}
+// PlatformDefinition is now imported from ../types/platform.js
 
 // Types for JSONC config structure (array format)
 interface PlatformConfig {
@@ -688,20 +675,7 @@ export function getPlatformRootFiles(targetDir?: string): string[] {
 
 
 
-export interface PlatformDetectionResult {
-  name: Platform
-  detected: boolean
-}
-
-export type PlatformPaths = {
-  rootDir: string
-  rootFile?: string
-  subdirs: Record<string, string> // universalDir -> full directory path
-}
-
-export interface PlatformDirectoryPaths {
-  [platformName: string]: PlatformPaths
-}
+// PlatformDetectionResult, PlatformPaths, PlatformDirectoryPaths are now imported from ../types/platform.js
 
 /**
  * Get platform definition by name

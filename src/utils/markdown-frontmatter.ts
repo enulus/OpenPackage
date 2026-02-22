@@ -1,5 +1,5 @@
 import * as yaml from 'js-yaml';
-import type { Platform } from '../core/platforms.js';
+import type { Platform } from '../types/platform.js';
 import { resolvePlatformKey } from '../core/platforms.js';
 
 export interface FrontmatterSplitResult<T = any> {

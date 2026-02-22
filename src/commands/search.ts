@@ -3,7 +3,7 @@ import { Command } from 'commander';
 
 import { CommandResult } from '../types/index.js';
 import { PackageYml } from '../types/index.js';
-import { withErrorHandling, ValidationError } from '../utils/errors.js';
+import { ValidationError } from '../utils/errors.js';
 import { createExecutionContext } from '../core/execution-context.js';
 import { listAllPackages, listPackageVersions } from '../core/directory.js';
 import { getLocalPackagesDir } from '../utils/paths.js';
@@ -278,19 +278,9 @@ async function searchCommand(
   return { success: true };
 }
 
-// ── Commander setup ──────────────────────────────────────────────
+// ── Command setup ──────────────────────────────────────────────
 
-export function setupSearchCommand(program: Command): void {
-  program
-    .command('search')
-    .description('Search available packages across local sources')
-    .argument('[query]', 'filter by package name, keywords, or description')
-    .option('-p, --project', 'search project packages only (./.openpackage/packages)')
-    .option('-g, --global', 'search global packages only (~/.openpackage/packages)')
-    .option('-r, --registry', 'search local registry only (~/.openpackage/registry)')
-    .option('-a, --all', 'show all versions for registry packages (default: latest only)')
-    .option('--json', 'output results as JSON')
-    .action(withErrorHandling(async (query: string | undefined, options: SearchOptions, command: Command) => {
-      await searchCommand(query, options, command);
-    }));
+export async function setupSearchCommand(args: any[]): Promise<void> {
+  const [query, options, command] = args as [string | undefined, SearchOptions, Command];
+  await searchCommand(query, options, command);
 }

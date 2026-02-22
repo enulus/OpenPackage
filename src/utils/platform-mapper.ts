@@ -1,13 +1,11 @@
 import { join, basename, dirname, extname, relative, resolve } from 'path';
 import { realpathSync } from 'fs';
+import type { Platform, PlatformPaths, PlatformDefinition } from '../types/platform.js';
 import {
   getPlatformDefinition,
   getDetectedPlatforms,
   getAllPlatforms,
-  getPlatformDirectoryPathsForPlatform,
-  type Platform,
-  type PlatformPaths,
-  type PlatformDefinition
+  getPlatformDirectoryPathsForPlatform
 } from '../core/platforms.js';
 import type { Flow } from '../types/flows.js';
 import { logger } from './logger.js';

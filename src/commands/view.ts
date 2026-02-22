@@ -1,8 +1,8 @@
 import { join } from 'path';
-import { Command } from 'commander';
+import type { Command } from 'commander';
 
 import { CommandResult, type ExecutionContext } from '../types/index.js';
-import { withErrorHandling, ValidationError } from '../utils/errors.js';
+import { ValidationError } from '../utils/errors.js';
 import { parseWorkspaceScope } from '../utils/scope-resolution.js';
 import { createExecutionContext } from '../core/execution-context.js';
 import { classifyInput } from '../core/install/preprocessing/index.js';
@@ -364,18 +364,10 @@ function printLocalPackageView(
 // Commander setup
 // ---------------------------------------------------------------------------
 
-export function setupViewCommand(program: Command): void {
-  program
-    .command('view')
-    .alias('show')
-    .description('View package contents, metadata, and dependencies')
-    .argument('<package-spec>', 'package name, git URL, or registry spec')
-    .option('-s, --scope <scope>', 'workspace scope: project or global (default: search both)')
-    .option('-f, --files', 'show individual file paths')
-    .option('--remote', 'fetch from remote registry or git, skipping local lookup')
-    .option('--profile <profile>', 'profile to use for authentication')
-    .option('--api-key <key>', 'API key for authentication (overrides profile)')
-    .action(withErrorHandling(async (packageName: string, options: ViewOptions, command: Command) => {
-      await viewCommand(packageName, options, command);
-    }));
+export async function setupViewCommand(args: any[]): Promise<void> {
+  const [packageName, options, command] = args as [string | undefined, ViewOptions, Command];
+  if (!packageName) {
+    throw new ValidationError('Package name is required.');
+  }
+  await viewCommand(packageName, options, command);
 }

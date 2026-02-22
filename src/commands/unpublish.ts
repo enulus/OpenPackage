@@ -1,7 +1,6 @@
-import { Command } from 'commander';
 import prompts from 'prompts';
 
-import { withErrorHandling, ValidationError, PackageNotFoundError, UserCancellationError } from '../utils/errors.js';
+import { ValidationError, PackageNotFoundError, UserCancellationError } from '../utils/errors.js';
 import { runUnpublishPipeline } from '../core/unpublish/unpublish-pipeline.js';
 import type { UnpublishOptions } from '../core/unpublish/unpublish-types.js';
 import { safePrompts, promptConfirmation } from '../utils/prompts.js';
@@ -204,34 +203,24 @@ async function handleListUnpublish(
   }
 }
 
-export function setupUnpublishCommand(program: Command): void {
-  program
-    .command('unpublish')
-    .argument('[package-spec]', 'package[@version] to unpublish (e.g., my-package@1.0.0)')
-    .description('Remove package from remote registry (use --local for local unpublishing)')
-    .option('--local', 'unpublish from local registry (~/.openpackage/registry)')
-    .option('--force', 'skip confirmation prompts')
-    .option('-i, --interactive', 'interactively select packages/versions to unpublish (implies --local)')
-    .option('--profile <profile>', 'profile to use for authentication (remote only)')
-    .option('--api-key <key>', 'API key for authentication (remote only, overrides profile)')
-    .action(withErrorHandling(async (packageSpec: string | undefined, options: UnpublishCommandOptions) => {
-      // Handle interactive mode
-      if (options.interactive) {
-        // Auto-imply --local when --interactive is used (interactive only works with local registry)
-        options.local = true;
-        await handleListUnpublish(packageSpec, options);
-        return;
-      }
-      
-      // Validate package spec is provided for non-list mode
-      if (!packageSpec) {
-        throw new Error('Package specification is required. Usage: opkg unpublish <package[@version]> or use --interactive for interactive selection');
-      }
-      
-      // Run unpublish pipeline (routes to local or remote)
-      const result = await runUnpublishPipeline(packageSpec, options);
-      if (!result.success) {
-        throw new Error(result.error || 'Unpublish operation failed');
-      }
-    }));
+export async function setupUnpublishCommand(args: any[]): Promise<void> {
+  const [packageSpec, options] = args as [string | undefined, UnpublishCommandOptions];
+  // Handle interactive mode
+  if (options.interactive) {
+    // Auto-imply --local when --interactive is used (interactive only works with local registry)
+    options.local = true;
+    await handleListUnpublish(packageSpec, options);
+    return;
+  }
+  
+  // Validate package spec is provided for non-list mode
+  if (!packageSpec) {
+    throw new Error('Package specification is required. Usage: opkg unpublish <package[@version]> or use --interactive for interactive selection');
+  }
+  
+  // Run unpublish pipeline (routes to local or remote)
+  const result = await runUnpublishPipeline(packageSpec, options);
+  if (!result.success) {
+    throw new Error(result.error || 'Unpublish operation failed');
+  }
 }

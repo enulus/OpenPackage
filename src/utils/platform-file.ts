@@ -4,12 +4,12 @@
  */
 
 import { basename, join } from 'path';
+import type { Platform } from '../types/platform.js';
 import {
   getPlatformDefinition,
   getAllPlatforms,
   getPlatformsState,
-  isPlatformId,
-  type Platform
+  isPlatformId
 } from '../core/platforms.js';
 import { DIR_PATTERNS, FILE_PATTERNS, type UniversalSubdir } from '../constants/index.js';
 import { getFirstPathComponent, parsePathWithPrefix, normalizePathForProcessing } from './path-normalization.js';

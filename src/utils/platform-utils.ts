@@ -6,13 +6,12 @@
 import { join } from 'path';
 import { getPathLeaf } from './path-normalization.js';
 import { FILE_PATTERNS } from '../constants/index.js';
+import type { Platform, PlatformDetectionResult } from '../types/platform.js';
 import {
   getAllPlatforms,
   getPlatformRootFiles as getPlatformRootFileNames,
   getPlatformDefinition,
   getPlatformDirLookup,
-  type Platform,
-  type PlatformDetectionResult,
   detectAllPlatforms
 } from '../core/platforms.js';
 

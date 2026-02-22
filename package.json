@@ -34,7 +34,9 @@
     "openpackage": "./bin/openpackage"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/build.mjs",
+    "build:types": "tsc --emitDeclarationOnly",
+    "build:check": "tsc --noEmit",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "dev:watch": "nodemon --exec ts-node src/index.ts",
@@ -69,6 +71,7 @@
     "@types/prompts": "^2.4.9",
     "@types/semver": "^7.7.1",
     "@types/tar": "^6.1.0",
+    "esbuild": "^0.25.0",
     "nodemon": "^3.1.10",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2"
