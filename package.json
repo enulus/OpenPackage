@@ -31,7 +31,7 @@
     "opkg",
     "opm"
   ],
-  "main": "dist/index.js",
+  "main": "packages/cli/dist/index.js",
   "type": "module",
   "bin": {
     "opkg": "./bin/openpackage",
@@ -39,12 +39,11 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "build:types": "tsc --emitDeclarationOnly",
-    "build:check": "tsc --noEmit",
-    "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts",
-    "dev:watch": "nodemon --exec ts-node src/index.ts",
-    "clean": "rm -rf dist",
+    "build:core": "npm run build -w packages/core",
+    "build:cli": "npm run build -w packages/cli",
+    "build:check": "tsc --noEmit -p packages/core/tsconfig.json && tsc --noEmit -p packages/cli/tsconfig.json",
+    "start": "node packages/cli/dist/index.js",
+    "clean": "npm run clean -w packages/core && npm run clean -w packages/cli",
     "prepublishOnly": "npm run build",
     "test": "TS_NODE_TRANSPILE_ONLY=1 node --loader ts-node/esm tests/run-tests.ts"
   },

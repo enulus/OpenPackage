@@ -18,9 +18,38 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./*.js": {
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js"
+    },
+    "./core/*.js": {
+      "types": "./dist/core/*.d.ts",
+      "import": "./dist/core/*.js"
+    },
+    "./utils/*.js": {
+      "types": "./dist/utils/*.d.ts",
+      "import": "./dist/utils/*.js"
+    },
+    "./types/*.js": {
+      "types": "./dist/types/*.d.ts",
+      "import": "./dist/types/*.js"
+    },
+    "./constants/*.js": {
+      "types": "./dist/constants/*.d.ts",
+      "import": "./dist/constants/*.js"
+    },
     "./ports": {
       "types": "./dist/core/ports/index.d.ts",
       "import": "./dist/core/ports/index.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "core/*": ["dist/core/*"],
+      "utils/*": ["dist/utils/*"],
+      "types/*": ["dist/types/*"],
+      "constants/*": ["dist/constants/*"],
+      "ports": ["dist/core/ports/index.d.ts"]
     }
   },
   "files": [

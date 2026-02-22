@@ -4,7 +4,6 @@
     "module": "ES2020",
     "lib": ["ES2020"],
     "outDir": "./dist",
-    "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -14,11 +13,11 @@
     "declarationMap": true,
     "sourceMap": true,
     "moduleResolution": "node",
-    "composite": true
+    "baseUrl": ".",
+    "paths": {
+      "@opkg/core/*": ["../core/src/*"]
+    }
   },
-  "references": [
-    { "path": "../core" }
-  ],
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }

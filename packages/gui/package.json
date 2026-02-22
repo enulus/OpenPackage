@@ -13,7 +13,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "@opkg/core": "workspace:*",
+    "@opkg/core": "*",
     "@tauri-apps/api": "^2.0.0"
   },
   "devDependencies": {

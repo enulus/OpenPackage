@@ -47,6 +47,22 @@ export { runMultiContextPipeline } from './core/install/unified/multi-context-pi
 // ============================================================================
 
 export { runUninstallPipeline, runSelectiveUninstallPipeline } from './core/uninstall/uninstall-pipeline.js';
+export { executeUninstallCandidate } from './core/uninstall/uninstall-executor.js';
+export {
+  collectWorkspaceResources,
+  buildGroupedUninstallOptions,
+  executeBatchUninstall,
+  type WorkspaceCollectionResult,
+  type GroupedUninstallOptions,
+  type UninstallChoiceValue,
+  type BatchUninstallSummary,
+} from './core/uninstall/workspace-resource-collector.js';
+export {
+  runDirectUninstallFlow,
+  type DirectUninstallOptions,
+  type DirectUninstallResult,
+  type CandidateFormatters,
+} from './core/uninstall/direct-uninstall-flow.js';
 
 // ============================================================================
 // Publish / Unpublish Pipelines
@@ -56,6 +72,10 @@ export { runPublishPipeline } from './core/publish/publish-pipeline.js';
 export { runLocalPublishPipeline } from './core/publish/local-publish-pipeline.js';
 export { runUnpublishPipeline } from './core/unpublish/unpublish-pipeline.js';
 export { runLocalUnpublishPipeline } from './core/unpublish/local-unpublish-pipeline.js';
+export {
+  runInteractiveUnpublishFlow,
+  type InteractiveUnpublishResult,
+} from './core/unpublish/interactive-unpublish-flow.js';
 
 // ============================================================================
 // Save / Set Pipelines
@@ -69,6 +89,11 @@ export { runSetPipeline } from './core/set/set-pipeline.js';
 // ============================================================================
 
 export { runAddToSourcePipeline, runAddToSourcePipelineBatch } from './core/add/add-to-source-pipeline.js';
+export {
+  processAddResource,
+  type AddResourceResult,
+  type ProcessAddResourceOptions,
+} from './core/add/add-orchestrator.js';
 export { runRemoveFromSourcePipeline, runRemoveFromSourcePipelineBatch } from './core/remove/remove-from-source-pipeline.js';
 
 // ============================================================================
@@ -76,6 +101,35 @@ export { runRemoveFromSourcePipeline, runRemoveFromSourcePipelineBatch } from '.
 // ============================================================================
 
 export { runListPipeline } from './core/list/list-pipeline.js';
+
+// ============================================================================
+// View Pipeline
+// ============================================================================
+
+export {
+  resolvePackageView,
+  resolveLocalPackage,
+  resolveRemoteForPackage,
+  type LocalPackageResult,
+  type ResolvedViewResult,
+  type WorkspaceIndexViewResult,
+  type LocalPackageViewResult,
+  type RemoteViewResult,
+  type NotFoundViewResult,
+  type ViewPipelineOptions,
+} from './core/view/view-pipeline.js';
+export { enhanceResourceGroups } from './core/view/view-helpers.js';
+
+// ============================================================================
+// Search Pipeline
+// ============================================================================
+
+export {
+  runSearchPipeline,
+  type SearchOptions,
+  type PackageMatch,
+  type SearchResult,
+} from './core/search/search-pipeline.js';
 
 // ============================================================================
 // Package Creation & Context

@@ -3,8 +3,6 @@
     "target": "ES2020",
     "module": "ES2020",
     "lib": ["ES2020"],
-    "outDir": "./dist",
-    "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -15,6 +13,10 @@
     "sourceMap": true,
     "moduleResolution": "node"
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/cli" }
+  ],
+  "files": [],
+  "exclude": ["node_modules"]
 }
