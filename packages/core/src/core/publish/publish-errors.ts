@@ -20,7 +20,7 @@ export function handlePublishError(
   output?: OutputPort
 ): PublishResult {
   const out = output ?? resolveOutput();
-  logger.error('Publish operation failed', { error, packageName, version });
+  logger.debug('Publish operation failed', { error, packageName, version });
 
   if (error instanceof PublishError) {
     out.error(error.message);

@@ -7,9 +7,11 @@ import {
 } from '@opkg/core/core/device-auth.js';
 import { profileManager } from '@opkg/core/core/profiles.js';
 import { logger } from '@opkg/core/utils/logger.js';
+import { UserCancellationError } from '@opkg/core/utils/errors.js';
 import { getCurrentUsername } from '@opkg/core/core/api-keys.js';
 import { createCliExecutionContext } from '../cli/context.js';
 import { resolveOutput } from '@opkg/core/core/ports/resolve.js';
+import { cancel } from '@clack/prompts';
 
 type LoginOptions = {
 	profile?: string;
@@ -28,24 +30,27 @@ export async function setupLoginCommand(args: any[]): Promise<void> {
 
 	const authorization = await startDeviceAuthorization();
 
-	out.info('A browser will open for you to confirm sign-in.');
-	out.info(`User code: ${authorization.userCode}`);
-	out.info(`Verification URL: ${authorization.verificationUri}`);
-	out.message('');
+	out.info(`A browser will open for you to confirm sign-in.\n\nUser code: ${authorization.userCode}\nVerification URL: ${authorization.verificationUri}`);
 	out.info('If the browser does not open, visit the URL and enter the code above.');
 
 	openBrowser(authorization.verificationUriComplete);
+
+	const abortController = new AbortController();
+	const cleanupKeyListener = setupCancelListener(abortController);
 
 	try {
 		const tokens = await pollForDeviceToken({
 			deviceCode: authorization.deviceCode,
 			intervalSeconds: authorization.interval,
 			expiresInSeconds: authorization.expiresIn,
+			signal: abortController.signal,
 		});
+
+		cleanupKeyListener();
 
 		await persistTokens(profileName, tokens);
 
-		const username = tokens.username ?? (await resolveUsername(profileName));
+		const username = tokens.username ?? (await resolveUsername(tokens.apiKey));
 		if (username) {
 			await profileManager.setProfileDefaultScope(profileName, `@${username}`);
 			out.success(`Default scope set to @${username} for profile "${profileName}".`);
@@ -53,18 +58,53 @@ export async function setupLoginCommand(args: any[]): Promise<void> {
 			logger.debug('Could not derive username from API key; default scope not set');
 		}
 
-		out.message('');
 		out.success('Login successful.');
 		out.success(`API key stored for profile "${profileName}".`);
 	} catch (error: any) {
+		cleanupKeyListener();
+		if (abortController.signal.aborted) {
+			cancel('Operation cancelled.');
+			throw new UserCancellationError('Operation cancelled by user');
+		}
 		logger.debug('Device login failed', { error });
 		throw error;
 	}
 }
 
-async function resolveUsername(profileName: string): Promise<string | undefined> {
+function setupCancelListener(abortController: AbortController): () => void {
+	const stdin = process.stdin;
+	const wasRaw = stdin.isRaw;
+	const wasListening = stdin.listenerCount('data') > 0;
+
+	if (stdin.isTTY) {
+		stdin.setRawMode(true);
+		stdin.resume();
+	}
+
+	const onData = (data: Buffer) => {
+		const key = data.toString();
+		// Escape key (\x1b without [ following, i.e. bare escape)
+		if (key === '\x1b' || key === '\x03') {
+			abortController.abort();
+		}
+	};
+
+	stdin.on('data', onData);
+
+	return () => {
+		stdin.off('data', onData);
+		if (stdin.isTTY) {
+			stdin.setRawMode(wasRaw ?? false);
+			if (!wasListening) {
+				stdin.pause();
+			}
+		}
+	};
+}
+
+async function resolveUsername(apiKey: string): Promise<string | undefined> {
 	try {
-		return await getCurrentUsername({ profile: profileName });
+		return await getCurrentUsername({ apiKey });
 	} catch (error) {
 		logger.debug('Unable to resolve username from API key', { error });
 		return undefined;

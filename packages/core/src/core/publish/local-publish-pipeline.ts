@@ -218,7 +218,7 @@ export async function runLocalPublishPipeline(
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    logger.error('Local publish failed', { error: message, cwd });
+    logger.debug('Local publish failed', { error: message, cwd });
     
     return {
       success: false,

@@ -51,12 +51,17 @@ export async function pollForDeviceToken(params: {
 	deviceCode: string;
 	intervalSeconds: number;
 	expiresInSeconds: number;
+	signal?: AbortSignal;
 }): Promise<DeviceTokenResult> {
 	const client = await createHttpClient();
 	const expiresAt = Date.now() + params.expiresInSeconds * 1000;
 	let intervalMs = params.intervalSeconds * 1000;
 
 	while (Date.now() < expiresAt) {
+		if (params.signal?.aborted) {
+			throw new Error('Login cancelled.');
+		}
+
 		try {
 			const tokenResponse = await client.post<{
 				apiKey: string;
@@ -93,7 +98,7 @@ export async function pollForDeviceToken(params: {
 			}
 		}
 
-		await wait(intervalMs);
+		await wait(intervalMs, params.signal);
 	}
 
 	throw new Error('Device code expired. Please run "opkg login" again.');
@@ -125,7 +130,21 @@ export function openBrowser(url: string): void {
 	}
 }
 
-function wait(ms: number): Promise<void> {
-	return new Promise(resolve => setTimeout(resolve, ms));
+function wait(ms: number, signal?: AbortSignal): Promise<void> {
+	return new Promise((resolve, reject) => {
+		if (signal?.aborted) {
+			reject(new Error('Login cancelled.'));
+			return;
+		}
+
+		const timer = setTimeout(resolve, ms);
+
+		const onAbort = () => {
+			clearTimeout(timer);
+			reject(new Error('Login cancelled.'));
+		};
+
+		signal?.addEventListener('abort', onAbort, { once: true });
+	});
 }
 

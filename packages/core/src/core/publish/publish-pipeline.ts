@@ -164,12 +164,9 @@ async function resolveUploadName(
   return await resolveScopedNameForPushWithUserScope(packageName, username, authOptions.profile);
 }
 
-function validateVersion(version?: string): void {
+function validateVersionIfPresent(version?: string): void {
   if (!version) {
-    throw new PublishError(
-      'openpackage.yml must contain a version field to publish',
-      'MISSING_VERSION'
-    );
+    return; // Unversioned publish is allowed
   }
 
   if (!semver.valid(version)) {
@@ -208,9 +205,9 @@ async function runRemotePublishPipeline(
       );
     }
 
-    // Validate version
-    validateVersion(source.version);
-    version = source.version;
+    // Validate version (if present; unversioned publish is allowed)
+    validateVersionIfPresent(source.version);
+    version = source.version || undefined;
 
     logger.info(`Publishing package '${source.name}' from ${source.packageRoot}`, { 
       packageRoot: source.packageRoot, 
@@ -268,7 +265,7 @@ async function runRemotePublishPipeline(
       success: true,
       data: {
         packageName: response.package.name,
-        version: response.version.version ?? version,
+        version: response.version.version ?? version ?? '',
         size: tarballInfo.size,
         checksum: tarballInfo.checksum,
         registry: registryUrl,
@@ -294,7 +291,8 @@ function printPublishSuccessEnhanced(
   cwd: string,
   out: OutputPort
 ): void {
-  out.success(`Published ${source.name}@${source.version} to remote registry`);
+  const versionLabel = source.version ? `@${source.version}` : '';
+  out.success(`Published ${source.name}${versionLabel} to remote registry`);
   
   // Package description if available
   if (source.manifest.description) {
