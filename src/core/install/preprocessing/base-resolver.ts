@@ -5,6 +5,69 @@ import { stat } from 'fs/promises';
 import { logger } from '../../../utils/logger.js';
 import { ValidationError } from '../../../utils/errors.js';
 
+export interface ResourceScopingResult {
+  /** Relative path from the base to the resource. Empty string means resource IS the base. */
+  relPath: string;
+  /** Whether the resource path is a directory on disk. */
+  isDirectory: boolean;
+  /** The computed glob pattern for file matching (e.g. "**", "dir/**", or "file.ts"). */
+  pattern: string;
+}
+
+export interface ResolveResourceScopingOptions {
+  /**
+   * When true, throws ValidationError if the resource path does not exist on disk.
+   * When false (default), a missing path is treated as a file (isDirectory = false).
+   */
+  strict?: boolean;
+}
+
+/**
+ * Core computation: resolve a resource path relative to a package base and produce a match pattern.
+ *
+ * This is the single source of truth for the path-math shared by both
+ * `computePathScoping()` (direct installs) and the installation planner (recursive installs).
+ *
+ * @returns A ResourceScopingResult, or `null` if the resource path is outside the base.
+ */
+export async function resolveResourceScoping(
+  repoRoot: string,
+  baseAbs: string,
+  resourcePath: string,
+  options?: ResolveResourceScopingOptions
+): Promise<ResourceScopingResult | null> {
+  const absResourcePath = join(repoRoot, resourcePath);
+  const rawRel = relative(baseAbs, absResourcePath).replace(/\\/g, '/');
+
+  // Resource is outside the detected base — caller decides how to handle.
+  if (rawRel.startsWith('..')) {
+    return null;
+  }
+
+  // Strip cosmetic "./" prefix (when resource is at the same level as base).
+  const relToBaseRaw = rawRel.replace(/^\.\/?/, '');
+
+  let isDirectory = false;
+  try {
+    const s = await stat(absResourcePath);
+    isDirectory = s.isDirectory();
+  } catch {
+    if (options?.strict) {
+      throw new ValidationError(
+        `The specified resource path does not exist in the repository: ${resourcePath}\n\n` +
+        `Please verify the path. The file or directory may have been moved, or you may have meant a different path.`
+      );
+    }
+    // Non-strict: best-effort, default to file
+  }
+
+  // When relToBaseRaw is "" the resource IS the base directory → pattern "**"
+  const prefix = relToBaseRaw.replace(/\/$/, '');
+  const pattern = isDirectory ? (prefix ? `${prefix}/**` : '**') : relToBaseRaw;
+
+  return { relPath: relToBaseRaw, isDirectory, pattern };
+}
+
 export type SpecialHandling = 'marketplace' | 'ambiguous';
 
 export interface AmbiguousBaseMatch {
@@ -125,12 +188,8 @@ export async function computePathScoping(
     return;
   }
 
-  const absResourcePath = join(repoRoot, resourcePath);
-  const relToBaseRaw = relative(baseAbs, absResourcePath)
-    .replace(/\\/g, '/')
-    .replace(/^\.\/?/, '');
-
-  if (!relToBaseRaw || relToBaseRaw.startsWith('..')) {
+  const result = await resolveResourceScoping(repoRoot, baseAbs, resourcePath, { strict: true });
+  if (!result) {
     // Path is outside the detected package base - invalid for single-file install
     throw new ValidationError(
       `The specified resource path is outside the package base: ${resourcePath}\n\n` +
@@ -138,20 +197,7 @@ export async function computePathScoping(
     );
   }
 
-  let isDirectory = false;
-  try {
-    const s = await stat(absResourcePath);
-    isDirectory = s.isDirectory();
-  } catch {
-    // User specified a concrete file/dir path that does not exist. Fail instead of
-    // silently installing the entire package (which was the prior bug).
-    throw new ValidationError(
-      `The specified resource path does not exist in the repository: ${resourcePath}\n\n` +
-      `Please verify the path. The file or directory may have been moved, or you may have meant a different path.`
-    );
-  }
-
-  ctx.matchedPattern = isDirectory ? `${relToBaseRaw.replace(/\/$/, '')}/**` : relToBaseRaw;
+  ctx.matchedPattern = result.pattern;
 
   // Mark as performed
   ctx._pathScopingPerformed = true;
