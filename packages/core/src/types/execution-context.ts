@@ -80,6 +80,19 @@ export interface ExecutionContext {
    * CLI provides ClackProgressAdapter; GUI provides its own adapter.
    */
   progress?: ProgressPort;
+
+  /**
+   * Rich output port for use during prompt-driven phases.
+   * When prompts fire, surrounding output should match their visual style.
+   * Use `withRichOutput()` to temporarily swap to these ports.
+   * Set by the CLI (or other UI adapter) at context creation; undefined when not available.
+   */
+  richOutput?: OutputPort;
+
+  /**
+   * Rich progress port, paired with richOutput.
+   */
+  richProgress?: ProgressPort;
 }
 
 /**

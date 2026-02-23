@@ -42,7 +42,8 @@ export async function setupInstallCommand(args: any[]): Promise<void> {
   // Create execution context with CLI ports and telemetry
   const execContext = await createCliExecutionContext({
     global: options.global,
-    cwd: programOpts.cwd
+    cwd: programOpts.cwd,
+    interactive: options.interactive,
   });
   
   // Add telemetry collector to context

@@ -15,7 +15,7 @@ import {
 import { createInteractionPolicy, PromptTier } from '../../interaction-policy.js';
 import type { InteractionPolicy } from '../../interaction-policy.js';
 import type { OutputPort } from '../../ports/output.js';
-import { resolveOutput, resolvePrompt } from '../../ports/resolve.js';
+import { resolveOutput, resolvePrompt, withRichOutput } from '../../ports/resolve.js';
 import {
   parseMarketplace,
   promptPluginSelection,
@@ -140,10 +140,17 @@ export class InstallOrchestrator {
 
     switch (specialHandling) {
       case 'marketplace':
-        return this.handleMarketplace(result, options, execContext, policy, out);
+        // Marketplace flow uses prompts (plugin selection, install mode).
+        // Upgrade to rich output so prompt rendering is visually consistent.
+        return withRichOutput(execContext, () =>
+          this.handleMarketplace(result, options, execContext, policy, resolveOutput(execContext))
+        );
       
       case 'ambiguous':
-        return this.handleAmbiguous(result, options, execContext, policy);
+        // Ambiguity resolution may prompt for base selection.
+        return withRichOutput(execContext, () =>
+          this.handleAmbiguous(result, options, execContext, policy)
+        );
       
       case 'multi-resource':
         return this.handleMultiResource(result, options, execContext, policy);
@@ -162,7 +169,10 @@ export class InstallOrchestrator {
         
         // Normal pipeline flow: resolve platforms once if not set
         if (context.platforms.length === 0) {
-          context.platforms = await resolvePlatforms(context.targetDir, options.platforms, { interactive: policy.canPrompt(PromptTier.Required), output: resolveOutput(execContext), prompt: resolvePrompt(execContext) });
+          // Platform resolution may prompt if no platforms are auto-detected.
+          context.platforms = await withRichOutput(execContext, () =>
+            resolvePlatforms(context.targetDir, options.platforms, { interactive: policy.canPrompt(PromptTier.Required), output: resolveOutput(execContext), prompt: resolvePrompt(execContext) })
+          );
         }
         // For path/git sources with manifests, install root first (updates manifest),
         // then run executor for dependencies only (with skipManifestUpdate)
@@ -254,7 +264,9 @@ export class InstallOrchestrator {
     const platforms =
       context.platforms.length > 0
         ? context.platforms
-        : await resolvePlatforms(context.targetDir, options.platforms, { interactive: policy?.canPrompt(PromptTier.Required) ?? false, output: resolveOutput(execContext), prompt: resolvePrompt(execContext) });
+        : await withRichOutput(execContext, () =>
+            resolvePlatforms(context.targetDir, options.platforms, { interactive: policy?.canPrompt(PromptTier.Required) ?? false, output: resolveOutput(execContext), prompt: resolvePrompt(execContext) })
+          );
 
     const skipCache = options.resolutionMode === 'remote-primary';
     
@@ -716,7 +728,9 @@ export class InstallOrchestrator {
       (workspaceContext?.platforms.length === 0);
 
     if (needsPlatforms) {
-      const resolvedPlatforms = await resolvePlatforms(context.targetDir, options.platforms, { interactive: policy.canPrompt(PromptTier.Required), output: resolveOutput(execContext), prompt: resolvePrompt(execContext) });
+      const resolvedPlatforms = await withRichOutput(execContext, () =>
+        resolvePlatforms(context.targetDir, options.platforms, { interactive: policy.canPrompt(PromptTier.Required), output: resolveOutput(execContext), prompt: resolvePrompt(execContext) })
+      );
       for (const ctx of dependencyContexts) {
         if (ctx.platforms.length === 0) ctx.platforms = resolvedPlatforms;
       }
@@ -821,7 +835,9 @@ export class InstallOrchestrator {
     const policy = execContext.interactionPolicy;
     let platforms = workspaceContext?.platforms?.length
       ? workspaceContext.platforms
-      : await resolvePlatforms(execContext.targetDir, options.platforms, { interactive: policy?.canPrompt(PromptTier.Required) ?? false, output: resolveOutput(execContext), prompt: resolvePrompt(execContext) });
+      : await withRichOutput(execContext, () =>
+          resolvePlatforms(execContext.targetDir, options.platforms, { interactive: policy?.canPrompt(PromptTier.Required) ?? false, output: resolveOutput(execContext), prompt: resolvePrompt(execContext) })
+        );
 
     const skipCache = options.resolutionMode === 'remote-primary';
     

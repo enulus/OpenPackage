@@ -32,7 +32,7 @@ export async function reportResultsPhase(
     isDependencyInstall,
     namespaced: installResult.namespaced,
     relocatedFiles: installResult.relocatedFiles,
-    interactive: ctx.execution.interactionPolicy?.isTTY ?? false,
+    interactive: ctx.execution.interactionPolicy?.mode === 'always',
   }, resolveOutput(ctx.execution));
   
   // Build result data
