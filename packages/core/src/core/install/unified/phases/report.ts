@@ -34,6 +34,7 @@ export async function reportResultsPhase(
     namespaced: installResult.namespaced,
     relocatedFiles: installResult.relocatedFiles,
     interactive: ctx.execution.interactionPolicy?.mode === 'always',
+    replacedResources: ctx._replacedResources,
   };
 
   if (ctx._deferredReport) {

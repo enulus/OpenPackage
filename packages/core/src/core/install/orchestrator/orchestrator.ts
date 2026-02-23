@@ -215,10 +215,11 @@ export class InstallOrchestrator {
 
       switch (result.type) {
         case 'upgrade': {
-          // Resource entries exist that will be subsumed by the full package
-          const names = result.entriesToRemove.map(e => e.packageName).join(', ');
-          out.info(`Upgrading to full package ${context.source.packageName} (replacing: ${names})`);
-          await resolveSubsumption(result, context.execution, out);
+          // Resource entries exist that will be subsumed by the full package.
+          // Silently resolve; the report phase will show replaced resources.
+          const replacedNames = result.entriesToRemove.map(e => e.packageName);
+          await resolveSubsumption(result, context.execution);
+          context._replacedResources = replacedNames;
           return null; // Proceed with install
         }
 

@@ -32,6 +32,8 @@ export interface InstallReportData {
   relocatedFiles?: RelocatedFile[];
   /** When true, use compact note-based display for file lists (interactive mode) */
   interactive?: boolean;
+  /** Package names that were replaced during subsumption resolution (upgrade from resource-scoped installs) */
+  replacedResources?: string[];
 }
 
 // ============================================================================
@@ -87,6 +89,7 @@ export function displayInstallationResults(data: InstallReportData, output: Outp
     namespaced,
     relocatedFiles,
     interactive = false,
+    replacedResources,
   } = data;
 
   // Check if installation actually succeeded
@@ -146,7 +149,9 @@ export function displayInstallationResults(data: InstallReportData, output: Outp
     });
     renderTreeList(depLines, output);
   }
-  output.success(`Total packages processed: ${resolvedPackages.length}`);
+  if (resolvedPackages.length > 1) {
+    output.success(`Total packages processed: ${resolvedPackages.length}`);
+  }
 
   // ── Installed files ───────────────────────────────────────────────────
   if (installedFiles && installedFiles.length > 0) {
@@ -172,6 +177,18 @@ export function displayInstallationResults(data: InstallReportData, output: Outp
       r => `${formatPathForDisplay(r.from)} → ${formatPathForDisplay(r.to)}`
     );
     renderFileList(lines, `Relocated files: ${relocatedFiles.length}`, output, interactive);
+  }
+
+  // ── Replaced resources (subsumption upgrade) ────────────────────────
+  if (replacedResources && replacedResources.length > 0) {
+    const count = replacedResources.length;
+    const header = `Replaced ${count} previously installed resource${count === 1 ? '' : 's'}:`;
+    if (interactive) {
+      output.note(replacedResources.join('\n'), header);
+    } else {
+      output.success(header);
+      renderTreeList(replacedResources, output);
+    }
   }
 
   // ── Root files ────────────────────────────────────────────────────────

@@ -15,8 +15,6 @@ import type { WorkspaceIndex, WorkspaceIndexPackage } from '../../../types/works
 import { readWorkspaceIndex } from '../../../utils/workspace-index-yml.js';
 import { normalizePackageName } from '../../../utils/package-name.js';
 import { normalizeGitUrl } from '../../../utils/git-url-parser.js';
-import type { OutputPort } from '../../ports/output.js';
-import { resolveOutput } from '../../ports/resolve.js';
 import type { ExecutionContext } from '../../../types/execution-context.js';
 import { runUninstallPipeline } from '../../uninstall/uninstall-pipeline.js';
 
@@ -259,18 +257,12 @@ export async function checkSubsumption(
  *
  * @param result - The upgrade subsumption result
  * @param execContext - Execution context (targetDir, etc.) for uninstall operations
- * @param output - Optional output port for user messages
  */
 export async function resolveSubsumption(
   result: SubsumptionUpgrade,
   execContext: ExecutionContext,
-  output?: OutputPort
 ): Promise<void> {
-  const out = output ?? resolveOutput(execContext);
-
   for (const entry of result.entriesToRemove) {
-    out.info(`  Replacing ${entry.packageName} (subsumed by full package)`);
-
     const uninstallResult = await runUninstallPipeline(entry.packageName, {}, execContext);
 
     if (!uninstallResult.success) {

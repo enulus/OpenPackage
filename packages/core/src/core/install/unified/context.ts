@@ -145,6 +145,13 @@ export interface InstallationContext {
    * for the caller to merge and display (used by runMultiContextPipeline groupReport).
    */
   _deferredReport?: boolean;
+
+  /**
+   * Package names that were replaced during subsumption resolution.
+   * Set by the orchestrator when upgrading from resource-scoped installs
+   * to a full package, so the report phase can display them.
+   */
+  _replacedResources?: string[];
   
   /** Ambiguous matches awaiting user resolution */
   ambiguousMatches?: Array<{
