@@ -812,7 +812,7 @@ export class InstallOrchestrator {
       return { success: true, data: { installed: 0, skipped: 0 } };
     }
 
-    return this.runBulkInstall(dependencyContexts);
+    return this.runBulkInstall(dependencyContexts, context.source.packageName);
   }
 
   /**
@@ -883,41 +883,31 @@ export class InstallOrchestrator {
   }
   
   /**
-   * Run bulk installation for multiple packages.
+   * Run bulk installation for multiple resources from the same package.
+   * Used for convenience filters (--agents, --skills, etc.) matching multiple resources.
+   * Groups output into a single report for parity with interactive multiselect.
    */
-  private async runBulkInstall(contexts: InstallationContext[]): Promise<CommandResult> {
-    const out = resolveOutput(contexts[0]?.execution);
-    let totalInstalled = 0;
-    let totalSkipped = 0;
-    const results: Array<{ name: string; success: boolean; error?: string }> = [];
-    
-    for (const ctx of contexts) {
-      try {
-        const result = await runUnifiedInstallPipeline(ctx);
-        
-        if (result.success) {
-          totalInstalled++;
-          results.push({ name: ctx.source.packageName, success: true });
-        } else {
-          totalSkipped++;
-          results.push({ name: ctx.source.packageName, success: false, error: result.error });
-          out.error(`${ctx.source.packageName}: ${result.error}`);
-        }
-      } catch (error) {
-        totalSkipped++;
-        results.push({ name: ctx.source.packageName, success: false, error: String(error) });
-        out.error(`${ctx.source.packageName}: ${error}`);
-      }
+  private async runBulkInstall(
+    contexts: InstallationContext[],
+    basePackageName: string
+  ): Promise<CommandResult> {
+    const result = await runMultiContextPipeline(contexts, {
+      groupReport: true,
+      groupReportPackageName: basePackageName
+    });
+
+    const results = (result.data as any)?.results ?? [];
+    const failedCount = results.filter((r: { success: boolean }) => !r.success).length;
+    const totalInstalled = (result.data as any)?.installed ?? 0;
+
+    if (failedCount > 0 || totalInstalled > 0) {
+      const out = resolveOutput(contexts[0]?.execution);
+      out.success(`Installation complete: ${totalInstalled} installed${failedCount > 0 ? `, ${failedCount} failed` : ''}`);
     }
-    
-    // Display summary
-    out.success(`Installation complete: ${totalInstalled} installed${totalSkipped > 0 ? `, ${totalSkipped} failed` : ''}`);
-    
-    const allSuccessful = totalSkipped === 0;
+
     return {
-      success: allSuccessful,
-      data: { installed: totalInstalled, skipped: totalSkipped, results },
-      error: allSuccessful ? undefined : `${totalSkipped} packages failed to install`
+      ...result,
+      error: result.success ? undefined : `${failedCount} resource${failedCount === 1 ? '' : 's'} failed to install`
     };
   }
 }
