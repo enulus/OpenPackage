@@ -1,4 +1,5 @@
 import type { Command } from 'commander';
+import { join } from 'path';
 
 import { runRemoveFromSourcePipeline, runRemoveFromSourcePipelineBatch, type RemoveFromSourceOptions } from '@opkg/core/core/remove/remove-from-source-pipeline.js';
 import { resolveMutableSource } from '@opkg/core/core/source-resolution/resolve-mutable-source.js';
@@ -142,46 +143,72 @@ export async function setupRemoveCommand(args: any[]): Promise<void> {
  * @param skipHeader - When true (interactive remove), header was already shown before selection
  */
 async function handleRemoveResult(
-  data: { filesRemoved: number; sourcePath: string; packageName: string; removedPaths: string[]; removalType?: string; removedDependency?: string },
+  data: { filesRemoved: number; sourcePath: string; packageName: string; removedPaths: string[]; removalType?: string; removedDependency?: string; removedFromSection?: string },
   options: RemoveFromSourceOptions & { from?: string },
   cwd: string,
   out: ReturnType<typeof resolveOutput>,
   interactive: boolean,
   skipHeader = false
 ): Promise<void> {
-  const { filesRemoved, sourcePath, packageName: resolvedName, removedPaths, removalType, removedDependency } = data;
+  const { filesRemoved, sourcePath, packageName: resolvedName, removedPaths, removalType, removedDependency, removedFromSection } = data;
   const isWorkspaceRoot = sourcePath.includes('.openpackage') && !sourcePath.includes('.openpackage/packages');
 
-  if (!skipHeader) {
-    const pkgLabel = isWorkspaceRoot ? 'workspace package' : resolvedName;
-    const displayPath = formatPathForDisplay(sourcePath, cwd);
-    const header = `From: ${pkgLabel} (${displayPath})`;
-    if (interactive) out.info(header);
-    else out.success(header);
-  }
-
   if (removalType === 'dependency') {
-    out.success(`Removed dependency ${removedDependency} from ${resolvedName}`);
-  } else if (options.dryRun) {
-    out.success(isWorkspaceRoot
-      ? `(dry-run) Would remove ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from workspace package`
-      : `(dry-run) Would remove ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from ${resolvedName}`);
-  } else {
-    out.success(isWorkspaceRoot
-      ? `Removed ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from workspace package`
-      : `Removed ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from ${resolvedName}`);
-  }
-
-  if (removedPaths.length > 0) {
-    const sortedPaths = [...removedPaths].sort((a, b) => a.localeCompare(b));
+    // Dependency removal
     if (interactive) {
-      const maxDisplay = 10;
-      const displayPaths = sortedPaths.slice(0, maxDisplay);
-      const more = sortedPaths.length > maxDisplay ? `\n... and ${sortedPaths.length - maxDisplay} more` : '';
-      out.note(displayPaths.join('\n') + more, 'Removed files');
+      if (!skipHeader) {
+        const pkgLabel = isWorkspaceRoot ? 'workspace package' : resolvedName;
+        const displayPath = formatPathForDisplay(sourcePath, cwd);
+        out.info(`From: ${pkgLabel} (${displayPath})`);
+      }
+      out.success(`Removed dependency ${removedDependency} from ${resolvedName}`);
     } else {
-      for (let i = 0; i < sortedPaths.length; i++) {
-        out.message(`  ${getTreeConnector(i === sortedPaths.length - 1)}${sortedPaths[i]}`);
+      // Non-interactive: clean tree format
+      // ✓ Removed from dependencies (.openpackage/openpackage.yml)
+      //   └── essentials
+      const section = removedFromSection || 'dependencies';
+      const manifestPath = join(sourcePath, 'openpackage.yml');
+      const displayPath = formatPathForDisplay(manifestPath, cwd);
+      out.success(`Removed from ${section} (${displayPath})`);
+      const connector = getTreeConnector(true);
+      out.message(`  ${connector}${removedDependency}`);
+    }
+  } else {
+    // File removal
+    if (interactive) {
+      if (!skipHeader) {
+        const pkgLabel = isWorkspaceRoot ? 'workspace package' : resolvedName;
+        const displayPath = formatPathForDisplay(sourcePath, cwd);
+        out.info(`From: ${pkgLabel} (${displayPath})`);
+      }
+      const target = isWorkspaceRoot ? 'workspace package' : resolvedName;
+      if (options.dryRun) {
+        out.success(`(dry-run) Would remove ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from ${target}`);
+      } else {
+        out.success(`Removed ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from ${target}`);
+      }
+    } else {
+      // Non-interactive: clean format with path in success line
+      const target = isWorkspaceRoot ? 'workspace package' : resolvedName;
+      const displayPath = formatPathForDisplay(sourcePath, cwd);
+      if (options.dryRun) {
+        out.success(`(dry-run) Would remove ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from ${target} (${displayPath})`);
+      } else {
+        out.success(`Removed ${filesRemoved} file${filesRemoved !== 1 ? 's' : ''} from ${target} (${displayPath})`);
+      }
+    }
+
+    if (removedPaths.length > 0) {
+      const sortedPaths = [...removedPaths].sort((a, b) => a.localeCompare(b));
+      if (interactive) {
+        const maxDisplay = 10;
+        const displayPaths = sortedPaths.slice(0, maxDisplay);
+        const more = sortedPaths.length > maxDisplay ? `\n... and ${sortedPaths.length - maxDisplay} more` : '';
+        out.note(displayPaths.join('\n') + more, 'Removed files');
+      } else {
+        for (let i = 0; i < sortedPaths.length; i++) {
+          out.message(`  ${getTreeConnector(i === sortedPaths.length - 1)}${sortedPaths[i]}`);
+        }
       }
     }
   }
@@ -208,10 +235,14 @@ async function processRemoveResource(
     ...options,
     execContext,
     beforeConfirm: (info) => {
-      const pkgLabel = info.packageName;
-      const displayPath = formatPathForDisplay(info.sourcePath, cwd);
-      out.success(`From: ${pkgLabel} (${displayPath})`);
-      headerShown = true;
+      // Show context header before confirmation prompt (interactive only).
+      // Non-interactive: skip header here, let handleRemoveResult show the clean format.
+      if (interactive) {
+        const pkgLabel = info.packageName;
+        const displayPath = formatPathForDisplay(info.sourcePath, cwd);
+        out.info(`From: ${pkgLabel} (${displayPath})`);
+      }
+      headerShown = interactive;
     }
   });
   if (!result.success) throw new Error(result.error || 'Remove operation failed');

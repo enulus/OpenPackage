@@ -27,17 +27,20 @@ function displayAddResults(data: AddToSourceResult, out: ReturnType<typeof resol
   const { filesAdded, packageName: resolvedName, addedFilePaths, isWorkspaceRoot, sourcePath } = data;
   const target = isWorkspaceRoot ? 'workspace package' : resolvedName;
 
-  if (!skipHeader) {
+  if (interactive && !skipHeader) {
     const pkgLabel = isWorkspaceRoot ? 'workspace package' : resolvedName;
     const displayPath = formatPathForDisplay(sourcePath, process.cwd());
-    const header = `To: ${pkgLabel} (${displayPath})`;
-    if (interactive) out.info(header);
-    else out.success(header);
+    out.info(`To: ${pkgLabel} (${displayPath})`);
   }
 
   if (filesAdded > 0) {
     const count = filesAdded === 1 ? '1 file' : `${filesAdded} files`;
-    out.success(`Added ${count} to ${target}`);
+    if (interactive) {
+      out.success(`Added ${count} to ${target}`);
+    } else {
+      const displayPath = formatPathForDisplay(sourcePath, process.cwd());
+      out.success(`Added ${count} to ${target} (${displayPath})`);
+    }
     const sortedFiles = [...(addedFilePaths || [])].sort((a, b) => a.localeCompare(b));
     const relPaths = sortedFiles.map((f) => relative(sourcePath, f).replace(/\\/g, '/'));
 
@@ -57,23 +60,39 @@ function displayAddResults(data: AddToSourceResult, out: ReturnType<typeof resol
   }
 }
 
+function displayDependencyResult(depResult: AddResourceResult & { kind: 'dependency' }, out: ReturnType<typeof resolveOutput>, interactive: boolean): void {
+  const { result: dep, classification } = depResult;
+  const displayPath = formatPathForDisplay(dep.targetManifest, process.cwd());
+
+  if (interactive) {
+    // Interactive mode: keep existing clack-based display
+    const header = `To: ${dep.packageName} (${displayPath})`;
+    out.info(header);
+    if (dep.wasAutoDetected) {
+      out.info(`Detected package at ${classification.localPath} — adding as dependency.`);
+      out.message('To copy files instead, use --copy.');
+    }
+    const versionSuffix = classification.version ? `@${classification.version}` : '';
+    out.success(`Added ${dep.packageName}${versionSuffix} to ${dep.section}`);
+  } else {
+    // Non-interactive: clean tree format
+    // ✓ Added to dependencies (.openpackage/openpackage.yml)
+    //   └── essentials@1.2.0
+    out.success(`Added to ${dep.section} (${displayPath})`);
+    const versionSuffix = classification.version ? `@${classification.version}` : '';
+    const connector = getTreeConnector(true);
+    out.message(`  ${connector}${dep.packageName}${versionSuffix}`);
+    if (dep.wasAutoDetected) {
+      out.message('  Detected local package — use --copy to copy files instead.');
+    }
+  }
+}
+
 function displayResult(result: AddResourceResult, out: ReturnType<typeof resolveOutput>, interactive: boolean, resourceSpec: string): void {
   switch (result.kind) {
-    case 'dependency': {
-      const { result: depResult, classification } = result;
-      const displayPath = formatPathForDisplay(depResult.targetManifest, process.cwd());
-      const header = `To: ${depResult.packageName} (${displayPath})`;
-      if (interactive) out.info(header);
-      else out.success(header);
-      if (depResult.wasAutoDetected) {
-        out.info(`Detected package at ${classification.localPath} — adding as dependency.`);
-        out.message('To copy files instead, use --copy.');
-      }
-      const versionSuffix = classification.version ? `@${classification.version}` : '';
-      out.success(`Added ${depResult.packageName}${versionSuffix} to ${depResult.section}`);
-      out.message(`in ${formatPathForDisplay(depResult.targetManifest, process.cwd())}`);
+    case 'dependency':
+      displayDependencyResult(result, out, interactive);
       break;
-    }
     case 'workspace-resource':
       if (result.result.data) {
         out.info(`Resolved "${resourceSpec}" from installed workspace resources.`);

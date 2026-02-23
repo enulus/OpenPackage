@@ -15,6 +15,7 @@ import { UserCancellationError } from '../../utils/errors.js';
 import { cleanupEmptyParents } from '../../utils/cleanup-empty-parents.js';
 import { resolveSourceOperationArguments } from '../../utils/source-operation-arguments.js';
 import { buildWorkspacePackageContext } from '../workspace-package-context.js';
+import { withRichOutput } from '../ports/resolve.js';
 
 export interface RemoveFromSourceOptions {
   force?: boolean;
@@ -34,6 +35,8 @@ export interface RemoveFromSourceResult {
   removalType?: 'files' | 'dependency';
   /** Dependency name when removalType is 'dependency' */
   removedDependency?: string;
+  /** Which manifest section the dependency was removed from */
+  removedFromSection?: 'dependencies' | 'dev-dependencies';
 }
 
 export async function runRemoveFromSourcePipeline(
@@ -134,7 +137,8 @@ export async function runRemoveFromSourcePipeline(
         sourceType,
         removedPaths: [],
         removalType: 'dependency',
-        removedDependency: classification.dependencyName
+        removedDependency: classification.dependencyName,
+        removedFromSection: depResult.section
       }
     };
   }
@@ -162,9 +166,17 @@ export async function runRemoveFromSourcePipeline(
     sourcePath: packageRootDir
   });
 
-  // Confirm removal with user (unless --force or --dry-run)
+  // Confirm removal with user (unless --force or --dry-run).
+  // Use withRichOutput so the confirmation prompt uses the interactive
+  // (clack) output adapter when available on TTY.
+  const execCtx = options.execContext;
+  const doConfirm = () => confirmRemoval(resolvedName, entries, options);
   try {
-    await confirmRemoval(resolvedName, entries, options);
+    if (execCtx) {
+      await withRichOutput(execCtx, doConfirm);
+    } else {
+      await doConfirm();
+    }
   } catch (error) {
     if (error instanceof UserCancellationError) {
       throw error;

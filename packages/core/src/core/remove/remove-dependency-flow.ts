@@ -6,6 +6,7 @@ export interface RemoveDependencyResult {
   targetManifest: string;
   dependencyName: string;
   removed: boolean;
+  section?: 'dependencies' | 'dev-dependencies';
 }
 
 /**
@@ -22,16 +23,17 @@ export async function runRemoveDependencyFlow(
   dependencyName: string,
   packageName: string
 ): Promise<RemoveDependencyResult> {
-  const removed = await removeDependencyFromManifest(manifestPath, dependencyName);
+  const result = await removeDependencyFromManifest(manifestPath, dependencyName);
 
   logger.info(
-    removed ? `Removed ${dependencyName} from ${manifestPath}` : `No matching dependency found for ${dependencyName}`
+    result.removed ? `Removed ${dependencyName} from ${manifestPath}` : `No matching dependency found for ${dependencyName}`
   );
 
   return {
     packageName,
     targetManifest: manifestPath,
     dependencyName,
-    removed
+    removed: result.removed,
+    section: result.section
   };
 }

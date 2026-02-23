@@ -7,7 +7,7 @@ import { resolveOutput } from '../ports/resolve.js';
 export interface RemovalConfirmationOptions {
   force?: boolean;
   dryRun?: boolean;
-  execContext?: { interactionPolicy?: { canPrompt(tier: PromptTier): boolean } };
+  execContext?: { interactionPolicy?: { canPrompt(tier: PromptTier): boolean }; output?: OutputPort };
   output?: OutputPort;
 }
 
@@ -36,7 +36,7 @@ export async function confirmRemoval(
     throw new Error('Removal requires confirmation. Use --force in non-interactive mode.');
   }
 
-  const out = resolveOutput(options);
+  const out = resolveOutput(options.execContext);
   const confirmed = await out.confirm('Confirm removal?', { initial: false });
   if (!confirmed) {
     throw new UserCancellationError();

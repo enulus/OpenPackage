@@ -423,16 +423,22 @@ function doesDependencyMatchPackageName(
  * @param dependencyName - User-specified name to match (e.g. essential-agent, @scope/pkg)
  * @returns true if a dependency was removed, false otherwise
  */
+export interface RemoveDependencyFromManifestResult {
+  removed: boolean;
+  section?: 'dependencies' | 'dev-dependencies';
+}
+
 export async function removeDependencyFromManifest(
   manifestPath: string,
   dependencyName: string
-): Promise<boolean> {
-  if (!(await exists(manifestPath))) return false;
+): Promise<RemoveDependencyFromManifestResult> {
+  if (!(await exists(manifestPath))) return { removed: false };
 
   try {
     const config = await parsePackageYml(manifestPath);
     const sections: Array<'dependencies' | 'dev-dependencies'> = [DEPENDENCY_ARRAYS.DEPENDENCIES, DEPENDENCY_ARRAYS.DEV_DEPENDENCIES];
     let removed = false;
+    let removedFromSection: 'dependencies' | 'dev-dependencies' | undefined;
     let hadAnyDependencies = false;
 
     for (const section of sections) {
@@ -447,6 +453,7 @@ export async function removeDependencyFromManifest(
       if (next.length !== arr.length) {
         config[section] = next as any;
         removed = true;
+        removedFromSection = section;
       }
     }
 
@@ -456,10 +463,10 @@ export async function removeDependencyFromManifest(
     if (removed || hadAnyDependencies) {
       await writePackageYml(manifestPath, config);
     }
-    return removed;
+    return { removed, section: removedFromSection };
   } catch (error) {
     logger.warn(`Failed to update openpackage.yml when removing ${dependencyName}: ${error}`);
-    return false;
+    return { removed: false };
   }
 }
 
@@ -472,7 +479,8 @@ export async function removePackageFromOpenpackageYml(
   packageName: string
 ): Promise<boolean> {
   const packageYmlPath = getLocalPackageYmlPath(targetDir);
-  return removeDependencyFromManifest(packageYmlPath, packageName);
+  const result = await removeDependencyFromManifest(packageYmlPath, packageName);
+  return result.removed;
 }
 
 /**

@@ -83,7 +83,7 @@ export async function runAddDependencyFlow(
     classification.version,
     isDev,
     undefined,
-    false,
+    true, // silent — CLI layer handles display
     localPath,
     classification.gitUrl,
     classification.gitRef,
