@@ -26,6 +26,8 @@ import { resolveDeclaredPath } from '../../utils/path-resolution.js';
 import { classifyInput } from '../install/preprocessing/index.js';
 import { resolveRemoteList, type RemoteListResult } from '../list/remote-list-resolver.js';
 import type { ExecutionContext } from '../../types/execution-context.js';
+import { getLocalOpenPackageDir, getLocalPackageYmlPath } from '../../utils/paths.js';
+import { arePackageNamesEquivalent } from '../../utils/package-name.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -172,6 +174,83 @@ export async function resolveLocalPackage(
 }
 
 // ---------------------------------------------------------------------------
+// Pipeline: resolve workspace root package
+// ---------------------------------------------------------------------------
+
+/**
+ * Check if the requested package name matches the workspace root package
+ * (.openpackage/openpackage.yml) and resolve it directly if so.
+ *
+ * This handles the case where `opkg view` is run from a workspace directory
+ * and the auto-detected (or explicitly provided) name is the workspace itself,
+ * not an installed dependency.
+ */
+async function resolveWorkspaceRootPackage(
+  packageName: string,
+  cwd: string
+): Promise<LocalPackageResult | null> {
+  const manifestPath = getLocalPackageYmlPath(cwd);
+
+  if (!(await exists(manifestPath))) {
+    return null;
+  }
+
+  let manifest;
+  try {
+    manifest = await parsePackageYml(manifestPath);
+  } catch {
+    return null;
+  }
+
+  const workspaceName = manifest.name;
+  if (!workspaceName || !arePackageNamesEquivalent(workspaceName, packageName)) {
+    return null;
+  }
+
+  const openpackageDir = getLocalOpenPackageDir(cwd);
+  const version = manifest.version;
+  const metadata = extractMetadataFromManifest(manifest);
+
+  const allDeps = [
+    ...(manifest.dependencies || []),
+    ...(manifest['dev-dependencies'] || [])
+  ];
+  const dependencies = allDeps.map(dep => dep.name);
+
+  const files = await collectFiles(openpackageDir, openpackageDir);
+  const fileList: ListFileMapping[] = files.map(f => ({
+    source: f,
+    target: join(openpackageDir, f),
+    exists: true
+  }));
+  const resourceGroups = fileList.length > 0 ? groupFilesIntoResources(fileList) : undefined;
+
+  const headerType = await detectEntityType(openpackageDir);
+
+  return {
+    report: {
+      name: workspaceName,
+      version,
+      path: openpackageDir,
+      state: 'synced',
+      totalFiles: fileList.length,
+      existingFiles: fileList.length,
+      fileList,
+      resourceGroups,
+      dependencies
+    },
+    headerInfo: {
+      name: workspaceName,
+      version: version !== '0.0.0' ? version : undefined,
+      path: formatPathForDisplay(openpackageDir),
+      type: headerType
+    },
+    scope: 'project',
+    metadata
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Pipeline: resolve remote package (tier 3)
 // ---------------------------------------------------------------------------
 
@@ -303,6 +382,18 @@ export async function resolvePackageView(
         metadata: viewMetadata,
         dependencies: targetPkg?.dependencies ?? []
       };
+    }
+  }
+
+  // --- Tier 1.5: Workspace root package ---
+  // If the package name matches the workspace root (.openpackage/openpackage.yml),
+  // resolve it directly. This handles `opkg view` from a workspace where the
+  // auto-detected name is the workspace itself, not an installed dependency.
+  if (showProject) {
+    const cwd = options.cwd || process.cwd();
+    const workspaceRootResult = await resolveWorkspaceRootPackage(packageName, cwd);
+    if (workspaceRootResult) {
+      return { kind: 'local-package', localResult: workspaceRootResult };
     }
   }
 
