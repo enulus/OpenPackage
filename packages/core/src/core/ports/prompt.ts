@@ -33,6 +33,14 @@ export interface PromptGroupChoices<T = string> {
 export interface TextPromptOptions {
   initial?: string;
   placeholder?: string;
+  /**
+   * Validate the user's input. Return `true` or `undefined` if valid,
+   * or a string error message if invalid.
+   *
+   * Async validators are supported but note: because @clack/core does not
+   * await validate results, async validators are handled via a post-submit
+   * retry loop in the CLI adapter rather than inline validation.
+   */
   validate?: (value: string) => string | true | undefined | Promise<string | true | undefined>;
 }
 

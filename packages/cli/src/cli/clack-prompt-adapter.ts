@@ -84,18 +84,51 @@ export function createClackPrompt(): PromptPort {
       message: string,
       options?: TextPromptOptions
     ): Promise<string> {
-      const result = await clack.text({
-        message,
-        placeholder: options?.placeholder,
-        defaultValue: options?.initial,
-        validate: options?.validate ? (async (value: string | undefined) => {
-          const r = await options.validate!(value ?? '');
-          if (r === true || r === undefined) return undefined;
-          return r;
-        }) as any : undefined,
-      });
-      handleCancel(result);
-      return result as string;
+      // @clack/core does NOT await validate results, so async validators
+      // will render as [object Promise]. We need to handle sync and async
+      // validators differently.
+      const userValidate = options?.validate;
+
+      // Wrap validate to be synchronous for clack. If the user's validator
+      // is async, we skip clack's built-in validate and handle it via a
+      // retry loop below.
+      let isAsync = false;
+
+      const syncValidate = userValidate ? (value: string | undefined) => {
+        const r = userValidate(value ?? '');
+        if (r && typeof (r as any).then === 'function') {
+          // Async validator detected — let clack accept the value,
+          // we'll validate after the prompt returns.
+          isAsync = true;
+          return undefined;
+        }
+        if (r === true || r === undefined) return undefined;
+        return r as string;
+      } : undefined;
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const result = await clack.text({
+          message,
+          placeholder: options?.placeholder,
+          defaultValue: options?.initial,
+          validate: syncValidate,
+        });
+        handleCancel(result);
+
+        // If the validator was async, run it now and re-prompt on failure
+        if (isAsync && userValidate) {
+          const asyncResult = await userValidate((result as string) ?? '');
+          if (asyncResult !== true && asyncResult !== undefined) {
+            // Show the validation error and re-prompt
+            clack.log.error(asyncResult as string);
+            isAsync = false; // reset for next iteration
+            continue;
+          }
+        }
+
+        return result as string;
+      }
     },
   };
 }

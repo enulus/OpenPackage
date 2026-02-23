@@ -84,7 +84,7 @@ export async function setupNewCommand(args: any[]): Promise<void> {
     customPath,
     packageName,
     force: options?.force || false
-  });
+  }, out);
 
   if (!result.success) {
     throw new Error(result.error || 'Package creation failed');

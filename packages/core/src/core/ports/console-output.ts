@@ -38,10 +38,11 @@ export const consoleOutput: OutputPort = {
   },
 
   note(content: string, title?: string): void {
+    const indented = content.split('\n').map(line => `  ${line}`).join('\n');
     if (title) {
-      console.log(`\n${title}\n${content}`);
+      console.log(`\n${title}\n${indented}`);
     } else {
-      console.log(`\n${content}`);
+      console.log(`\n${indented}`);
     }
   },
 

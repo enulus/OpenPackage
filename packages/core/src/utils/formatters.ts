@@ -231,17 +231,17 @@ export function displayPackageConfig(packageConfig: PackageYml, path: string, is
   
   out.success(`${displayPath} ${action}`);
 
-  out.message(`  - Name: ${packageConfig.name}`);
+  out.message(`  Name: ${packageConfig.name}`);
   if (packageConfig.version) {
-    out.message(`  - Version: ${packageConfig.version}`);
+    out.message(`  Version: ${packageConfig.version}`);
   }
   if (packageConfig.description) {
-    out.message(`  - Description: ${packageConfig.description}`);
+    out.message(`  Description: ${packageConfig.description}`);
   }
   if (packageConfig.keywords && packageConfig.keywords.length > 0) {
-    out.message(`  - Keywords: ${packageConfig.keywords.join(', ')}`);
+    out.message(`  Keywords: ${packageConfig.keywords.join(', ')}`);
   }
   if (packageConfig.private) {
-    out.message(`  - Private: Yes`);
+    out.message(`  Private: Yes`);
   }
 }

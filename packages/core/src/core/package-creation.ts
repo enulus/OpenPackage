@@ -202,9 +202,9 @@ export async function createPackage(
 
     // Step 8: Show scope info
     if (isCustomPath) {
-      out.info(`\nLocation: Custom path (${displayPath})`);
+      out.message(`  Location: Custom path (${displayPath})`);
     } else if (scope) {
-      out.info(`\nScope: ${getScopeDescription(scope)}`);
+      out.message(`  Scope: ${getScopeDescription(scope)}`);
     }
 
     // Step 9: Return success with context
