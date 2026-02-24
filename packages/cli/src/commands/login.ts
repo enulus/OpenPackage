@@ -11,7 +11,6 @@ import { UserCancellationError } from '@opkg/core/utils/errors.js';
 import { getCurrentUsername } from '@opkg/core/core/api-keys.js';
 import { createCliExecutionContext } from '../cli/context.js';
 import { resolveOutput } from '@opkg/core/core/ports/resolve.js';
-import { cancel } from '@clack/prompts';
 
 type LoginOptions = {
 	profile?: string;
@@ -63,7 +62,7 @@ export async function setupLoginCommand(args: any[]): Promise<void> {
 	} catch (error: any) {
 		cleanupKeyListener();
 		if (abortController.signal.aborted) {
-			cancel('Operation cancelled.');
+			out.warn('Operation cancelled.');
 			throw new UserCancellationError('Operation cancelled by user');
 		}
 		logger.debug('Device login failed', { error });

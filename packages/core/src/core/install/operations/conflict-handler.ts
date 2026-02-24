@@ -10,6 +10,7 @@ import { logger } from '../../../utils/logger.js';
 import { getLocalPackageDir } from '../../../utils/paths.js';
 import { FILE_PATTERNS } from '../../../constants/index.js';
 import { getVersionInfoFromDependencyTree } from '../install-helpers.js';
+import type { OutputPort } from '../../ports/output.js';
 import type { PromptPort } from '../../ports/prompt.js';
 import { resolvePrompt, resolveOutput } from '../../ports/resolve.js';
 
@@ -37,13 +38,14 @@ export async function checkAndHandleAllPackageConflicts(
   resolvedPackages: ResolvedPackage[],
   options: InstallOptions,
   policy?: InteractionPolicy,
-  prompt?: PromptPort
+  prompt?: PromptPort,
+  output?: OutputPort
 ): Promise<{ shouldProceed: boolean; skippedPackages: string[]; forceOverwritePackages: Set<string> }> {
   const cwd = process.cwd();
   const skippedPackages: string[] = [];
   const forceOverwritePackages = new Set<string>();
   const p = prompt ?? resolvePrompt();
-  const out = resolveOutput();
+  const out = output ?? resolveOutput();
   
   // Check each package in the dependency tree for conflicts
   for (const resolved of resolvedPackages) {

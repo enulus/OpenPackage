@@ -80,7 +80,7 @@ export async function executeUninstallCandidate(
 
   for (const filePath of resource.targetFiles) {
     const absPath = path.join(targetDir, filePath);
-    if (options.dryRun && execContext.outputMode !== 'rich') {
+    if (options.dryRun) {
       removedFiles.push(filePath);
     } else if (await exists(absPath)) {
       await remove(absPath);

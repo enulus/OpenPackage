@@ -9,13 +9,16 @@ import type { PromptPort } from '../ports/prompt.js';
  * - Uses specified platforms if provided (validated against known platforms)
  * - Otherwise auto-detects
  * - If none detected and interactive=true, prompts user to select
+ *
+ * The `interactive` flag is typically derived from
+ * `InteractionPolicy.canPrompt(PromptTier.Required)` at the call site.
  */
 export async function resolvePlatforms(
   cwd: string,
   specified: string[] | undefined,
   options: { interactive?: boolean; output?: OutputPort; prompt?: PromptPort } = {}
 ): Promise<Platform[]> {
-  const interactive = options.interactive === true;
+  const canPrompt = options.interactive === true;
 
   const normalized = normalizePlatforms(specified);
   if (normalized && normalized.length > 0) {
@@ -30,7 +33,7 @@ export async function resolvePlatforms(
   const auto = await detectPlatforms(cwd);
   if (auto.length > 0) return auto;
 
-  if (interactive) {
+  if (canPrompt) {
     const selected = await promptForPlatformSelection(options.output, options.prompt);
     return selected;
   }

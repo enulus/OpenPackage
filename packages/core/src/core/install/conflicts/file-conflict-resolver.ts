@@ -485,9 +485,10 @@ export function classifyFileConflict(
  * @param relPath         - Workspace-relative path (for display / per-path key lookup)
  * @param ownerName       - Package name of the owner (only relevant for 'owned-by-other')
  * @param sourcePath      - Package-relative source path (shown in prompts)
- * @param options         - Install options carrying force / conflictStrategy / conflictDecisions
- * @param interactive     - Whether the session is running in TTY interactive mode
- * @param forceOverwrite  - True when the package-level phase confirmed an overwrite for this pkg
+ * @param options              - Install options carrying force / conflictStrategy / conflictDecisions
+ * @param interactive          - Whether prompts are allowed for conflict resolution
+ *                               (derived from InteractionPolicy at the call site)
+ * @param forceOverwrite       - True when the package-level phase confirmed an overwrite for this pkg
  */
 export async function resolveFileConflict(
   conflictType: 'owned-by-other' | 'exists-unowned',
@@ -651,10 +652,11 @@ export async function resolveConflictsForTargets(
   options: InstallOptions,
   installingPackageName: string,
   forceOverwrite: boolean = false,
-  prompt?: PromptPort
+  prompt?: PromptPort,
+  canPrompt?: boolean
 ): Promise<ConflictResolutionResult> {
   const warnings: string[] = [];
-  const interactive = options.interactive ?? false;
+  const interactive = canPrompt ?? options.interactive ?? false;
   const isDryRun = Boolean(options.dryRun);
 
   // -------------------------------------------------------------------------

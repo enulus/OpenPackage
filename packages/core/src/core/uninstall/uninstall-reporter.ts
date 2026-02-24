@@ -12,7 +12,7 @@ export interface UninstallResult {
  * Report uninstall results to console
  */
 export function reportUninstallResult(result: UninstallResult, context?: { outputMode?: string }, output?: OutputPort): void {
-  // Suppress output in interactive mode (spinner handles feedback)
+  // Suppress per-item output in rich mode (batch summary shown by caller)
   if (context?.outputMode === 'rich') return;
   
   const out = output ?? resolveOutput();
@@ -60,7 +60,7 @@ export interface ResourceUninstallResult {
  * Report resource-level uninstall results to console
  */
 export function reportResourceUninstallResult(result: ResourceUninstallResult, context?: { outputMode?: string }, output?: OutputPort): void {
-  // Suppress output in interactive mode (spinner handles feedback)
+  // Suppress per-item output in rich mode (batch summary shown by caller)
   if (context?.outputMode === 'rich') return;
   
   const out = output ?? resolveOutput();

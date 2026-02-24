@@ -2,18 +2,20 @@ import { UserCancellationError } from '../../utils/errors.js';
 import type { RemovalEntry } from './removal-collector.js';
 import { PromptTier } from '../../core/interaction-policy.js';
 import type { OutputPort } from '../ports/output.js';
-import { resolveOutput } from '../ports/resolve.js';
+import type { PromptPort } from '../ports/prompt.js';
+import { resolvePrompt } from '../ports/resolve.js';
 
 export interface RemovalConfirmationOptions {
   force?: boolean;
   dryRun?: boolean;
-  execContext?: { interactionPolicy?: { canPrompt(tier: PromptTier): boolean }; output?: OutputPort };
+  execContext?: { interactionPolicy?: { canPrompt(tier: PromptTier): boolean }; prompt?: PromptPort; output?: OutputPort };
   output?: OutputPort;
 }
 
 /**
  * Confirm removal operation with user.
- * Uses unified output (clack in interactive mode, plain console otherwise).
+ * Uses the PromptPort from the execution context so the confirmation
+ * renders consistently with the committed output mode (rich or plain).
  *
  * @param packageName - Name of the package
  * @param entries - Files to be removed
@@ -36,8 +38,8 @@ export async function confirmRemoval(
     throw new Error('Removal requires confirmation. Use --force in non-interactive mode.');
   }
 
-  const out = resolveOutput(options.execContext);
-  const confirmed = await out.confirm('Confirm removal?', { initial: false });
+  const prm = resolvePrompt(options.execContext);
+  const confirmed = await prm.confirm('Confirm removal?', false);
   if (!confirmed) {
     throw new UserCancellationError();
   }
