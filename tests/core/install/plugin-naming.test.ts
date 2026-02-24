@@ -325,7 +325,46 @@ describe('Plugin Naming', () => {
       );
     });
 
-    // ── No resource marker → fall back to repo ───────────────────────────
+    // ── Structural prefix detection (plugins/, packages/) ────────────────
+
+    it('should extract leaf after plugins/ prefix when no resource marker', () => {
+      assert.strictEqual(
+        deriveNamespaceSlug('gh@anthropics/claude-plugins-official/plugins/code-review'),
+        'code-review'
+      );
+    });
+
+    it('should extract leaf after packages/ prefix when no resource marker', () => {
+      assert.strictEqual(
+        deriveNamespaceSlug('gh@owner/mono-repo/packages/my-tool'),
+        'my-tool'
+      );
+    });
+
+    it('should strip extension from structural prefix leaf', () => {
+      assert.strictEqual(
+        deriveNamespaceSlug('gh@owner/repo/plugins/my-plugin.md'),
+        'my-plugin'
+      );
+    });
+
+    it('should escalate structural prefix leaf on collision', () => {
+      const existing = new Set(['code-review']);
+      assert.strictEqual(
+        deriveNamespaceSlug('gh@anthropics/claude-plugins-official/plugins/code-review', existing),
+        'claude-plugins-official/code-review'
+      );
+    });
+
+    it('should prefer resource marker over structural prefix when both present', () => {
+      // plugins/my-plugin/commands/foo.md → markerIndex=2 > 0, leaf = "my-plugin"
+      assert.strictEqual(
+        deriveNamespaceSlug('gh@owner/repo/plugins/my-plugin/commands/foo.md'),
+        'my-plugin'
+      );
+    });
+
+    // ── No resource marker, no structural prefix → fall back to repo ────
 
     it('should fall back to repo when no resource marker found (tools/linter)', () => {
       assert.strictEqual(

@@ -413,7 +413,7 @@ export class InstallOrchestrator {
       selectedPlugin = await promptPluginSelection(marketplace, execContext);
       
        if (!selectedPlugin) {
-         out.warn('No plugin selected. Installation cancelled.');
+         // Cancel already shown by clack.cancel() in prompt adapter; skip redundant warn to avoid orphan "│"
          return { success: true, data: { installed: 0, skipped: 0 } };
        }
        
@@ -421,7 +421,7 @@ export class InstallOrchestrator {
        const mode = await promptInstallMode(selectedPlugin, execContext);
        
        if (!mode) {
-         out.warn('Installation cancelled.');
+         // Cancel already shown by clack.cancel() in prompt adapter; skip redundant warn
          return { success: true, data: { installed: 0, skipped: 0 } };
        }
      

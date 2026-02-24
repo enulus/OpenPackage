@@ -180,3 +180,16 @@ export const DIR_TO_TYPE: Readonly<Record<string, ResourceTypeId>> = {
   skills: 'skill',
   hooks: 'hook',
 };
+
+/**
+ * Known structural prefix directories used to organize plugins/collections
+ * within a repository (e.g. `plugins/code-review`, `packages/my-tool`).
+ *
+ * These are NOT resource types — they are organizational containers that sit
+ * above resource directories in the repo hierarchy. Used by the namespace
+ * slug derivation algorithm to identify meaningful package names.
+ */
+export const STRUCTURAL_PREFIX_DIRS: ReadonlySet<string> = new Set([
+  'plugins',
+  'packages',
+]);

@@ -1,6 +1,6 @@
 import { basename } from 'path';
 import { extractGitHubInfo } from './git-url-parser.js';
-import { DIR_TO_TYPE } from '../constants/index.js';
+import { DIR_TO_TYPE, STRUCTURAL_PREFIX_DIRS } from '../constants/index.js';
 import { logger } from './logger.js';
 
 /**
@@ -254,9 +254,15 @@ function stripExtension(segment: string): string {
  * Derive a short, human-readable namespace slug from a full package name.
  *
  * Uses "smart leaf detection": walks the sub-path segments and identifies
- * the meaningful name segment that sits before the first resource-type
- * directory marker (rules, agents, commands, skills, hooks — as defined
- * by DIR_TO_TYPE in the resource registry).
+ * the meaningful name segment using a three-tier strategy:
+ *
+ * 1. **Resource marker** — if a resource-type directory (`rules`, `agents`,
+ *    `commands`, `skills`, `hooks` from `DIR_TO_TYPE`) appears at index > 0,
+ *    the segment immediately before it is the leaf.
+ * 2. **Structural prefix** — if no resource marker is found (or it's at
+ *    index 0), and a known structural prefix directory (`plugins`,
+ *    `packages`) exists, the segment immediately *after* it is the leaf.
+ * 3. **Repo fallback** — if neither strategy applies, the repo name is used.
  *
  * The slug uses `/` as separators so it produces real nested directories.
  *
@@ -280,6 +286,8 @@ function stripExtension(segment: string): string {
  *  |---------------------------------------------------------------|---------------------|
  *  | gh@owner/repo/plugins/foo/commands/bar/baz/hello.md           | foo                 |
  *  | gh@anthropics/claude-plugins/plugins/feature-dev/agents/x.md  | feature-dev         |
+ *  | gh@anthropics/repo/plugins/code-review                        | code-review         |
+ *  | gh@owner/repo/packages/my-tool                                | my-tool             |
  *  | gh@anthropics/essentials                                      | essentials          |
  *  | gh@owner/repo/agents/designer.md                              | repo                |
  *  | gh@owner/repo/tools/linter                                    | repo                |
@@ -317,10 +325,21 @@ export function deriveNamespaceSlug(
     if (markerIndex > 0) {
       // Segment immediately before the first resource marker
       leaf = stripExtension(segments[markerIndex - 1]);
-    } else {
-      // Marker at index 0 (e.g. "agents/designer.md") or no marker found
-      // Both cases fall back to repo
+    } else if (markerIndex === 0) {
+      // Marker at index 0 (e.g. "agents/designer.md") — package IS the repo
       leaf = repo;
+    } else {
+      // No resource marker found — check for known structural prefix directories
+      // (e.g. "plugins/code-review", "packages/my-tool")
+      const prefixIndex = segments.findIndex(seg => STRUCTURAL_PREFIX_DIRS.has(seg));
+
+      if (prefixIndex >= 0 && prefixIndex + 1 < segments.length) {
+        // Use the segment immediately after the structural prefix
+        leaf = stripExtension(segments[prefixIndex + 1]);
+      } else {
+        // No recognized structure — fall back to repo
+        leaf = repo;
+      }
     }
   }
 
