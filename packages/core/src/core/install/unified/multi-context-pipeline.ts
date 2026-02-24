@@ -3,7 +3,6 @@ import type { InstallationContext } from './context.js';
 import type { InstallReportData } from '../install-reporting.js';
 import { displayInstallationResults } from '../install-reporting.js';
 import { runUnifiedInstallPipeline } from './pipeline.js';
-import { logger } from '../../../utils/logger.js';
 import { resolveOutput } from '../../ports/resolve.js';
 
 export interface MultiContextPipelineOptions {
@@ -46,7 +45,6 @@ export async function runMultiContextPipeline(
       }
     } else {
       failed += 1;
-      logger.error(`Failed to install ${name}: ${result.error}`);
     }
 
     results.push({

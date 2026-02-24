@@ -100,11 +100,15 @@ export async function runUnifiedInstallPipeline(
     return await reportResultsPhase(ctx, installResult);
     
   } catch (error) {
-    logger.error(`Pipeline failed for ${ctx.source.packageName}:`, error);
+    logger.debug(`Pipeline failed for ${ctx.source.packageName}:`, error);
+    
+    const out = resolveOutput(ctx.execution);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    out.error(`Failed to install ${ctx.source.packageName}: ${errorMessage}`);
     
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage,
       warnings: ctx.warnings.length > 0 ? ctx.warnings : undefined
     };
   } finally {

@@ -103,6 +103,10 @@ export class PathSourceLoader implements PackageSourceLoader {
             manifestPath: pluginDetection.manifestPath || detectedBaseInfo?.manifestPath
           },
           sourceMetadata: {
+            // Preserve the repo root for resource-centric installs so that
+            // computePathScoping resolves resourcePath (which is relative to
+            // resolvedPath) against the correct reference frame.
+            ...(source.resourcePath ? { repoPath: resolvedPath } : {}),
             baseDetection: detectedBaseInfo
           }
         };
@@ -139,6 +143,10 @@ export class PathSourceLoader implements PackageSourceLoader {
           pluginType: pluginDetection.type as any  // Can be 'individual', 'marketplace', or 'marketplace-defined'
         } : undefined,
         sourceMetadata: {
+          // Preserve the repo root for resource-centric installs so that
+          // computePathScoping resolves resourcePath (which is relative to
+          // resolvedPath) against the correct reference frame.
+          ...(source.resourcePath ? { repoPath: resolvedPath } : {}),
           baseDetection: detectedBaseInfo
         }
       };
