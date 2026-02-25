@@ -8,7 +8,8 @@
  *  - Packages in the same wave have no inter-dependencies (by BFS definition)
  *  - Workspace index writes are deferred via IndexWriteCollector and flushed
  *    atomically after each wave completes
- *  - Ownership context for conflict detection is built once per wave and shared
+ *  - Ownership context for conflict detection is built per-package (not shared)
+ *    to correctly handle reinstalls and self-owned file detection
  *  - Per-package output is buffered and flushed sequentially in install order
  */
 
@@ -18,7 +19,6 @@ import type { NormalizedInstallOptions } from '../orchestrator/types.js';
 import type { InstallOrchestrator } from '../orchestrator/orchestrator.js';
 import type { InstallReportData } from '../install-reporting.js';
 import { IndexWriteCollector } from './index-write-collector.js';
-import { buildOwnershipContext } from '../conflicts/file-conflict-resolver.js';
 import { BufferedOutputAdapter } from '../../ports/buffered-output.js';
 import { runWithConcurrency } from '../../../utils/concurrency-pool.js';
 import { updateWorkspaceIndex } from './index-updater.js';
@@ -186,19 +186,17 @@ export async function installInWaves(
     const useParallel = installableNodes.length > 1 && concurrencyLimit > 1;
 
     if (useParallel) {
-      // Build shared ownership context for the wave (single index read)
-      let sharedOwnership;
-      try {
-        sharedOwnership = await buildOwnershipContext(targetDir, '__wave__', null);
-      } catch (error) {
-        logger.warn(`Failed to build ownership context for wave ${waveNum}: ${error}`);
-        sharedOwnership = undefined;
-      }
-
       // Create collector for deferred index writes
       const collector = new IndexWriteCollector();
 
       // Build task array
+      // NOTE: We intentionally do NOT build a shared ownership context here.
+      // Each package must build its own ownership context (inside
+      // FlowBasedInstallStrategy) so that it correctly excludes itself from
+      // the "other owners" list and recognises its own previously-owned paths.
+      // Passing a shared context with packageName='__wave__' caused reinstalls
+      // to misclassify a package's own files as "owned by other", triggering
+      // spurious namespacing.
       const taskMeta: Array<{ node: WaveNode; packageName: string; input: string }> = [];
       const tasks = installableNodes.map((node) => {
         const packageName = node.source.packageName ?? node.metadata?.name ?? node.displayName;
@@ -211,7 +209,6 @@ export async function installInWaves(
             ...execContext,
             output: buffered,
             indexWriteCollector: collector,
-            sharedOwnershipContext: sharedOwnership,
             // Disable mode commitment for parallel installs (already committed)
             commitOutputMode: undefined,
           };
