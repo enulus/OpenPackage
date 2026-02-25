@@ -1,6 +1,5 @@
 import type { InstallationContext } from '../context.js';
 import { performIndexBasedInstallationPhases } from '../../operations/installation-executor.js';
-import { displayDependencyTree } from '../../../dependency-resolver/display.js';
 import { resolvePlatforms } from '../../platform-resolution.js';
 import { logger } from '../../../../utils/logger.js';
 import { splitPackageNameForTelemetry } from '../../../../utils/plugin-naming.js';
@@ -31,9 +30,6 @@ export interface ExecutionResult {
 export async function executeInstallationPhase(
   ctx: InstallationContext
 ): Promise<ExecutionResult> {
-  // Display dependency tree
-  displayDependencyTree(ctx.resolvedPackages, true);
-  
   // Resolve platforms if not already set (orchestrator preflight sets for bulk/single)
   if (ctx.platforms.length === 0) {
     const canPrompt = ctx.execution.interactionPolicy?.canPrompt(PromptTier.Required) ?? false;

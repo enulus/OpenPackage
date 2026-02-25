@@ -21,7 +21,6 @@ export {
 
 // Helper utilities
 export {
-  shouldResolveDependencies,
   shouldUpdateManifest,
   addWarning,
   addError,

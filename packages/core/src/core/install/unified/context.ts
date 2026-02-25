@@ -141,13 +141,6 @@ export interface InstallationContext {
   _pathScopingPerformed?: boolean;
 
   /**
-   * When true, the dependency resolution phase is skipped.
-   * Set on per-resource contexts built from an already-loaded package (e.g. interactive
-   * selection) where the scoped packageName is not a valid registry identifier.
-   */
-  _skipDependencyResolution?: boolean;
-
-  /**
    * When true, report phase skips display and attaches report data to the result
    * for the caller to merge and display (used by runMultiContextPipeline groupReport).
    */

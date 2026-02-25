@@ -2,36 +2,6 @@ import type { InstallationContext } from './context.js';
 import { resolveOutput } from '../../ports/resolve.js';
 
 /**
- * Check if context should resolve dependencies
- */
-export function shouldResolveDependencies(ctx: InstallationContext): boolean {
-  // Skip dependency resolution for apply mode
-  if (ctx.mode === 'apply') {
-    return false;
-  }
-  // Skip when explicitly marked (e.g. per-resource contexts from interactive selection
-  // where the scoped packageName is not a valid registry identifier).
-  if (ctx._skipDependencyResolution) {
-    return false;
-  }
-  // Git/path installs are already fully specified by their source content.
-  // The registry dependency resolver expects the root package to exist in a registry;
-  // for git/path sources this can incorrectly mark the root as "missing" and trigger
-  // remote pulls (e.g. Claude marketplace plugins).
-  if (ctx.source.type === 'git' || ctx.source.type === 'path') {
-    return false;
-  }
-  // Workspace sources with contentRoot already set (workspace root install) are also
-  // fully specified and should not be resolved through the registry. These install
-  // workspace-level files from .openpackage/ and the package name in the manifest
-  // is just metadata, not a reference to a registry package.
-  if (ctx.source.type === 'workspace' && ctx.source.contentRoot) {
-    return false;
-  }
-  return true;
-}
-
-/**
  * Check if context should update manifest
  */
 export function shouldUpdateManifest(ctx: InstallationContext): boolean {

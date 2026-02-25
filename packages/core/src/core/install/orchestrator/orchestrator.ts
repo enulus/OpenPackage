@@ -33,7 +33,7 @@ import { runMultiContextPipeline } from '../unified/multi-context-pipeline.js';
 import { createAllStrategies } from './strategies/index.js';
 import { resolveWave, updateWorkspaceIndex } from '../wave-resolver/index.js';
 import type { WaveResolverOptions, WaveVersionConflict, WaveNode } from '../wave-resolver/types.js';
-import { getManifestPathAtContentRoot } from '../resolution/manifest-reader.js';
+import { getManifestPathAtContentRoot } from '../wave-resolver/manifest-reader.js';
 import { handleListSelection } from '../list-handler.js';
 import { discoverResources } from '../resource-discoverer.js';
 import { promptResourceSelection } from '../resource-selection-menu.js';
@@ -186,7 +186,6 @@ export class InstallOrchestrator {
         // resolver loop. Just run the pipeline for this single package -- do not
         // recurse into dependency installation again.
         if (options._skipDependencyInstall) {
-          context._skipDependencyResolution = true;
           return runUnifiedInstallPipeline(context);
         }
 
@@ -197,8 +196,6 @@ export class InstallOrchestrator {
         const rootManifestPath =
           isPathOrGit && contentRoot ? await getManifestPathAtContentRoot(contentRoot) : null;
         if (rootManifestPath) {
-          // Skip legacy dep resolution -- the wave resolver handles it
-          context._skipDependencyResolution = true;
           // Install root package first (this updates the workspace manifest)
           const rootResult = await runUnifiedInstallPipeline(context);
           // Then install dependencies via wave resolver (skipManifestUpdate for deps)
@@ -206,8 +203,6 @@ export class InstallOrchestrator {
         }
 
         // Run unified pipeline (handles load, resolve metadata, convert, conflicts, execute, manifest)
-        // Skip legacy dep resolution -- the orchestrator handles deps via the wave resolver below
-        context._skipDependencyResolution = true;
         const pipelineResult = await runUnifiedInstallPipeline(context);
 
         // After installing a registry package, check if it has a manifest with

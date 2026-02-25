@@ -439,15 +439,14 @@ function buildResourceMatchedPattern(
 }
 
 /**
- * Prepare resource contexts for multi-resource pipeline: set _skipDependencyResolution
- * and localPath for path sources so the pipeline skips reload and uses the correct root.
+ * Prepare resource contexts for multi-resource pipeline: set localPath
+ * for path sources so the pipeline uses the correct root.
  */
 export function prepareResourceContextsForMultiInstall(
   contexts: InstallationContext[],
   repoRoot: string
 ): InstallationContext[] {
   return contexts.map(rc => {
-    rc._skipDependencyResolution = true;
     if (rc.source.type === 'path') {
       rc.source.localPath = repoRoot;
     }

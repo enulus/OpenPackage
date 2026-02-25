@@ -129,10 +129,6 @@ export async function handleListSelection(
     resourceSpecs,
     repoRoot
   ).map(rc => {
-    // Per-resource contexts are sub-resources of an already-loaded package.
-    // Skip dependency resolution since the scoped packageName (e.g.
-    // "essentials/agents/code-reviewer.md") is not a valid registry identifier.
-    rc._skipDependencyResolution = true;
     // Ensure path-based loader can resolve repo-relative resourcePath
     if (rc.source.type === 'path') {
       rc.source.localPath = repoRoot;

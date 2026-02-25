@@ -14,8 +14,8 @@ import type {
 } from './types.js';
 import { selectInstallVersionUnified } from '../version-selection.js';
 import { resolvePackageContentRoot } from '../local-source-resolution.js';
-import { ensureContentRoot } from '../resolution/content-root-cache.js';
-import { normalizeGitUrl } from '../resolution/id-generator.js';
+import { ensureContentRoot } from './content-root-cache.js';
+import { normalizeGitUrl } from '../../../utils/git-url-parser.js';
 import { resolveDeclaredPath } from '../../../utils/path-resolution.js';
 import { readManifestAtPath, extractDependencies } from './manifest-reader.js';
 import { logger } from '../../../utils/logger.js';

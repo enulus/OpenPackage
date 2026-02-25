@@ -104,8 +104,6 @@ function buildResolvedPackage(node: WaveNode): ResolvedPackage | null {
  * - Skips marketplace nodes
  * - Skips already-installed packages (unless force)
  * - Builds a PackageSource and optional ResolvedPackage
- * - Sets `_skipDependencyResolution: true` since the wave resolver has
- *   already discovered the full dependency tree
  *
  * @returns contexts to install and a list of skipped nodes with reasons
  */
@@ -153,7 +151,6 @@ export async function buildInstallContexts(
       resolvedPackages: resolvedPackage ? [resolvedPackage] : [],
       warnings: [],
       errors: [],
-      _skipDependencyResolution: true,
       detectedBase: node.loaded?.baseDetection?.base,
       baseRelative: node.loaded?.baseDetection?.relative,
       baseSource: node.loaded?.baseDetection?.source as InstallationContext['baseSource'],

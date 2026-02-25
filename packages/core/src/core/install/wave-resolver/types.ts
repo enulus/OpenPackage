@@ -4,18 +4,60 @@
  */
 
 import type { PackageYml } from '../../../types/index.js';
-import type {
-  DependencyDeclaration,
-  ResolvedSource,
-  LoadedPackageData,
-  ParsedManifest
-} from '../resolution/types.js';
 import type { InstallResolutionMode } from '../types.js';
 import type { Platform } from '../../platforms.js';
 import type { InstallOptions } from '../../../types/index.js';
 
-// Re-export commonly used resolution types for convenience
-export type { DependencyDeclaration, ResolvedSource, LoadedPackageData, ParsedManifest };
+// ---------------------------------------------------------------------------
+// Types migrated from resolution/types.ts to remove cross-module dependency
+// ---------------------------------------------------------------------------
+
+/** Parsed manifest (openpackage.yml) - alias for PackageYml */
+export type ParsedManifest = PackageYml;
+
+export interface DependencyDeclaration {
+  name: string;
+  version?: string;
+  path?: string;
+  url?: string;
+  ref?: string;
+  base?: string;
+  isDev: boolean;
+  declaredIn: string;
+  depth: number;
+}
+
+export interface ResolvedSource {
+  type: 'registry' | 'path' | 'git';
+  packageName?: string;
+  resolvedVersion?: string;
+  registryPath?: string;
+  absolutePath?: string;
+  gitUrl?: string;
+  gitRef?: string;
+  resourcePath?: string;
+  contentRoot?: string;
+  manifestPath?: string;
+}
+
+export interface BaseDetectionResult {
+  base?: string;
+  relative?: string;
+  source?: 'openpackage' | 'plugin' | 'marketplace' | 'pattern' | 'user-selection' | 'manifest';
+  pattern?: string;
+  matchType?: string;
+}
+
+export interface LoadedPackageData {
+  name: string;
+  version: string;
+  contentRoot: string;
+  repoRoot?: string;
+  metadata: PackageYml;
+  manifest: ParsedManifest;
+  baseDetection?: BaseDetectionResult;
+  formatDetection?: { format?: unknown };
+}
 
 /**
  * A resolved dependency node in the wave graph.
