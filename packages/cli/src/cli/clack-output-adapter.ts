@@ -155,7 +155,7 @@ export function createPlainOutput(): OutputPort {
           if (s) {
             s.stop();
             if (finalMessage) {
-              console.log(finalMessage);
+              console.log(`✓ ${finalMessage}`);
             }
             s = null;
           }
