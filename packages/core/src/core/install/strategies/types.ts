@@ -10,7 +10,8 @@ import type { InstallOptions } from '../../../types/index.js';
 import type { PackageFormat } from '../format-detector.js';
 import type { PackageConversionContext } from '../../../types/conversion-context.js';
 
-import type { RelocatedFile } from '../conflicts/file-conflict-resolver.js';
+import type { RelocatedFile, OwnershipContext } from '../conflicts/file-conflict-resolver.js';
+import type { IndexWriteCollector } from '../wave-resolver/index-write-collector.js';
 
 /**
  * Installation context
@@ -45,6 +46,17 @@ export interface FlowInstallContext {
    * Threaded from ExecutionContext to avoid falling back to nonInteractivePrompt.
    */
   prompt?: import('../../ports/prompt.js').PromptPort;
+
+  /**
+   * Pre-built ownership context shared across parallel installs within a wave.
+   * When present, the flow-based strategy skips building its own context.
+   */
+  sharedOwnershipContext?: OwnershipContext;
+
+  /**
+   * Index write collector for deferred writes during parallel installs.
+   */
+  indexWriteCollector?: IndexWriteCollector;
 }
 
 /**

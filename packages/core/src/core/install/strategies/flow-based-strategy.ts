@@ -99,15 +99,21 @@ export class FlowBasedInstallStrategy extends BaseStrategy {
       const targets = this.computeTargetEntries(filteredSources, flowContext);
 
       if (targets.length > 0) {
-        // Load the package's previous workspace-index record to determine previously-owned paths
-        const previousRecord = await this.readPreviousIndexRecord(workspaceRoot, packageName);
+        // Use shared ownership context (parallel mode) or build fresh (sequential mode)
+        let ownershipContext;
+        if (context.sharedOwnershipContext) {
+          ownershipContext = context.sharedOwnershipContext;
+        } else {
+          // Load the package's previous workspace-index record to determine previously-owned paths
+          const previousRecord = await this.readPreviousIndexRecord(workspaceRoot, packageName);
 
-        // Build ownership context (other-package indexes + previous-owned paths)
-        const ownershipContext = await buildOwnershipContext(
-          workspaceRoot,
-          packageName,
-          previousRecord
-        );
+          // Build ownership context (other-package indexes + previous-owned paths)
+          ownershipContext = await buildOwnershipContext(
+            workspaceRoot,
+            packageName,
+            previousRecord
+          );
+        }
 
         // Resolve conflicts — get back the filtered set of allowed targets
         const { allowedTargets, warnings, packageWasNamespaced, namespaceDir, relocatedFiles } = await resolveConflictsForTargets(
@@ -117,7 +123,9 @@ export class FlowBasedInstallStrategy extends BaseStrategy {
           effectiveOptions,
           packageName,
           forceOverwrite,
-          context.prompt
+          context.prompt,
+          undefined,
+          context.indexWriteCollector
         );
         conflictWarnings.push(...warnings);
         wasNamespaced = packageWasNamespaced;

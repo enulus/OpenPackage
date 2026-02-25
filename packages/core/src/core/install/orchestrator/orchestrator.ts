@@ -32,6 +32,7 @@ import { runUnifiedInstallPipeline } from '../unified/pipeline.js';
 import { runMultiContextPipeline } from '../unified/multi-context-pipeline.js';
 import { createAllStrategies } from './strategies/index.js';
 import { resolveWave, updateWorkspaceIndex } from '../wave-resolver/index.js';
+import { installInWaves } from '../wave-resolver/wave-installer.js';
 import type { WaveResolverOptions, WaveVersionConflict, WaveNode } from '../wave-resolver/types.js';
 import { getManifestPathAtContentRoot } from '../wave-resolver/manifest-reader.js';
 import { handleListSelection } from '../list-handler.js';
@@ -335,66 +336,15 @@ export class InstallOrchestrator {
       };
     }
 
-    // Install each dependency by routing through the full orchestrator pipeline.
+    // Install dependencies in parallel waves.
     // This ensures every source type (git, path, registry) gets full strategy
     // preprocessing -- base detection, marketplace handling, plugin transformation, etc.
-    const depOptions: NormalizedInstallOptions = {
-      ...options,
-      skipManifestUpdate: true,
-      _skipDependencyInstall: true // Prevent recursive dep resolution
-    };
-    const force = options.force ?? false;
-
-    let depInstalled = 0;
-    let depFailed = 0;
-    let depSkipped = 0;
-    const depResults: Array<{ id: string; success: boolean; error?: string }> = [];
-
-    for (const nodeId of waveResult.graph.installOrder) {
-      const node = waveResult.graph.nodes.get(nodeId);
-      if (!node) continue;
-
-      // Skip marketplace nodes
-      if (node.isMarketplace) {
-        depSkipped++;
-        continue;
-      }
-
-      const packageName = node.source.packageName ?? node.metadata?.name ?? node.displayName;
-
-      // Check already-installed (unless force)
-      if (!force) {
-        const installedVersion = await getInstalledPackageVersion(packageName, execContext.targetDir);
-        if (installedVersion) {
-          depSkipped++;
-          continue;
-        }
-      }
-
-      // Reconstruct install input from the node's declaration
-      const input = nodeToInstallInput(node);
-      if (!input) {
-        logger.warn(`Could not reconstruct install input for ${packageName}, skipping`);
-        depSkipped++;
-        continue;
-      }
-
-      try {
-        const result = await this.execute(input, depOptions, execContext);
-        if (result.success) {
-          depInstalled++;
-          depResults.push({ id: packageName, success: true });
-        } else {
-          depFailed++;
-          depResults.push({ id: packageName, success: false, error: result.error });
-        }
-      } catch (error) {
-        depFailed++;
-        const errMsg = error instanceof Error ? error.message : String(error);
-        logger.warn(`Failed to install dependency ${packageName}: ${errMsg}`);
-        depResults.push({ id: packageName, success: false, error: errMsg });
-      }
-    }
+    const waveInstallResult = await installInWaves(
+      this,
+      waveResult,
+      options,
+      execContext
+    );
 
     // Update workspace index with dependency information
     await updateWorkspaceIndex(execContext.targetDir, waveResult.graph);
@@ -402,25 +352,25 @@ export class InstallOrchestrator {
     // Combine root result with dependency results
     const rootInstalled = (rootResult.data as { installed?: number })?.installed ?? 0;
 
-    if (depFailed > 0) {
+    if (waveInstallResult.failed > 0) {
       const out = resolveOutput(execContext);
-      const failedDeps = depResults.filter(r => !r.success);
-      const failedLines = failedDeps.map(r => {
+      const failedItems = waveInstallResult.results.filter(r => !r.success);
+      const failedLines = failedItems.map(r => {
         const reason = r.error ?? 'unknown error';
         return `  ${r.id}: ${reason}`;
       });
-      out.warn(`${depFailed} dependencies failed to install:\n${failedLines.join('\n')}`);
+      out.warn(`${waveInstallResult.failed} dependencies failed to install:\n${failedLines.join('\n')}`);
     }
 
     return {
-      success: rootResult.success && depFailed === 0,
+      success: rootResult.success && waveInstallResult.failed === 0,
       data: {
         packageName: context.source.packageName,
-        installed: rootInstalled + depInstalled,
-        skipped: depSkipped,
-        results: depResults
+        installed: rootInstalled + waveInstallResult.installed,
+        skipped: waveInstallResult.skipped,
+        results: waveInstallResult.results
       },
-      error: depFailed > 0 ? `${depFailed} dependencies failed to install` : rootResult.error,
+      error: waveInstallResult.failed > 0 ? `${waveInstallResult.failed} dependencies failed to install` : rootResult.error,
       warnings: waveResult.graph.warnings.length > 0 ? waveResult.graph.warnings : rootResult.warnings
     };
   }
@@ -989,68 +939,15 @@ export class InstallOrchestrator {
       };
     }
 
-    // Install each dependency by routing through the full orchestrator pipeline.
-    const depOptions: NormalizedInstallOptions = {
-      ...options,
-      // Recursive dependency installs should not modify workspace openpackage.yml
-      skipManifestUpdate: true,
-      _skipDependencyInstall: true // Prevent recursive dep resolution
-    };
-    const force = options.force ?? false;
+    // Install packages in parallel waves
+    const waveInstallResult = await installInWaves(
+      this,
+      waveResult,
+      options,
+      execContext
+    );
 
-    let installed = 0;
-    let failed = 0;
-    let skipped = 0;
-    const results: Array<{ id: string; success: boolean; error?: string }> = [];
-
-    for (const nodeId of waveResult.graph.installOrder) {
-      const node = waveResult.graph.nodes.get(nodeId);
-      if (!node) continue;
-
-      // Skip marketplace nodes
-      if (node.isMarketplace) {
-        skipped++;
-        continue;
-      }
-
-      const packageName = node.source.packageName ?? node.metadata?.name ?? node.displayName;
-
-      // Check already-installed (unless force)
-      if (!force) {
-        const installedVersion = await getInstalledPackageVersion(packageName, execContext.targetDir);
-        if (installedVersion) {
-          skipped++;
-          continue;
-        }
-      }
-
-      // Reconstruct install input from the node's declaration
-      const input = nodeToInstallInput(node);
-      if (!input) {
-        logger.warn(`Could not reconstruct install input for ${packageName}, skipping`);
-        skipped++;
-        continue;
-      }
-
-      try {
-        const result = await this.execute(input, depOptions, execContext);
-        if (result.success) {
-          installed++;
-          results.push({ id: packageName, success: true });
-        } else {
-          failed++;
-          results.push({ id: packageName, success: false, error: result.error });
-        }
-      } catch (error) {
-        failed++;
-        const errMsg = error instanceof Error ? error.message : String(error);
-        logger.warn(`Failed to install ${packageName}: ${errMsg}`);
-        results.push({ id: packageName, success: false, error: errMsg });
-      }
-    }
-
-    // Update workspace index with dependency information
-    await updateWorkspaceIndex(execContext.targetDir, waveResult.graph);
+    const { installed, failed, skipped, results } = waveInstallResult;
 
     if (failed > 0) {
       const failedItems = results.filter((r: { success: boolean }) => !r.success);

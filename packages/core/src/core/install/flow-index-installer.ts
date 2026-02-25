@@ -32,6 +32,7 @@ import type { Platform } from '../platforms.js';
 import type { InstallOptions } from '../../types/index.js';
 import type { WorkspaceIndexFileMapping } from '../../types/workspace-index.js';
 import type { RelocatedFile } from './conflicts/file-conflict-resolver.js';
+import type { IndexWriteCollector } from './wave-resolver/index-write-collector.js';
 import { createContextFromFormat } from '../conversion-context/creation.js';
 import { detectFormatWithContextFromDirectory } from './helpers/format-detection.js';
 import {
@@ -97,7 +98,9 @@ export async function installPackageByIndexWithFlows(
   resourceVersion?: string,  // Resource-specific version (for agents/skills)
   originalContentRoot?: string,  // Original source path before conversion (for index)
   forceOverwrite?: boolean,  // Phase 5: Package was confirmed for overwrite at package-level conflict phase
-  prompt?: import('../ports/prompt.js').PromptPort
+  prompt?: import('../ports/prompt.js').PromptPort,
+  indexWriteCollector?: IndexWriteCollector,
+  sharedOwnershipContext?: import('./conflicts/file-conflict-resolver.js').OwnershipContext
 ): Promise<IndexInstallResult> {
   logger.debug(`Installing ${packageName}@${version} with flows for platforms: ${platforms.join(', ')}`);
 
@@ -208,7 +211,10 @@ export async function installPackageByIndexWithFlows(
       conversionContext,
       // Phase 4: Pass resource filtering info
       matchedPattern,
-      prompt
+      prompt,
+      // Parallel install support
+      sharedOwnershipContext,
+      indexWriteCollector
     };
 
     try {
@@ -314,7 +320,8 @@ export async function installPackageByIndexWithFlows(
       indexSourcePath,
       fileMapping,
       marketplaceMetadata,
-      resourceVersion
+      resourceVersion,
+      indexWriteCollector
     );
   }
 
@@ -343,8 +350,23 @@ async function updateWorkspaceIndexForFlows(
     commitSha: string;
     pluginName: string;
   },
-  resourceVersion?: string
+  resourceVersion?: string,
+  indexWriteCollector?: IndexWriteCollector
 ): Promise<void> {
+  const effectiveVersion = resourceVersion ?? version;
+
+  // Defer to collector if present (parallel install mode)
+  if (indexWriteCollector) {
+    indexWriteCollector.recordPackageUpdate({
+      packageName,
+      path: packagePath,
+      version: effectiveVersion,
+      files: fileMapping,
+      marketplace: marketplaceMetadata,
+    });
+    return;
+  }
+
   try {
     const wsRecord = await readWorkspaceIndex(cwd);
     

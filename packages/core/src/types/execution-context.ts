@@ -10,6 +10,8 @@ import type { InteractionPolicy } from '../core/interaction-policy.js';
 import type { OutputPort } from '../core/ports/output.js';
 import type { PromptPort } from '../core/ports/prompt.js';
 import type { ProgressPort } from '../core/ports/progress.js';
+import type { IndexWriteCollector } from '../core/install/wave-resolver/index-write-collector.js';
+import type { OwnershipContext } from '../core/install/conflicts/file-conflict-resolver.js';
 
 /**
  * Output mode for the current session.
@@ -107,7 +109,23 @@ export interface ExecutionContext {
    * This is a one-shot operation: calling it when outputMode is already
    * set to the requested mode is a no-op.
    */
-  commitOutputMode?: (mode: OutputMode) => void;
+   commitOutputMode?: (mode: OutputMode) => void;
+
+  /**
+   * When present, workspace index writes are deferred to this collector
+   * instead of being written to disk immediately. Used during parallel
+   * wave-based installations to prevent read-modify-write races on
+   * openpackage.index.yml.
+   */
+  indexWriteCollector?: IndexWriteCollector;
+
+  /**
+   * Pre-built ownership context shared across parallel installs within a wave.
+   * When present, the flow-based strategy skips building its own context and
+   * uses this one instead. Prevents stale reads when multiple packages install
+   * concurrently.
+   */
+  sharedOwnershipContext?: OwnershipContext;
 }
 
 /**

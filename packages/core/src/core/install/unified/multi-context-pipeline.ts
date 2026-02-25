@@ -10,6 +10,8 @@ export interface MultiContextPipelineOptions {
   groupReport?: boolean;
   /** Package name for the grouped report (uses first context's packageName when omitted) */
   groupReportPackageName?: string;
+  /** When true, stop processing remaining contexts on the first failure */
+  failFast?: boolean;
 }
 
 export async function runMultiContextPipeline(
@@ -20,7 +22,7 @@ export async function runMultiContextPipeline(
     return { success: true, data: { installed: 0, skipped: 0, results: [] } };
   }
 
-  const { groupReport, groupReportPackageName } = options ?? {};
+  const { groupReport, groupReportPackageName, failFast } = options ?? {};
 
   let installed = 0;
   let skipped = 0;
@@ -45,6 +47,15 @@ export async function runMultiContextPipeline(
       }
     } else {
       failed += 1;
+      if (failFast) {
+        // Record remaining contexts as skipped
+        results.push({
+          name,
+          success: false,
+          error: result.error
+        });
+        break;
+      }
     }
 
     results.push({
@@ -74,7 +85,7 @@ export async function runMultiContextPipeline(
   };
 }
 
-function mergeInstallReportData(
+export function mergeInstallReportData(
   list: InstallReportData[],
   overrides: { packageName?: string }
 ): InstallReportData {

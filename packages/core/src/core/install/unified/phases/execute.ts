@@ -52,7 +52,9 @@ export async function executeInstallationPhase(
     options: ctx.options,
     targetDir: ctx.targetDir,
     matchedPattern: ctx.matchedPattern,  // Phase 4: Pass matched pattern
-    prompt: ctx.execution?.prompt
+    prompt: ctx.execution?.prompt,
+    indexWriteCollector: ctx.execution?.indexWriteCollector,
+    sharedOwnershipContext: ctx.execution?.sharedOwnershipContext
   });
   
   // Track errors in context

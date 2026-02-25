@@ -25,6 +25,7 @@ import { deriveNamespaceSlug } from '../../../utils/plugin-naming.js';
 import type { InstallOptions } from '../../../types/index.js';
 import type { WorkspaceConflictOwner } from '../../../utils/workspace-index-ownership.js';
 import type { WorkspaceIndexFileMapping } from '../../../types/workspace-index.js';
+import type { IndexWriteCollector } from '../wave-resolver/index-write-collector.js';
 import {
   loadOtherPackageIndexes,
   buildExpandedIndexesContext,
@@ -359,7 +360,8 @@ async function updateOwnerIndexAfterRename(
   owner: WorkspaceConflictOwner,
   oldRelPath: string,
   newRelPath: string,
-  indexByPackage: Map<string, PackageIndexRecord>
+  indexByPackage: Map<string, PackageIndexRecord>,
+  indexWriteCollector?: IndexWriteCollector
 ): Promise<void> {
   const normalizedOld = normalizePathForProcessing(oldRelPath);
   const normalizedNew = normalizePathForProcessing(newRelPath);
@@ -380,6 +382,22 @@ async function updateOwnerIndexAfterRename(
       : { ...oldMapping, target: normalizedNew };
   }
   // dir-key owners: directory key is still valid after rename, nothing to change.
+
+  // Defer to collector if present (parallel install mode)
+  if (indexWriteCollector) {
+    indexWriteCollector.recordFileMappingRename({
+      packageName: owner.packageName,
+      indexKey: owner.key,
+      oldTargetPath: normalizedOld,
+      newTargetPath: normalizedNew,
+      entrySnapshot: {
+        path: record.path,
+        version: record.workspace?.version,
+        files: record.files,
+      },
+    });
+    return;
+  }
 
   // Persist to workspace index
   const wsRecord = await readWorkspaceIndex(cwd);
@@ -573,7 +591,8 @@ export async function executeNamespace(
   ownershipContext: OwnershipContext,
   flowToPattern: string | undefined,
   dryRun: boolean,
-  ownerNamespaceSlug: string
+  ownerNamespaceSlug: string,
+  indexWriteCollector?: IndexWriteCollector
 ): Promise<{ ownerNamespacedPath: string; warning: string }> {
   const normalized = normalizePathForProcessing(targetRelPath);
   const ownerNamespacedPath = generateNamespacedPath(normalized, ownerNamespaceSlug, flowToPattern);
@@ -595,7 +614,8 @@ export async function executeNamespace(
     owner,
     normalized,
     ownerNamespacedPath,
-    ownershipContext.indexByPackage
+    ownershipContext.indexByPackage,
+    indexWriteCollector
   );
 
   // Update in-memory ownership map so subsequent targets in this run see the move
@@ -653,7 +673,8 @@ export async function resolveConflictsForTargets(
   installingPackageName: string,
   forceOverwrite: boolean = false,
   prompt?: PromptPort,
-  canPrompt?: boolean
+  canPrompt?: boolean,
+  indexWriteCollector?: IndexWriteCollector
 ): Promise<ConflictResolutionResult> {
   const warnings: string[] = [];
   const interactive = canPrompt ?? options.interactive ?? false;
@@ -816,7 +837,8 @@ export async function resolveConflictsForTargets(
             ownershipContext,
             target.flowToPattern,
             isDryRun,
-            ownerSlug
+            ownerSlug,
+            indexWriteCollector
           );
           warnings.push(nsWarn);
           relocatedFiles.push({ from: normalizePathForProcessing(target.relPath), to: ownerNamespacedPath });
