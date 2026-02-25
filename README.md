@@ -4,7 +4,7 @@
     <picture>
       <source srcset="assets/openpackage_ascii_dark.png" media="(prefers-color-scheme: dark)">
       <source srcset="assets/openpackage_ascii_light.png" media="(prefers-color-scheme: light)">
-      <img src="assets/openpackage_ascii_light.png" alt="OpenPackage logo" height="64">
+      <img src="assets/openpackage_ascii_light.png" alt="OpenPackage logo" height="84">
     </picture>
   </a>
 </p>
@@ -96,7 +96,7 @@ opkg install gh@wshobson/agents --plugins ui-design --agents ui-designer
 opkg install gh@wshobson/agents/plugins/ui-design/agents/ui-designer
 opkg install gh@vercel-labs/agent-skills --skills react-best-practices
 opkg install https://github.com/anthropics/claude-code/tree/main/plugins/code-review
-opkg install https://github.com/wshobson/agents/tree/main/plugins/ui-design/ui-designer.md
+opkg install https://github.com/wshobson/agents/tree/main/plugins/ui-design/agents/ui-designer.md
 opkg install https://github.com/vercel-labs/agent-skills/tree/main/skills/react-best-practices
 ```  
 
