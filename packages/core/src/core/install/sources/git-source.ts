@@ -8,6 +8,7 @@ import { detectPluginType } from '../plugin-detector.js';
 import { detectBase } from '../base-detector.js';
 import { getPlatformsState } from '../../../core/platforms.js';
 import { logger } from '../../../utils/logger.js';
+import { exists } from '../../../utils/fs.js';
 import { resolve, relative } from 'path';
 
 /**
@@ -109,7 +110,16 @@ export class GitSourceLoader implements PackageSourceLoader {
       }
       
       // Use detected base as content root if available
-      const contentRoot = detectedBaseInfo?.base || result.sourcePath;
+      // When resourcePath is specified and detected base equals repo root (pattern matched at top level),
+      // use the resource subpath so we load from the user-requested directory (e.g. skills/skill-creator)
+      // instead of the marketplace root.
+      let contentRoot = detectedBaseInfo?.base || result.sourcePath;
+      if (source.resourcePath && contentRoot === result.repoPath) {
+        const subpathRoot = resolve(result.repoPath, source.resourcePath);
+        if (await exists(subpathRoot)) {
+          contentRoot = subpathRoot;
+        }
+      }
       
       // Load individual package/plugin
       let sourcePackage = await loadPackageFromPath(contentRoot, {
