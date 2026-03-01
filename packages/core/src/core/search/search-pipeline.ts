@@ -5,7 +5,7 @@
  * No terminal-UI dependencies — display is handled by the CLI command layer.
  */
 
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { listAllPackages, listPackageVersions } from '../directory.js';
 import { getLocalPackagesDir } from '../../utils/paths.js';
 import { exists, listDirectories } from '../../utils/fs.js';
@@ -155,17 +155,29 @@ export interface RunSearchOptions {
 export async function runSearchPipeline(options: RunSearchOptions): Promise<SearchResult> {
   const result: SearchResult = { matches: [] };
 
+  // Resolve directories up front to detect project === global overlap
+  let projectDir: string | undefined;
+  let globalDir: string | undefined;
+
   if (options.showProject) {
     const ctx = await options.createContext({ global: false, cwd: options.cwd });
-    const projectPackagesDir = getLocalPackagesDir(ctx.targetDir);
-    const projectMatches = await scanPackagesDirectory(projectPackagesDir, 'project', options.query);
+    projectDir = getLocalPackagesDir(ctx.targetDir);
+  }
+  if (options.showGlobal) {
+    const ctx = await options.createContext({ global: true, cwd: options.cwd });
+    globalDir = getLocalPackagesDir(ctx.targetDir);
+  }
+
+  // Skip project when it resolves to the same path as global (avoids duplicate output)
+  const skipProject = !!(projectDir && globalDir && resolve(projectDir) === resolve(globalDir));
+
+  if (projectDir && !skipProject) {
+    const projectMatches = await scanPackagesDirectory(projectDir, 'project', options.query);
     result.matches.push(...projectMatches);
   }
 
-  if (options.showGlobal) {
-    const ctx = await options.createContext({ global: true, cwd: options.cwd });
-    const globalPackagesDir = getLocalPackagesDir(ctx.targetDir);
-    const globalMatches = await scanPackagesDirectory(globalPackagesDir, 'global', options.query);
+  if (globalDir) {
+    const globalMatches = await scanPackagesDirectory(globalDir, 'global', options.query);
     result.matches.push(...globalMatches);
   }
 

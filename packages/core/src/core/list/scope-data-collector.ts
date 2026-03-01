@@ -1,3 +1,4 @@
+import { resolve } from 'path';
 import type { ExecutionContext } from '../../types/index.js';
 import { runListPipeline, type ListPackageReport, type ListTreeNode, type ListPipelineResult, type ListFileMapping } from './list-pipeline.js';
 import { logger } from '../../utils/logger.js';
@@ -148,11 +149,22 @@ export async function collectScopedData(
 ): Promise<Array<{ scope: ResourceScope; result: ScopeResult }>> {
   const results: Array<{ scope: ResourceScope; result: ScopeResult }> = [];
 
+  // Resolve contexts up front to detect project === global overlap
+  let projectContext: ExecutionContext | undefined;
+  let globalContext: ExecutionContext | undefined;
+
   if (options.showProject) {
-    const projectContext = await createContext({
-      global: false,
-      cwd: options.cwd
-    });
+    projectContext = await createContext({ global: false, cwd: options.cwd });
+  }
+  if (options.showGlobal) {
+    globalContext = await createContext({ global: true, cwd: options.cwd });
+  }
+
+  // Skip project when it resolves to the same target as global (avoids duplicate output)
+  const skipProject = !!(projectContext && globalContext &&
+    resolve(projectContext.targetDir) === resolve(globalContext.targetDir));
+
+  if (projectContext && !skipProject) {
     try {
       const projectResult = await runScopeList(packageName, projectContext, options.pipelineOptions);
       if (projectResult) {
@@ -163,11 +175,7 @@ export async function collectScopedData(
     }
   }
 
-  if (options.showGlobal) {
-    const globalContext = await createContext({
-      global: true,
-      cwd: options.cwd
-    });
+  if (globalContext) {
     try {
       const globalResult = await runScopeList(packageName, globalContext, options.pipelineOptions);
       if (globalResult) {
