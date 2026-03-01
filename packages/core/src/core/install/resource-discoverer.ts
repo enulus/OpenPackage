@@ -16,10 +16,11 @@ import { exists, readTextFile } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
 import { extractMarkdownResourceMetadata } from '../resources/markdown-metadata.js';
 import { defaultNameFromPath, defaultNameFromSkillDir, preferFrontmatterName } from '../resources/resource-naming.js';
-import type { 
-  DiscoveredResource, 
+import { getMarkerFilename, isMarkerFile } from '../resources/resource-registry.js';
+import type {
+  DiscoveredResource,
   ResourceDiscoveryResult,
-  ResourceType 
+  ResourceType
 } from './resource-types.js';
 
 /**
@@ -116,7 +117,7 @@ async function discoverAgents(
 }
 
 /**
- * Discover skills (skills/.../ directories with SKILL.md)
+ * Discover skills (skills/.../ directories with marker file)
  */
 async function discoverSkills(
   basePath: string,
@@ -124,13 +125,13 @@ async function discoverSkills(
 ): Promise<DiscoveredResource[]> {
   const resources: DiscoveredResource[] = [];
   const skillsDir = join(basePath, 'skills');
-  
+
   if (!(await exists(skillsDir))) {
     return resources;
   }
-  
+
   for await (const file of walkFiles(skillsDir)) {
-    if (basename(file) !== 'SKILL.md') {
+    if (!isMarkerFile(basename(file), 'skill')) {
       continue;
     }
     

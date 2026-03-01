@@ -12,6 +12,7 @@ import { splitFrontmatter } from '../markdown-frontmatter.js';
 import { logger } from '../../utils/logger.js';
 import type { OutputPort } from '../ports/output.js';
 import { resolveOutput } from '../ports/resolve.js';
+import { isMarkerFile, getMarkerFilename } from '../resources/resource-registry.js';
 
 /**
  * Result of a resource match
@@ -348,15 +349,15 @@ async function matchSkills(
 ): Promise<ResourceMatchResult[]> {
   const results: ResourceMatchResult[] = [];
   
-  // Find all SKILL.md files (skills/**/SKILL.md)
+  // Find all marker files (skills/**/SKILL.md)
   const skillsDir = join(basePath, 'skills');
   const skillFiles: string[] = [];
-  
+
   // Check if skills directory exists
   if (await exists(skillsDir)) {
-    // Walk the skills directory and collect SKILL.md files
+    // Walk the skills directory and collect marker files
     for await (const file of walkFiles(skillsDir)) {
-      if (basename(file) === 'SKILL.md') {
+      if (isMarkerFile(basename(file), 'skill')) {
         skillFiles.push(file);
       }
     }
@@ -378,7 +379,7 @@ async function matchSkills(
       results.push({
         name,
         found: false,
-        error: `Skill '${name}' not found (requires SKILL.md)`
+        error: `Skill '${name}' not found (requires ${getMarkerFilename('skill')})`
       });
     }
   }

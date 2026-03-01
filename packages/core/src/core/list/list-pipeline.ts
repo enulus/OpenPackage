@@ -17,7 +17,8 @@ import { isPlatformId, getAllPlatforms, getPlatformDefinition } from '../platfor
 import { normalizePlatforms } from '../platform/platform-mapper.js';
 import { DIR_TO_TYPE, RESOURCE_TYPE_ORDER, toPluralKey, type ResourceTypeId } from '../resources/resource-registry.js';
 import { classifySourceKey } from '../resources/source-key-classifier.js';
-import { deriveResourceFullName } from '../resources/resource-namespace.js';
+import { deriveResourceFullName, buildMarkerBoundaries, deriveMarkerFullName } from '../resources/resource-namespace.js';
+import { getMarkerFilename } from '../resources/resource-registry.js';
 export { classifySourceKey } from '../resources/source-key-classifier.js';
 
 export type PackageSyncState = 'synced' | 'partial' | 'missing';
@@ -224,12 +225,27 @@ function extractPlatformFromPath(targetPath: string, targetDir: string): string 
  * For other types, each source key maps to one resource.
  */
 export function groupFilesIntoResources(fileList: ListFileMapping[]): ListResourceGroup[] {
+  // Pre-scan: build namespace boundaries for marker-based resource types
+  const markerBoundaryCache = new Map<string, string[]>();
+  for (const file of fileList) {
+    const { resourceType } = classifySourceKey(file.source);
+    if (!markerBoundaryCache.has(resourceType) && getMarkerFilename(resourceType)) {
+      const sources = fileList
+        .filter(f => classifySourceKey(f.source).resourceType === resourceType)
+        .map(f => f.source);
+      markerBoundaryCache.set(resourceType, buildMarkerBoundaries(sources, resourceType));
+    }
+  }
+
   // First pass: classify each file and group by resource identity
   const resourceMap = new Map<string, ListResourceInfo>();
 
   for (const file of fileList) {
     const { resourceType } = classifySourceKey(file.source);
-    const fullName = deriveResourceFullName(file.source, resourceType);
+    const boundaries = markerBoundaryCache.get(resourceType);
+    const fullName = boundaries && boundaries.length > 0
+      ? deriveMarkerFullName(file.source, resourceType, boundaries)
+      : deriveResourceFullName(file.source, resourceType);
     const key = fullName;
 
     if (!resourceMap.has(key)) {

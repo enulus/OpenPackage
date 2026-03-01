@@ -6,7 +6,7 @@
  */
 
 import { stripExtension } from './resource-naming.js';
-import { getResourceTypeDef, toPluralKey, type ResourceTypeId } from './resource-registry.js';
+import { getResourceTypeDef, getMarkerFilename, findMarkerIndex, toPluralKey, type ResourceTypeId } from './resource-registry.js';
 import { stripPlatformSuffixFromFilename } from '../flows/platform-suffix-handler.js';
 
 /**
@@ -41,8 +41,9 @@ function deriveNamespace(pathUnderCategory: string, resourceType: ResourceTypeId
 
   const parts = pathUnderCategory.split('/');
 
-  if (resourceType === 'skill') {
-    return parts[0] || 'unnamed';
+  const marker = getMarkerFilename(resourceType);
+  if (marker) {
+    return deriveMarkerNamespace(parts, marker);
   }
 
   // Strip platform suffix (e.g. git-manager.opencode.md -> git-manager.md) so platform-specific
@@ -95,4 +96,84 @@ export function deriveResourceFullName(path: string, resourceType: ResourceTypeI
   const namespace = deriveNamespace(pathUnder, normalizedType);
   const pluralKey = toPluralKey(normalizedType);
   return `${pluralKey}/${namespace}`;
+}
+
+/**
+ * Derive namespace for a marker-based resource type from its path segments.
+ *
+ * Marker-based resources (e.g. skills with SKILL.md) use the parent directory
+ * of the marker file as the namespace boundary. For paths containing the marker,
+ * everything before it is the namespace. For other files, falls back to the
+ * first segment.
+ */
+function deriveMarkerNamespace(parts: string[], marker: string): string {
+  const idx = findMarkerIndex(parts, marker);
+  if (idx > 0) {
+    return parts.slice(0, idx).join('/');
+  }
+  return parts[0] || 'unnamed';
+}
+
+/**
+ * Scan a list of paths and extract namespace boundaries by finding marker
+ * file entries for the given resource type.
+ *
+ * Returns boundaries sorted longest-first so callers can match greedily.
+ */
+export function buildMarkerBoundaries(paths: string[], resourceType: ResourceTypeId): string[] {
+  const marker = getMarkerFilename(resourceType);
+  if (!marker) return [];
+
+  const def = getResourceTypeDef(resourceType);
+  const categoryDir = def.dirName;
+  if (!categoryDir) return [];
+
+  const boundaries = new Set<string>();
+  for (const p of paths) {
+    const pathUnder = getPathUnderCategory(p, categoryDir);
+    if (pathUnder === null) continue;
+    const parts = pathUnder.split('/');
+    const idx = findMarkerIndex(parts, marker);
+    if (idx > 0) {
+      boundaries.add(parts.slice(0, idx).join('/'));
+    }
+  }
+  // Sort longest-first for greedy prefix matching
+  return Array.from(boundaries).sort((a, b) => b.length - a.length);
+}
+
+/**
+ * Derive the full resource name for a file belonging to a marker-based
+ * resource type, using pre-computed boundaries to correctly group files
+ * under nested directories.
+ *
+ * Falls back to standard derivation when no boundary matches.
+ */
+export function deriveMarkerFullName(path: string, resourceType: ResourceTypeId, boundaries: string[]): string {
+  const def = getResourceTypeDef(resourceType);
+  const categoryDir = def.dirName;
+  const pluralKey = toPluralKey(resourceType);
+
+  if (!categoryDir) {
+    const fallback = path.replace(/\\/g, '/').split('/').pop() ?? 'unnamed';
+    return `${pluralKey}/${stripExtension(fallback)}`;
+  }
+
+  const pathUnder = getPathUnderCategory(path, categoryDir);
+  if (pathUnder === null) {
+    const fallback = path.replace(/\\/g, '/').split('/').pop() ?? 'unnamed';
+    return `${pluralKey}/${stripExtension(fallback)}`;
+  }
+
+  // Try matching against known boundaries (longest-first)
+  for (const boundary of boundaries) {
+    if (pathUnder === boundary || pathUnder.startsWith(boundary + '/')) {
+      return `${pluralKey}/${boundary}`;
+    }
+  }
+
+  // Fallback: use standard marker namespace derivation
+  const marker = getMarkerFilename(resourceType);
+  const parts = pathUnder.split('/');
+  return `${pluralKey}/${marker ? deriveMarkerNamespace(parts, marker) : parts[0] || 'unnamed'}`;
 }

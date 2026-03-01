@@ -5,8 +5,15 @@
 import assert from 'node:assert/strict';
 import {
   deriveResourceFullName,
-  getPathUnderCategory
+  getPathUnderCategory,
+  buildMarkerBoundaries,
+  deriveMarkerFullName
 } from '../../../packages/core/src/core/resources/resource-namespace.js';
+import {
+  getMarkerFilename,
+  findMarkerIndex,
+  isMarkerFile
+} from '../../../packages/core/src/core/resources/resource-registry.js';
 
 // getPathUnderCategory
 {
@@ -20,6 +27,20 @@ import {
   assert.equal(getPathUnderCategory('rules/', 'rules'), '');
   assert.equal(getPathUnderCategory('other/unknown.mdc', 'rules'), null);
   console.log('✓ getPathUnderCategory works');
+}
+
+// Registry marker utilities
+{
+  assert.equal(getMarkerFilename('skill'), 'SKILL.md');
+  assert.equal(getMarkerFilename('rule'), null);
+  assert.equal(getMarkerFilename('agent'), null);
+  assert.equal(isMarkerFile('SKILL.md', 'skill'), true);
+  assert.equal(isMarkerFile('readme.md', 'skill'), false);
+  assert.equal(isMarkerFile('SKILL.md', 'rule'), false);
+  assert.equal(findMarkerIndex(['my-skill', 'SKILL.md'], 'SKILL.md'), 1);
+  assert.equal(findMarkerIndex(['openpackage', 'skill-creator', 'SKILL.md'], 'SKILL.md'), 2);
+  assert.equal(findMarkerIndex(['my-skill', 'readme.md'], 'SKILL.md'), -1);
+  console.log('✓ Registry marker utilities');
 }
 
 // deriveResourceFullName - rules
@@ -44,11 +65,42 @@ import {
   console.log('✓ deriveResourceFullName agents');
 }
 
-// deriveResourceFullName - skills
+// deriveResourceFullName - skills (single file, no boundary context)
 {
   assert.equal(deriveResourceFullName('skills/my-skill/readme.md', 'skill'), 'skills/my-skill');
   assert.equal(deriveResourceFullName('skills/foo/SKILL.md', 'skill'), 'skills/foo');
+  // Nested skill with SKILL.md - deriveResourceFullName detects marker in path
+  assert.equal(deriveResourceFullName('skills/openpackage/skill-creator/SKILL.md', 'skill'), 'skills/openpackage/skill-creator');
+  assert.equal(deriveResourceFullName('.claude/skills/openpackage/skill-creator/SKILL.md', 'skill'), 'skills/openpackage/skill-creator');
   console.log('✓ deriveResourceFullName skills');
+}
+
+// buildMarkerBoundaries + deriveMarkerFullName (boundary-aware grouping)
+{
+  const paths = [
+    'skills/openpackage/skill-creator/SKILL.md',
+    'skills/openpackage/skill-creator/agents/foo.md',
+    'skills/openpackage/skill-creator/scripts/bar.py',
+    'skills/my-skill/SKILL.md',
+    'skills/my-skill/readme.md',
+  ];
+  const boundaries = buildMarkerBoundaries(paths, 'skill');
+  assert.deepEqual(boundaries, ['openpackage/skill-creator', 'my-skill']);
+
+  // All nested files group under the correct skill boundary
+  assert.equal(deriveMarkerFullName('skills/openpackage/skill-creator/SKILL.md', 'skill', boundaries), 'skills/openpackage/skill-creator');
+  assert.equal(deriveMarkerFullName('skills/openpackage/skill-creator/agents/foo.md', 'skill', boundaries), 'skills/openpackage/skill-creator');
+  assert.equal(deriveMarkerFullName('skills/openpackage/skill-creator/scripts/bar.py', 'skill', boundaries), 'skills/openpackage/skill-creator');
+  assert.equal(deriveMarkerFullName('skills/my-skill/SKILL.md', 'skill', boundaries), 'skills/my-skill');
+  assert.equal(deriveMarkerFullName('skills/my-skill/readme.md', 'skill', boundaries), 'skills/my-skill');
+
+  // Also works with platform-prefixed workspace paths
+  assert.equal(deriveMarkerFullName('.claude/skills/openpackage/skill-creator/SKILL.md', 'skill', boundaries), 'skills/openpackage/skill-creator');
+  assert.equal(deriveMarkerFullName('.cursor/skills/my-skill/readme.md', 'skill', boundaries), 'skills/my-skill');
+
+  // Non-marker types return empty boundaries
+  assert.deepEqual(buildMarkerBoundaries(['rules/foo.mdc'], 'rule'), []);
+  console.log('✓ buildMarkerBoundaries + deriveMarkerFullName');
 }
 
 // deriveResourceFullName - mcp and other

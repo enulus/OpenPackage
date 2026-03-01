@@ -1,4 +1,5 @@
 import { basename } from 'path';
+import { isMarkerFile } from './resource-registry.js';
 
 export function stripExtension(filename: string): string {
   return filename.replace(/\.[^.]+$/, '') || filename;
@@ -23,13 +24,13 @@ export function preferFrontmatterName(
 
 /**
  * Derive a display name from an untracked file's workspace path.
- * For SKILL.md files nested in a directory, uses the parent directory name.
+ * For marker files (e.g. SKILL.md) nested in a directory, uses the parent directory name.
  * Otherwise uses the filename without extension.
  */
 export function deriveUntrackedResourceName(workspacePath: string): string {
   const parts = workspacePath.split('/');
   const fileName = parts[parts.length - 1];
-  if (fileName === 'SKILL.md' && parts.length >= 2) {
+  if (isMarkerFile(fileName, 'skill') && parts.length >= 2) {
     return parts[parts.length - 2];
   }
   return stripExtension(fileName);

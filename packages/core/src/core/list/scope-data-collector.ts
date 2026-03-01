@@ -8,7 +8,8 @@ import type { UntrackedScanResult } from './untracked-files-scanner.js';
 import { detectEntityType, getEntityDisplayName } from '../../utils/entity-detector.js';
 import { formatPathForDisplay } from '../../utils/formatters.js';
 import { resolveDeclaredPath } from '../../utils/path-resolution.js';
-import { deriveResourceFullName } from '../resources/resource-namespace.js';
+import { deriveResourceFullName, buildMarkerBoundaries, deriveMarkerFullName } from '../resources/resource-namespace.js';
+import { getMarkerFilename } from '../resources/resource-registry.js';
 import { RESOURCE_TYPE_ORDER_PLURAL, normalizeType, toPluralKey } from '../resources/resource-registry.js';
 import type { EnhancedFileMapping, EnhancedResourceInfo, EnhancedResourceGroup, ResourceScope } from './list-tree-renderer.js';
 
@@ -252,9 +253,24 @@ export function mergeTrackedAndUntrackedResources(
   tree.forEach(collectFromNode);
 
   if (untrackedFiles && untrackedFiles.files.length > 0) {
+    // Pre-scan: build namespace boundaries for marker-based resource types
+    const untrackedBoundaryCache = new Map<string, string[]>();
     for (const file of untrackedFiles.files) {
       const singularType = normalizeType(file.category);
-      const fullName = deriveResourceFullName(file.workspacePath, singularType);
+      if (!untrackedBoundaryCache.has(singularType) && getMarkerFilename(singularType)) {
+        const paths = untrackedFiles.files
+          .filter(f => normalizeType(f.category) === singularType)
+          .map(f => f.workspacePath);
+        untrackedBoundaryCache.set(singularType, buildMarkerBoundaries(paths, singularType));
+      }
+    }
+
+    for (const file of untrackedFiles.files) {
+      const singularType = normalizeType(file.category);
+      const boundaries = untrackedBoundaryCache.get(singularType);
+      const fullName = boundaries && boundaries.length > 0
+        ? deriveMarkerFullName(file.workspacePath, singularType, boundaries)
+        : deriveResourceFullName(file.workspacePath, singularType);
       const normalizedType = normalizeCategory(file.category);
 
       if (!typeMap.has(normalizedType)) {
