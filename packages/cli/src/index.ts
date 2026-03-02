@@ -92,7 +92,7 @@ program
       output += 'All commands:\n\n';
       output += '    install, uninstall, list,\n';
       output += '    new, add, remove, save, set,\n';
-      output += '    publish, unpublish, search, view,\n';
+      output += '    publish, unpublish, search, view, which,\n';
       output += '    login, logout, config\n\n';
       
       // Version
@@ -265,6 +265,17 @@ program
   .action(withErrorHandling(async (...args: any[]) => {
     const { setupViewCommand } = await import('./commands/view.js');
     await setupViewCommand(args);
+  }));
+
+program
+  .command('which')
+  .description('Show which package installed a resource')
+  .argument('<resource-name>', 'resource to look up (e.g., "skill-dev", "skills/skill-dev")')
+  .option('-s, --scope <scope>', 'workspace scope: project or global (default: both)')
+  .option('-f, --files', 'show individual file paths')
+  .action(withErrorHandling(async (...args: any[]) => {
+    const { setupWhichCommand } = await import('./commands/which.js');
+    await setupWhichCommand(args);
   }));
 
 // === PUBLISHING COMMANDS ===

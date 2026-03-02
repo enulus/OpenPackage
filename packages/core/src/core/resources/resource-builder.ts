@@ -125,7 +125,8 @@ export async function buildWorkspaceResources(
   );
 
   for (const file of untrackedResult.files) {
-    const cls = untrackedClassified.get(file.workspacePath)!;
+    const cls = untrackedClassified.get(file.workspacePath);
+    if (!cls) continue; // orphan file skipped by classifier
     const key = `${cls.resourceType}::${cls.resourceName}`;
 
     if (!untrackedMap.has(key)) {
