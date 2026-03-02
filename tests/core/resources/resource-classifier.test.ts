@@ -3,7 +3,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { classifySourceKeyBatch, classifyUntrackedPaths } from '../../../packages/core/src/core/resources/resource-classifier.js';
+import { classifySourceKeyBatch, classifyUntrackedPaths, classifyAndGroupUntrackedFiles } from '../../../packages/core/src/core/resources/resource-classifier.js';
 
 // classifySourceKeyBatch — simple rules
 {
@@ -210,6 +210,84 @@ import { classifySourceKeyBatch, classifyUntrackedPaths } from '../../../package
   const result = classifyUntrackedPaths(files);
   assert.equal(result.size, 0, 'All-orphan skill directory should produce empty result');
   console.log('✓ classifyUntrackedPaths — all-orphan skill directory');
+}
+
+// ---------------------------------------------------------------------------
+// classifyAndGroupUntrackedFiles tests
+// ---------------------------------------------------------------------------
+
+// classifyAndGroupUntrackedFiles — basic grouping
+{
+  const files = [
+    { workspacePath: '.cursor/rules/custom-rules.mdc', category: 'rules' },
+    { workspacePath: '.cursor/rules/other-rule.mdc', category: 'rules' },
+    { workspacePath: '.claude/agents/agent-creator.md', category: 'agents' },
+  ];
+  const grouped = classifyAndGroupUntrackedFiles(files);
+
+  assert.equal(grouped.size, 3, 'Should produce 3 groups (2 rules + 1 agent)');
+
+  const ruleGroup1 = grouped.get('rule::custom-rules');
+  assert.ok(ruleGroup1, 'Should have rule::custom-rules group');
+  assert.equal(ruleGroup1!.resourceType, 'rule');
+  assert.equal(ruleGroup1!.resourceName, 'custom-rules');
+  assert.equal(ruleGroup1!.fullName, 'rules/custom-rules');
+  assert.deepEqual(ruleGroup1!.filePaths, ['.cursor/rules/custom-rules.mdc']);
+
+  const ruleGroup2 = grouped.get('rule::other-rule');
+  assert.ok(ruleGroup2, 'Should have rule::other-rule group');
+  assert.deepEqual(ruleGroup2!.filePaths, ['.cursor/rules/other-rule.mdc']);
+
+  const agentGroup = grouped.get('agent::agent-creator');
+  assert.ok(agentGroup, 'Should have agent::agent-creator group');
+  assert.equal(agentGroup!.resourceType, 'agent');
+  assert.equal(agentGroup!.fullName, 'agents/agent-creator');
+
+  console.log('✓ classifyAndGroupUntrackedFiles — basic grouping');
+}
+
+// classifyAndGroupUntrackedFiles — orphan exclusion
+{
+  const files = [
+    { workspacePath: '.claude/skills/my-skill/SKILL.md', category: 'skills' },
+    { workspacePath: '.claude/skills/my-skill/readme.md', category: 'skills' },
+    { workspacePath: '.claude/skills/orphan.txt', category: 'skills' },
+  ];
+  const grouped = classifyAndGroupUntrackedFiles(files);
+
+  assert.equal(grouped.size, 1, 'Orphan files should be excluded');
+  const skillGroup = grouped.get('skill::my-skill');
+  assert.ok(skillGroup, 'Should have skill::my-skill group');
+  assert.deepEqual(skillGroup!.filePaths, [
+    '.claude/skills/my-skill/SKILL.md',
+    '.claude/skills/my-skill/readme.md',
+  ]);
+
+  console.log('✓ classifyAndGroupUntrackedFiles — orphan exclusion');
+}
+
+// classifyAndGroupUntrackedFiles — empty input
+{
+  const grouped = classifyAndGroupUntrackedFiles([]);
+  assert.equal(grouped.size, 0);
+  console.log('✓ classifyAndGroupUntrackedFiles — empty input');
+}
+
+// classifyAndGroupUntrackedFiles — mixed types
+{
+  const files = [
+    { workspacePath: '.cursor/rules/my-rule.mdc', category: 'rules' },
+    { workspacePath: '.claude/skills/my-skill/SKILL.md', category: 'skills' },
+    { workspacePath: '.claude/agents/my-agent.md', category: 'agents' },
+  ];
+  const grouped = classifyAndGroupUntrackedFiles(files);
+
+  assert.equal(grouped.size, 3, 'Should group each type separately');
+  assert.ok(grouped.has('rule::my-rule'));
+  assert.ok(grouped.has('skill::my-skill'));
+  assert.ok(grouped.has('agent::my-agent'));
+
+  console.log('✓ classifyAndGroupUntrackedFiles — mixed types');
 }
 
 console.log('\n✅ All resource-classifier tests passed');

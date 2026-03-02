@@ -648,8 +648,14 @@ export async function runListPipeline(
     let untrackedFiles: UntrackedScanResult | undefined;
     let untrackedCount = 0;
     if (!tracked) {
-      untrackedFiles = await scanUntrackedFiles(targetDir, platforms);
-      untrackedCount = untrackedFiles.totalFiles;
+      try {
+        untrackedFiles = await scanUntrackedFiles(targetDir, platforms);
+        untrackedCount = untrackedFiles.totalFiles;
+      } catch (error) {
+        logger.warn('Failed to scan untracked files', {
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     return {
@@ -691,8 +697,14 @@ export async function runListPipeline(
   let untrackedFiles: UntrackedScanResult | undefined;
   let untrackedCount = 0;
   if (!tracked) {
-    untrackedFiles = await scanUntrackedFiles(targetDir, platforms);
-    untrackedCount = untrackedFiles.totalFiles;
+    try {
+      untrackedFiles = await scanUntrackedFiles(targetDir, platforms);
+      untrackedCount = untrackedFiles.totalFiles;
+    } catch (error) {
+      logger.warn('Failed to scan untracked files', {
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   return {
