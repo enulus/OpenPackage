@@ -2,7 +2,6 @@ import { Command } from 'commander';
 
 import { CommandResult } from '@opkg/core/types/index.js';
 import { ValidationError } from '@opkg/core/utils/errors.js';
-import { parseWorkspaceScope } from '@opkg/core/core/scope-resolution.js';
 import { createCliExecutionContext } from '../cli/context.js';
 import {
   collectScopedData,
@@ -15,7 +14,8 @@ import { dim, printDepsView, printResourcesView } from '@opkg/core/core/list/lis
 import type { EnhancedResourceGroup, ResourceScope } from '@opkg/core/core/list/list-tree-renderer.js';
 
 interface ListOptions {
-  scope?: string;
+  global?: boolean;
+  project?: boolean;
   files?: boolean;
   tracked?: boolean;
   untracked?: boolean;
@@ -46,22 +46,13 @@ async function listCommand(
     throw new ValidationError('Cannot use --deps with --untracked.');
   }
 
-  let showProject: boolean;
-  let showGlobal: boolean;
-  if (options.scope) {
-    try {
-      const scope = parseWorkspaceScope(options.scope);
-      showProject = scope === 'project';
-      showGlobal = scope === 'global';
-    } catch (error) {
-      throw error instanceof ValidationError
-        ? error
-        : new ValidationError(error instanceof Error ? error.message : String(error));
-    }
-  } else {
-    showProject = true;
-    showGlobal = true;
+  if (options.project && options.global) {
+    throw new ValidationError('Cannot use --project and --global together.');
   }
+
+  const explicitScope = options.project || options.global;
+  const showProject = options.project || !explicitScope;
+  const showGlobal = options.global || !explicitScope;
 
   const results = await collectScopedData(
     packageName,

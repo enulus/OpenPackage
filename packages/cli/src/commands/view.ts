@@ -10,7 +10,6 @@ import type { Command } from 'commander';
 
 import { CommandResult } from '@opkg/core/types/index.js';
 import { ValidationError } from '@opkg/core/utils/errors.js';
-import { parseWorkspaceScope } from '@opkg/core/core/scope-resolution.js';
 import { getLocalPackageYmlPath } from '@opkg/core/utils/paths.js';
 import { exists } from '@opkg/core/utils/fs.js';
 import { parsePackageYml } from '@opkg/core/utils/package-yml.js';
@@ -30,23 +29,20 @@ import {
 
 async function viewCommand(
   packageName: string,
-  options: { scope?: string; files?: boolean; remote?: boolean; profile?: string; apiKey?: string },
+  options: { global?: boolean; project?: boolean; files?: boolean; remote?: boolean; profile?: string; apiKey?: string },
   command: Command
 ): Promise<CommandResult> {
   const programOpts = command.parent?.opts() || {};
 
-  if (options.scope && options.remote) {
-    throw new ValidationError('Cannot use --scope with --remote; choose one.');
+  if (options.project && options.global) {
+    throw new ValidationError('Cannot use --project and --global together.');
   }
 
-  let viewScope: 'project' | 'global' | undefined;
-  if (options.scope) {
-    try {
-      viewScope = parseWorkspaceScope(options.scope);
-    } catch (error) {
-      throw error instanceof ValidationError ? error : new ValidationError(error instanceof Error ? error.message : String(error));
-    }
+  if ((options.project || options.global) && options.remote) {
+    throw new ValidationError('Cannot use --project/--global with --remote; choose one.');
   }
+
+  const viewScope = options.global ? 'global' : options.project ? 'project' : undefined;
 
   const pipelineOptions: ViewPipelineOptions = {
     scope: viewScope,
