@@ -8,7 +8,7 @@
 import type { Command } from 'commander';
 
 import { ValidationError } from '@opkg/core/utils/errors.js';
-import { parseWorkspaceScope } from '@opkg/core/core/scope-resolution.js';
+import { parseScope } from '@opkg/core/core/scope-resolution.js';
 import { resolveWhich } from '@opkg/core/core/which/which-pipeline.js';
 import { printWhichResults } from '@opkg/core/core/which/which-printers.js';
 import type { TraverseScopesOptions } from '@opkg/core/core/resources/scope-traversal.js';
@@ -30,7 +30,7 @@ async function whichCommand(
 
   if (options.scope) {
     try {
-      const parsed = parseWorkspaceScope(options.scope);
+      const parsed = parseScope(options.scope);
       if (parsed === 'global') {
         traverseOpts.globalOnly = true;
       } else {
