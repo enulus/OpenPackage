@@ -12,6 +12,8 @@ import { normalizeType, RESOURCE_TYPE_ORDER, toLabelPlural } from '../resources/
 import { parsePackageYml } from '../../utils/package-yml.js';
 import { readWorkspaceIndex } from '../../utils/workspace-index-yml.js';
 import { formatScopeTag } from '../../utils/formatters.js';
+import { logger } from '../../utils/logger.js';
+import { ValidationError } from '../../utils/errors.js';
 import type { ExecutionContext } from '../../types/execution-context.js';
 import type { ResolutionCandidate } from '../resources/resource-resolver.js';
 
@@ -59,7 +61,18 @@ export async function collectWorkspaceResources(
   const scopeToTargetDir = new Map<ResourceScope, string>();
 
   const scopeResults = await traverseScopes(
-    traverseOpts,
+    {
+      ...traverseOpts,
+      onScopeError: (scope, error) => {
+        if (error instanceof ValidationError) {
+          logger.debug(`${scope} scope traversal skipped: ${error.message}`);
+        } else {
+          logger.warn(`${scope} scope traversal failed`, {
+            reason: error instanceof Error ? error.message : String(error),
+          });
+        }
+      },
+    },
     async ({ scope, context }) => {
       scopeToTargetDir.set(scope, context.targetDir);
       return buildWorkspaceResources(context.targetDir, scope);

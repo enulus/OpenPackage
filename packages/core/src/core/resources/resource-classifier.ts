@@ -14,6 +14,13 @@ import { getMarkerFilename, getResourceTypeDef } from './resource-registry.js';
 import { buildMarkerBoundaries, deriveMarkerFullName, deriveResourceFullName, getPathUnderCategory } from './resource-namespace.js';
 import { normalizeType, toPluralKey } from './resource-registry.js';
 
+export interface GroupedUntrackedResource {
+  resourceType: ResourceTypeId;
+  resourceName: string;
+  fullName: string;
+  filePaths: string[];
+}
+
 export interface ClassifiedResource {
   resourceType: ResourceTypeId;
   resourceName: string;   // e.g. "openpackage/skill-creator"
@@ -57,6 +64,9 @@ function extractResourceName(fullName: string, resourceType: ResourceTypeId): st
  *
  * Groups keys by type, builds marker boundaries for marker-based types,
  * then derives the correct fullName for each key.
+ *
+ * @invariant Always returns an entry for every input key — no keys are
+ * skipped. The `!` non-null assertions at call sites are therefore safe.
  */
 export function classifySourceKeyBatch(sourceKeys: string[]): Map<string, ClassifiedResource> {
   const result = new Map<string, ClassifiedResource>();
@@ -167,4 +177,49 @@ export function classifyUntrackedPaths(
   }
 
   return result;
+}
+
+/**
+ * Classify untracked files and group them by resource key.
+ *
+ * Combines `classifyUntrackedPaths` with the iterate-and-group pattern that
+ * both `resource-builder.ts` and `scope-data-collector.ts` duplicate. Orphan
+ * files (skipped by marker enforcement in `classifyUntrackedPaths`) are
+ * automatically excluded.
+ *
+ * @param files - Untracked files with workspace-relative paths and scanner categories
+ * @returns Map from `"resourceType::resourceName"` to grouped resource info
+ */
+export function classifyAndGroupUntrackedFiles(
+  files: Array<{ workspacePath: string; category: string }>
+): Map<string, GroupedUntrackedResource> {
+  if (files.length === 0) return new Map();
+
+  const classified = classifyUntrackedPaths(
+    files.map(f => ({
+      path: f.workspacePath,
+      resourceType: normalizeType(f.category),
+    }))
+  );
+
+  const grouped = new Map<string, GroupedUntrackedResource>();
+
+  for (const file of files) {
+    const cls = classified.get(file.workspacePath);
+    if (!cls) continue; // orphan — skipped by marker enforcement
+
+    const key = `${cls.resourceType}::${cls.resourceName}`;
+
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        resourceType: cls.resourceType,
+        resourceName: cls.resourceName,
+        fullName: cls.fullName,
+        filePaths: [],
+      });
+    }
+    grouped.get(key)!.filePaths.push(file.workspacePath);
+  }
+
+  return grouped;
 }

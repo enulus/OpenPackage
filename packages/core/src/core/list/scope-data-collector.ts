@@ -9,7 +9,7 @@ import type { UntrackedScanResult } from './untracked-files-scanner.js';
 import { detectEntityType, getEntityDisplayName } from '../../utils/entity-detector.js';
 import { formatPathForDisplay } from '../../utils/formatters.js';
 import { resolveDeclaredPath } from '../../utils/path-resolution.js';
-import { classifyUntrackedPaths } from '../resources/resource-classifier.js';
+import { classifyAndGroupUntrackedFiles } from '../resources/resource-classifier.js';
 import { RESOURCE_TYPE_ORDER_PLURAL, normalizeType, toPluralKey } from '../resources/resource-registry.js';
 import type { EnhancedFileMapping, EnhancedResourceInfo, EnhancedResourceGroup, ResourceScope } from './list-tree-renderer.js';
 
@@ -260,43 +260,34 @@ export function mergeTrackedAndUntrackedResources(
   tree.forEach(collectFromNode);
 
   if (untrackedFiles && untrackedFiles.files.length > 0) {
-    const untrackedClassified = classifyUntrackedPaths(
-      untrackedFiles.files.map(f => ({
-        path: f.workspacePath,
-        resourceType: normalizeType(f.category),
-      }))
-    );
+    const grouped = classifyAndGroupUntrackedFiles(untrackedFiles.files);
 
-    for (const file of untrackedFiles.files) {
-      const cls = untrackedClassified.get(file.workspacePath);
-      if (!cls) continue;
-      const fullName = cls.fullName;
-      const normalizedType = normalizeCategory(file.category);
+    for (const [, group] of grouped) {
+      const normalizedType = normalizeCategory(group.resourceType);
 
       if (!typeMap.has(normalizedType)) {
         typeMap.set(normalizedType, new Map());
       }
       const resourcesMap = typeMap.get(normalizedType)!;
 
-      const enhancedFile: EnhancedFileMapping = {
-        source: file.workspacePath,
-        target: file.workspacePath,
+      const enhancedFiles: EnhancedFileMapping[] = group.filePaths.map(fp => ({
+        source: fp,
+        target: fp,
         exists: true,
-        status: 'untracked',
+        status: 'untracked' as FileStatus,
         scope
-      };
+      }));
 
-      if (!resourcesMap.has(fullName)) {
-        resourcesMap.set(fullName, {
-          name: fullName,
+      if (!resourcesMap.has(group.fullName)) {
+        resourcesMap.set(group.fullName, {
+          name: group.fullName,
           resourceType: normalizedType,
-          files: [enhancedFile],
+          files: enhancedFiles,
           status: 'untracked',
           scopes: new Set([scope])
-          // no packages for untracked resources
         });
       } else {
-        resourcesMap.get(fullName)!.files.push(enhancedFile);
+        resourcesMap.get(group.fullName)!.files.push(...enhancedFiles);
       }
     }
   }

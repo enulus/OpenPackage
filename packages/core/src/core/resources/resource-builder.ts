@@ -11,9 +11,10 @@
 import { readWorkspaceIndex } from '../../utils/workspace-index-yml.js';
 import { getTargetPath } from '../../utils/workspace-index-helpers.js';
 import { scanUntrackedFiles } from '../list/untracked-files-scanner.js';
-import { normalizeType, RESOURCE_TYPE_ORDER } from './resource-registry.js';
-import { classifySourceKeyBatch, classifyUntrackedPaths } from './resource-classifier.js';
+import { RESOURCE_TYPE_ORDER } from './resource-registry.js';
+import { classifySourceKeyBatch, classifyAndGroupUntrackedFiles } from './resource-classifier.js';
 import type { ResourceScope } from './scope-traversal.js';
+import { logger } from '../../utils/logger.js';
 
 export interface ResolvedResource {
   kind: 'tracked' | 'untracked';
@@ -113,37 +114,24 @@ export async function buildWorkspaceResources(
     });
   }
 
-  // Process untracked files
-  const untrackedResult = await scanUntrackedFiles(targetDir);
-  const untrackedMap = new Map<string, string[]>();
+  // Process untracked files (isolated so scan failure doesn't discard tracked results)
+  try {
+    const untrackedResult = await scanUntrackedFiles(targetDir);
+    const grouped = classifyAndGroupUntrackedFiles(untrackedResult.files);
 
-  const untrackedClassified = classifyUntrackedPaths(
-    untrackedResult.files.map(f => ({
-      path: f.workspacePath,
-      resourceType: normalizeType(f.category),
-    }))
-  );
-
-  for (const file of untrackedResult.files) {
-    const cls = untrackedClassified.get(file.workspacePath);
-    if (!cls) continue; // orphan file skipped by classifier
-    const key = `${cls.resourceType}::${cls.resourceName}`;
-
-    if (!untrackedMap.has(key)) {
-      untrackedMap.set(key, []);
+    for (const [, group] of grouped) {
+      resources.push({
+        kind: 'untracked',
+        resourceName: group.resourceName,
+        resourceType: group.resourceType,
+        sourceKeys: new Set(),
+        targetFiles: group.filePaths,
+        scope,
+      });
     }
-    untrackedMap.get(key)!.push(file.workspacePath);
-  }
-
-  for (const [key, targetFiles] of untrackedMap) {
-    const [resourceType, resourceName] = key.split('::');
-    resources.push({
-      kind: 'untracked',
-      resourceName,
-      resourceType,
-      sourceKeys: new Set(),
-      targetFiles,
-      scope,
+  } catch (error) {
+    logger.warn('Failed to scan untracked files, returning tracked results only', {
+      reason: error instanceof Error ? error.message : String(error),
     });
   }
 

@@ -19,6 +19,8 @@ export interface TraverseScopesOptions {
   globalOnly?: boolean;
   /** If true, skip global scope entirely */
   projectOnly?: boolean;
+  /** Optional callback invoked when a scope fails. If not provided, errors are logged at debug level. */
+  onScopeError?: (scope: ResourceScope, error: unknown) => void;
 }
 
 /**
@@ -45,9 +47,13 @@ export async function traverseScopes<T>(
       const result = await callback({ scope: 'project', context });
       results.push({ scope: 'project', result });
     } catch (error) {
-      logger.debug('Project scope traversal skipped', {
-        reason: error instanceof Error ? error.message : String(error),
-      });
+      if (options.onScopeError) {
+        options.onScopeError('project', error);
+      } else {
+        logger.debug('Project scope traversal skipped', {
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 
@@ -58,9 +64,13 @@ export async function traverseScopes<T>(
       const result = await callback({ scope: 'global', context });
       results.push({ scope: 'global', result });
     } catch (error) {
-      logger.debug('Global scope traversal skipped', {
-        reason: error instanceof Error ? error.message : String(error),
-      });
+      if (options.onScopeError) {
+        options.onScopeError('global', error);
+      } else {
+        logger.debug('Global scope traversal skipped', {
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 

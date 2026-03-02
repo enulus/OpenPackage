@@ -34,6 +34,7 @@ const testFiles: string[] = [
   
   // Core - Resources
   'tests/core/resources/resource-namespace.test.ts',
+  'tests/core/resources/resource-classifier.test.ts',
 
   // Core - Source Resolution
   'tests/core/source-resolution/source-mutability.test.ts',
