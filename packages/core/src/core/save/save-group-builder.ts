@@ -80,7 +80,7 @@ export function buildCandidateGroups(
         localRefs,
         workspaceRoot
       );
-      
+
       // If export flow matching failed (e.g., platform detection failed),
       // try fallback matching based on filename similarity
       if (!sourceRegistryPath) {
@@ -89,7 +89,7 @@ export function buildCandidateGroups(
           localRefs
         );
       }
-      
+
       if (sourceRegistryPath) {
         logger.debug(
           `  Matched to source: workspace ${candidate.displayPath} → source ${sourceRegistryPath}`
@@ -238,11 +238,15 @@ function findSourceFileForWorkspace(
         
         logger.debug(`  Checking 'from' pattern: ${fromPattern}`);
         
-        // Find local ref that matches the 'from' pattern
+        // Find local ref that matches the 'from' pattern AND is the same file
+        // (same directory + basename, possibly different extension).
+        // Without the isCrossExtensionMatch guard, a broad glob like skills/**/*
+        // would match ANY local ref under that tree, causing new files to merge
+        // into an unrelated existing file's group.
         for (const ref of localRefs) {
           const fromMatches = minimatch(ref.registryPath, fromPattern, { dot: true });
-          
-          if (fromMatches) {
+
+          if (fromMatches && isCrossExtensionMatch(workspaceCandidate.registryPath, ref.registryPath)) {
             logger.debug(`  Found matching source: ${ref.registryPath}`);
             return ref.registryPath;
           }
@@ -273,6 +277,24 @@ export function filterGroupsWithWorkspace(
   groups: SaveCandidateGroup[]
 ): SaveCandidateGroup[] {
   return groups.filter(group => group.workspace.length > 0);
+}
+
+/**
+ * Check if a workspace registry path and a source registry path refer to the same file
+ * (same directory, same basename — possibly different extension).
+ *
+ * This prevents broad glob patterns like `skills/**\/*` from matching unrelated files
+ * in the same directory tree. For example, `skills/my-skill/evals.json` should NOT
+ * match `skills/my-skill/SKILL.md` just because both match `skills/**\/*`.
+ */
+function isCrossExtensionMatch(workspaceRegistryPath: string, sourceRegistryPath: string): boolean {
+  const wDir = workspaceRegistryPath.substring(0, workspaceRegistryPath.lastIndexOf('/') + 1);
+  const sDir = sourceRegistryPath.substring(0, sourceRegistryPath.lastIndexOf('/') + 1);
+  if (wDir !== sDir) return false;
+
+  const wBase = (workspaceRegistryPath.split('/').pop() ?? '').replace(/\.[^.]+$/, '');
+  const sBase = (sourceRegistryPath.split('/').pop() ?? '').replace(/\.[^.]+$/, '');
+  return wBase === sBase && wBase.length > 0;
 }
 
 /**
