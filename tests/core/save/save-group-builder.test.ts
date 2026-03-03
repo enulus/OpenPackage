@@ -105,6 +105,63 @@ describe('save-group-builder', () => {
       assert.strictEqual(groups.length, 0);
     });
 
+    it('should create separate groups for new skill files not in source', () => {
+      // Setup: 1 local ref (SKILL.md), 3 workspace candidates including 2 new files
+      const localRefs: LocalSourceRef[] = [
+        createRef('skills/my-skill/SKILL.md')
+      ];
+
+      const workspaceCandidates: SaveCandidate[] = [
+        createCandidate('workspace', 'skills/my-skill/SKILL.md', 'hash1', 'claude', '.claude/skills/my-skill/SKILL.md'),
+        createCandidate('workspace', 'skills/my-skill/evals.json', 'hash2', 'claude', '.claude/skills/my-skill/evals.json'),
+        createCandidate('workspace', 'skills/my-skill/helper.ts', 'hash3', 'claude', '.claude/skills/my-skill/helper.ts')
+      ];
+
+      const groups = buildCandidateGroups(localRefs, workspaceCandidates);
+
+      // Should produce 3 separate groups — NOT merge evals.json and helper.ts into SKILL.md's group
+      const groupsWithWorkspace = groups.filter(g => g.workspace.length > 0);
+      assert.strictEqual(groupsWithWorkspace.length, 3, 'Expected 3 groups with workspace candidates');
+
+      for (const group of groupsWithWorkspace) {
+        assert.strictEqual(group.workspace.length, 1, `Group ${group.registryPath} should have exactly 1 workspace candidate`);
+      }
+
+      // SKILL.md group should have the local ref
+      const skillGroup = groupsWithWorkspace.find(g => g.registryPath === 'skills/my-skill/SKILL.md');
+      assert.notStrictEqual(skillGroup, undefined);
+      assert.notStrictEqual(skillGroup!.localRef, undefined);
+
+      // New file groups should NOT have a local ref
+      const evalsGroup = groupsWithWorkspace.find(g => g.registryPath === 'skills/my-skill/evals.json');
+      assert.notStrictEqual(evalsGroup, undefined);
+      assert.strictEqual(evalsGroup!.localRef, undefined);
+
+      const helperGroup = groupsWithWorkspace.find(g => g.registryPath === 'skills/my-skill/helper.ts');
+      assert.notStrictEqual(helperGroup, undefined);
+      assert.strictEqual(helperGroup!.localRef, undefined);
+    });
+
+    it('should match cross-extension files via export flow (e.g., mcp.json → mcp.jsonc)', () => {
+      // Setup: source has mcp.jsonc, workspace has .cursor/mcp.json
+      const localRefs: LocalSourceRef[] = [
+        createRef('mcp.jsonc')
+      ];
+
+      const workspaceCandidates: SaveCandidate[] = [
+        createCandidate('workspace', 'mcp.json', 'hash1', 'cursor', '.cursor/mcp.json')
+      ];
+
+      const groups = buildCandidateGroups(localRefs, workspaceCandidates);
+
+      // Should match mcp.json to mcp.jsonc via export flow + cross-extension match
+      const groupsWithWorkspace = groups.filter(g => g.workspace.length > 0);
+      assert.strictEqual(groupsWithWorkspace.length, 1);
+      assert.strictEqual(groupsWithWorkspace[0].registryPath, 'mcp.jsonc');
+      assert.strictEqual(groupsWithWorkspace[0].workspace.length, 1);
+      assert.notStrictEqual(groupsWithWorkspace[0].localRef, undefined);
+    });
+
     it('should organize mixed scenarios', () => {
       const localRefs: LocalSourceRef[] = [
         createRef('file1.md'),
@@ -213,7 +270,8 @@ function createCandidate(
   source: 'local' | 'workspace',
   registryPath: string,
   contentHash: string,
-  platform?: string
+  platform?: string,
+  displayPath?: string
 ): SaveCandidate {
   return {
     source,
@@ -222,7 +280,7 @@ function createCandidate(
     content: `content for ${registryPath}`,
     contentHash,
     mtime: Date.now(),
-    displayPath: registryPath,
+    displayPath: displayPath ?? registryPath,
     platform: platform as any
   };
 }

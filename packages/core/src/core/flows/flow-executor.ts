@@ -54,6 +54,52 @@ import { resolveSwitchExpression, validateSwitchExpression } from './switch-reso
 import { smartEquals, smartNotEquals } from '../../utils/path-comparison.js';
 import { stripPlatformSuffixFromFilename } from './platform-suffix-handler.js';
 import { parseMarkdownDocument, serializeMarkdownDocument } from './markdown.js';
+import { STRUCTURED_FORMAT_EXTENSIONS, MARKDOWN_EXTENSIONS } from '../../constants/index.js';
+
+/**
+ * Determine if a flow is a pass-through (source bytes == target bytes).
+ *
+ * Returns true when the executor will perform a simple byte copy with no
+ * parsing, transformation, or serialization.  This is used by:
+ *   - The flow executor's internal dispatch (needsParsing → executePassThroughCopy)
+ *   - The install strategy to annotate TargetEntries for the conflict resolver
+ *
+ * Keep this in sync with the executor's pipeline — any new flow property that
+ * transforms content must be handled here.
+ */
+export function isPassThroughFlow(
+  flow: Flow,
+  sourcePath: string,
+  targetPath: string,
+  context: FlowContext
+): boolean {
+  // Content manipulation operations
+  if (flow.map || flow.pick || flow.omit || flow.path || flow.embed) {
+    return false;
+  }
+
+  // Merge operations that need parsing (deep, shallow require parse+merge)
+  if (flow.merge) {
+    if (flow.merge === 'deep' || flow.merge === 'shallow') {
+      return false;
+    }
+    // 'composite' and 'replace' don't need parsing
+  }
+
+  // Format conversion — structured source to different extension requires parse+serialize
+  const sourceExt = path.extname(sourcePath).toLowerCase();
+  const targetExt = path.extname(targetPath).toLowerCase();
+  if (sourceExt !== targetExt && STRUCTURED_FORMAT_EXTENSIONS.has(sourceExt)) {
+    return false;
+  }
+
+  // Markdown with platform-specific frontmatter overrides during install
+  if (MARKDOWN_EXTENSIONS.has(sourceExt) && context.platform && context.direction === 'install') {
+    return false;
+  }
+
+  return true;
+}
 
 /**
  * Default flow executor implementation
@@ -613,54 +659,32 @@ export class DefaultFlowExecutor implements FlowExecutor {
    * Write transformed content to target file
    */
   async writeTargetFile(filePath: string, content: any, sourceFormat: FileFormat): Promise<void> {
-    await fsUtils.ensureDir(path.dirname(filePath));
     // Detect target format from file extension
     const targetFormat = this.detectFormat(filePath, '');
-
     const serialized = this.serializeTargetContent(content, targetFormat);
+
+    // Skip write if target already has identical content (e.g., claimed unowned file)
+    if (await fsUtils.exists(filePath)) {
+      try {
+        const existing = await fsUtils.readTextFile(filePath, 'utf8');
+        if (existing === serialized) {
+          return;
+        }
+      } catch {
+        // Read failed — proceed with write
+      }
+    }
+
+    await fsUtils.ensureDir(path.dirname(filePath));
     await fsUtils.writeTextFile(filePath, serialized);
   }
 
   /**
-   * Determine if parsing is needed for this flow
-   * Returns false for simple pass-through copies with no transformations
+   * Determine if parsing is needed for this flow.
+   * Delegates to the standalone `isPassThroughFlow()` function.
    */
   private needsParsing(flow: Flow, sourcePath: string, targetPath: string, context: FlowContext): boolean {
-    // Check for content manipulation operations
-    if (flow.map || flow.pick || flow.omit || flow.path || flow.embed) {
-      return true;
-    }
-
-    // Check for merge operations that need parsing
-    if (flow.merge) {
-      if (flow.merge === 'deep' || flow.merge === 'shallow') {
-        return true;
-      }
-      // 'composite' and 'replace' don't need parsing
-    }
-
-    // Check for format conversion
-    const sourceExt = path.extname(sourcePath).toLowerCase();
-    const targetExt = path.extname(targetPath).toLowerCase();
-    
-    // If extensions differ and source is a structured format, need to parse for conversion
-    if (sourceExt !== targetExt) {
-      const structuredFormats = ['.json', '.jsonc', '.yaml', '.yml', '.toml'];
-      if (structuredFormats.includes(sourceExt)) {
-        return true;
-      }
-    }
-
-    // Check for markdown with platform-specific frontmatter overrides
-    if ((sourceExt === '.md' || sourceExt === '.mdc' || sourceExt === '.markdown') && 
-        context.platform && 
-        context.direction === 'install') {
-      // Need to parse for frontmatter override merging
-      return true;
-    }
-
-    // Simple pass-through - no parsing needed
-    return false;
+    return !isPassThroughFlow(flow, sourcePath, targetPath, context);
   }
 
   /**
@@ -689,8 +713,28 @@ export class DefaultFlowExecutor implements FlowExecutor {
 
       // Simple byte copy
       if (!context.dryRun) {
-        await fsUtils.ensureDir(path.dirname(targetPath));
         const content = await fs.readFile(sourcePath);
+
+        // Skip write if target already has identical content
+        if (await fsUtils.exists(targetPath)) {
+          try {
+            const existing = await fs.readFile(targetPath);
+            if (Buffer.compare(content, existing) === 0) {
+              // Content identical — return success without writing
+              return {
+                source: sourcePath,
+                target: targetPath,
+                success: true,
+                transformed: false,
+                warnings: warnings.length > 0 ? warnings : undefined,
+              };
+            }
+          } catch {
+            // Read failed — proceed with write
+          }
+        }
+
+        await fsUtils.ensureDir(path.dirname(targetPath));
         await fs.writeFile(targetPath, content);
       }
 
