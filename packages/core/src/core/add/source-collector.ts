@@ -1,4 +1,4 @@
-import { relative, basename } from 'path';
+import { relative, basename, dirname } from 'path';
 import { realpathSync } from 'fs';
 
 import { DIR_PATTERNS } from '../../constants/index.js';
@@ -17,13 +17,18 @@ export interface SourceEntry {
 /**
  * Collect source entries from a workspace path for adding to a package source.
  * Uses IMPORT flows (workspace → package direction) to map files correctly.
+ *
+ * @param resolvedPath - Absolute path to the file or directory to collect
+ * @param cwd - Workspace root directory
+ * @param inputRoot - Original directory input (for relative path computation with out-of-workspace paths)
  */
-export async function collectSourceEntries(resolvedPath: string, cwd: string): Promise<SourceEntry[]> {
+export async function collectSourceEntries(resolvedPath: string, cwd: string, inputRoot?: string): Promise<SourceEntry[]> {
   const entries: SourceEntry[] = [];
+  const effectiveInputRoot = inputRoot ?? (await isDirectory(resolvedPath) ? resolvedPath : undefined);
 
   if (await isDirectory(resolvedPath)) {
     for await (const filePath of walkFiles(resolvedPath)) {
-      const entry = deriveSourceEntry(filePath, cwd);
+      const entry = deriveSourceEntry(filePath, cwd, effectiveInputRoot);
       if (!entry) {
         throw new Error(`Unsupported file inside directory: ${relative(cwd, filePath)}`);
       }
@@ -33,7 +38,7 @@ export async function collectSourceEntries(resolvedPath: string, cwd: string): P
   }
 
   if (await isFile(resolvedPath)) {
-    const entry = deriveSourceEntry(resolvedPath, cwd);
+    const entry = deriveSourceEntry(resolvedPath, cwd, effectiveInputRoot);
     if (!entry) {
       throw new Error(`Unsupported file: ${relative(cwd, resolvedPath)}`);
     }
@@ -47,13 +52,15 @@ export async function collectSourceEntries(resolvedPath: string, cwd: string): P
 /**
  * Derive a source entry from an absolute file path.
  * Uses IMPORT flows to map workspace files to their universal package paths.
- * 
+ *
  * Flow-based mapping:
  * 1. Try to match against platform IMPORT flows (workspace → package)
  * 2. Check if it's a platform root file (AGENTS.md, CLAUDE.md, etc.)
  * 3. Otherwise, treat as root-level content (stored at package root)
+ *
+ * @param inputRoot - Original input directory root (for safe relative path computation when file is outside workspace)
  */
-function deriveSourceEntry(absFilePath: string, cwd: string): SourceEntry | null {
+function deriveSourceEntry(absFilePath: string, cwd: string, inputRoot?: string): SourceEntry | null {
   // Resolve symlinks to ensure consistent path comparison
   const realFilePath = realpathSync(absFilePath);
   const realCwd = realpathSync(cwd);
@@ -84,6 +91,17 @@ function deriveSourceEntry(absFilePath: string, cwd: string): SourceEntry | null
   }
 
   // 3. All other files: treat as root-level content
+  // Guard: when file is outside workspace, compute path relative to input directory
+  // to prevent path traversal (e.g., root/../../../.claude/skills/file.md)
+  if (normalizedRelPath.startsWith('..')) {
+    const base = inputRoot ? realpathSync(inputRoot) : dirname(realFilePath);
+    const safeRelPath = normalizePathForProcessing(relative(base, realFilePath));
+    return {
+      sourcePath: absFilePath,
+      registryPath: `root/${safeRelPath}`
+    };
+  }
+
   // These are non-platform-specific files stored at package root under root/
   return {
     sourcePath: absFilePath,
