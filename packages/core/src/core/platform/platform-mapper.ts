@@ -289,9 +289,16 @@ export function mapWorkspaceFileToUniversal(
   // Resolve symlinks to get real paths for consistent comparison
   const absolutePath = realpathSync(workspaceFilePath);
   const absoluteCwd = realpathSync(cwd);
-  
+
   // Convert to workspace-relative path for matching against flow patterns
   const relativePath = relative(absoluteCwd, absolutePath).replace(/\\/g, '/');
+
+  // For out-of-workspace files, extract a matchable suffix from the absolute path
+  const candidatePath = relativePath.startsWith('..')
+    ? extractPlatformSuffix(absolutePath)
+    : relativePath;
+
+  if (!candidatePath) return null;
 
   // Check each platform using import flows (workspace → package)
   for (const platform of getAllPlatforms({ includeDisabled: true }, cwd)) {
@@ -306,7 +313,7 @@ export function mapWorkspaceFileToUniversal(
         // Find first matching from pattern
         let matchedFromPattern: string | null = null;
         for (const p of fromPatterns) {
-          if (matchesFlowPattern(relativePath, p)) {
+          if (matchesFlowPattern(candidatePath, p)) {
             matchedFromPattern = p;
             break;
           }
@@ -331,11 +338,48 @@ export function mapWorkspaceFileToUniversal(
         const subdir = toParts[0];
 
         // Extract the relative path by mapping from fromPattern to toPattern
-        const relPath = mapPathUsingFlowPattern(relativePath, matchedFromPattern, toPattern);
+        const relPath = mapPathUsingFlowPattern(candidatePath, matchedFromPattern, toPattern);
 
         if (relPath) {
           return { platform, subdir, relPath, flow };
         }
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Extract the platform-relevant suffix from an absolute path.
+ * Walks backwards through path segments to find the shortest suffix
+ * that matches any IMPORT flow "from" pattern.
+ *
+ * Example: /Users/me/.claude/skills/commits/SKILL.md
+ *   → tries: SKILL.md, commits/SKILL.md, skills/commits/SKILL.md,
+ *            .claude/skills/commits/SKILL.md  ← matches .claude/skills/**\/*
+ */
+function extractPlatformSuffix(absolutePath: string): string | null {
+  const normalized = normalizePathForProcessing(absolutePath);
+  const segments = normalized.split('/').filter(Boolean);
+
+  // Collect all IMPORT from-patterns across all platforms
+  const allFromPatterns: string[] = [];
+  for (const platform of getAllPlatforms({ includeDisabled: true })) {
+    const def = getPlatformDefinition(platform);
+    if (!def.import) continue;
+    for (const flow of def.import) {
+      allFromPatterns.push(...extractFromPatternsFromFlow(flow));
+    }
+  }
+  if (allFromPatterns.length === 0) return null;
+
+  // Try suffixes from shortest (just filename) to longer, looking for a match
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const suffix = segments.slice(i).join('/');
+    for (const pattern of allFromPatterns) {
+      if (matchesFlowPattern(suffix, pattern)) {
+        return suffix;
       }
     }
   }

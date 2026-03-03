@@ -333,10 +333,177 @@ async function testReportedPaths(): Promise<void> {
   }
 }
 
+/**
+ * Test: Out-of-workspace absolute path with platform structure maps via flow
+ * Simulates: opkg add ~/.claude/skills/commits --to openpackage (from a different workspace)
+ */
+async function testOutOfWorkspaceAbsolutePathMapping(): Promise<void> {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-add-oow-ws-'));
+  const external = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-add-oow-ext-'));
+  const originalCwd = process.cwd();
+
+  try {
+    process.chdir(workspace);
+
+    // Setup workspace package
+    writeWorkspacePackageManifest(workspace);
+
+    // Create files outside the workspace in a .claude/skills/ structure
+    const skillFile = path.join(external, '.claude', 'skills', 'commits', 'SKILL.md');
+    writeFile(skillFile, '# Commit Skill');
+
+    // Add the out-of-workspace file
+    const result = await runAddToSourcePipeline(undefined, skillFile, {});
+
+    assert.ok(result.success, result.error);
+    assert.equal(result.data?.filesAdded, 1);
+
+    // Should land under skills/ (platform flow match), not root/../../...
+    const expectedPath = path.join(workspace, '.openpackage', 'skills', 'commits', 'SKILL.md');
+    assert.ok(fileExists(expectedPath), `Expected file at: ${expectedPath}`);
+
+    const savedContent = readFile(expectedPath);
+    assert.equal(savedContent, '# Commit Skill');
+
+    // Should NOT be under root/ with path traversal
+    const wrongPath = path.join(workspace, '.openpackage', 'root');
+    const wrongExists = fs.existsSync(wrongPath);
+    assert.ok(!wrongExists, `Should not create root/ directory for platform-matched files`);
+
+    console.log('✓ Out-of-workspace absolute path mapping test passed');
+  } finally {
+    process.chdir(originalCwd);
+    fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(external, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Test: Out-of-workspace directory with multiple files maps correctly
+ */
+async function testOutOfWorkspaceDirectoryMapping(): Promise<void> {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-add-oow-dir-ws-'));
+  const external = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-add-oow-dir-ext-'));
+  const originalCwd = process.cwd();
+
+  try {
+    process.chdir(workspace);
+
+    writeWorkspacePackageManifest(workspace);
+
+    // Create multiple files in an external .claude/skills/ directory
+    const skillsDir = path.join(external, '.claude', 'skills', 'commits');
+    writeFile(path.join(skillsDir, 'SKILL.md'), '# Skill');
+    writeFile(path.join(skillsDir, 'evals.json'), '{"evals": []}');
+
+    // Add the entire directory
+    const result = await runAddToSourcePipeline(undefined, skillsDir, {});
+
+    assert.ok(result.success, result.error);
+    assert.equal(result.data?.filesAdded, 2);
+
+    // Both files should be under skills/commits/
+    const skill = path.join(workspace, '.openpackage', 'skills', 'commits', 'SKILL.md');
+    const evals = path.join(workspace, '.openpackage', 'skills', 'commits', 'evals.json');
+    assert.ok(fileExists(skill), `Expected SKILL.md at: ${skill}`);
+    assert.ok(fileExists(evals), `Expected evals.json at: ${evals}`);
+
+    console.log('✓ Out-of-workspace directory mapping test passed');
+  } finally {
+    process.chdir(originalCwd);
+    fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(external, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Test: Out-of-workspace file with no platform structure falls back to root/filename
+ */
+async function testOutOfWorkspaceNonPlatformFallback(): Promise<void> {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-add-oow-np-ws-'));
+  const external = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-add-oow-np-ext-'));
+  const originalCwd = process.cwd();
+
+  try {
+    process.chdir(workspace);
+
+    writeWorkspacePackageManifest(workspace);
+
+    // Create a plain file outside workspace with no platform structure
+    const plainFile = path.join(external, 'notes.txt');
+    writeFile(plainFile, 'Some notes');
+
+    const result = await runAddToSourcePipeline(undefined, plainFile, {});
+
+    assert.ok(result.success, result.error);
+    assert.equal(result.data?.filesAdded, 1);
+
+    // Should be root/notes.txt (not root/../../.../notes.txt)
+    const expectedPath = path.join(workspace, '.openpackage', 'root', 'notes.txt');
+    assert.ok(fileExists(expectedPath), `Expected file at: ${expectedPath}`);
+
+    const savedContent = readFile(expectedPath);
+    assert.equal(savedContent, 'Some notes');
+
+    console.log('✓ Out-of-workspace non-platform fallback test passed');
+  } finally {
+    process.chdir(originalCwd);
+    fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(external, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Test: Out-of-workspace paths do not escape the package directory (path traversal guard)
+ */
+async function testOutOfWorkspaceNoPathTraversal(): Promise<void> {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-add-oow-sec-ws-'));
+  const external = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-add-oow-sec-ext-'));
+  const originalCwd = process.cwd();
+
+  try {
+    process.chdir(workspace);
+
+    writeWorkspacePackageManifest(workspace);
+
+    // Create a file that's deeply outside the workspace
+    const deepFile = path.join(external, 'deep', 'nested', 'config.yml');
+    writeFile(deepFile, 'key: value');
+
+    const result = await runAddToSourcePipeline(undefined, deepFile, {});
+
+    assert.ok(result.success, result.error);
+    assert.equal(result.data?.filesAdded, 1);
+
+    // Verify the file is within the package directory
+    const addedPath = result.data?.addedFilePaths[0];
+    assert.ok(addedPath, 'addedFilePaths should have an entry');
+
+    // Use realpathSync to handle macOS /tmp → /private/var/folders symlinks
+    const packageRoot = fs.realpathSync(path.join(workspace, '.openpackage'));
+    assert.ok(
+      addedPath.startsWith(packageRoot),
+      `File path should be inside package dir. Got: ${addedPath}`
+    );
+
+    // Verify the registry path doesn't contain '..'
+    assert.ok(
+      !addedPath.includes('..'),
+      `File path should not contain '..'. Got: ${addedPath}`
+    );
+
+    console.log('✓ Out-of-workspace no path traversal test passed');
+  } finally {
+    process.chdir(originalCwd);
+    fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(external, { recursive: true, force: true });
+  }
+}
+
 // Run all tests
 async function runTests() {
   console.log('\n🧪 Running flow-based mapping tests...\n');
-  
+
   await testCursorCommandsMapping();
   await testCursorRulesMapping();
   await testCursorAgentsMapping();
@@ -345,7 +512,11 @@ async function runTests() {
   await testNonPlatformFileMapping();
   await testMultipleFilesMapping();
   await testReportedPaths();
-  
+  await testOutOfWorkspaceAbsolutePathMapping();
+  await testOutOfWorkspaceDirectoryMapping();
+  await testOutOfWorkspaceNonPlatformFallback();
+  await testOutOfWorkspaceNoPathTraversal();
+
   console.log('\n✅ All flow-based mapping tests passed!\n');
 }
 
