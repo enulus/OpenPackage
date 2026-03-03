@@ -20,6 +20,7 @@ import { executeFlowsForSources } from '../../flows/flow-execution-coordinator.j
 import {
   resolveTargetFromGlob,
 } from '../../flows/flow-execution-coordinator.js';
+import { isPassThroughFlow } from '../../flows/flow-executor.js';
 import {
   resolvePattern,
   extractCapturedName,
@@ -248,11 +249,18 @@ export class FlowBasedInstallStrategy extends BaseStrategy {
           const targetRelRaw = relative(flowContext.workspaceRoot, targetAbs);
           const targetRel = targetRelRaw.replace(/\\/g, '/');
 
+          // For pass-through non-merge flows, provide the source path so the
+          // conflict resolver can lazily read & compare only when needed.
+          // Uses the same detection as the executor's dispatch (needsParsing).
+          const canCompareContent = !isMergeFlow
+            && isPassThroughFlow(flow, sourceAbs, targetAbs, flowContext);
+
           entries.push({
             relPath: targetRel,
             absPath: targetAbs,
             flowToPattern: resolvedToPattern,
-            isMergeFlow
+            isMergeFlow,
+            sourceAbsPath: canCompareContent ? sourceAbs : undefined,
           });
         } catch {
           // If target resolution fails for a source, skip it — the executor

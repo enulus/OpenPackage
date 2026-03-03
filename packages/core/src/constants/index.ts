@@ -33,6 +33,25 @@ export const FILE_PATTERNS = {
   YML_FILE: '.yml',
 } as const;
 
+/**
+ * File extensions that represent structured (parseable) data formats.
+ * Used by flow-level pass-through detection: when source and target extensions
+ * differ and the source is structured, the executor must parse → serialize
+ * (i.e. not a byte-level pass-through).
+ */
+export const STRUCTURED_FORMAT_EXTENSIONS: ReadonlySet<string> = new Set([
+  '.json', '.jsonc', '.yaml', '.yml', '.toml',
+]);
+
+/**
+ * File extensions recognised as Markdown variants.
+ * Used by flow-level pass-through detection: markdown files with platform
+ * overrides require frontmatter merging during install (not a pass-through).
+ */
+export const MARKDOWN_EXTENSIONS: ReadonlySet<string> = new Set([
+  '.md', '.mdc', '.markdown',
+]);
+
 // Universal subdirectory names are now dynamically discovered from platform configs
 // No hardcoded subdirs - platforms define their own universal directories
 

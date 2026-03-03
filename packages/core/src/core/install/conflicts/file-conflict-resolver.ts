@@ -88,6 +88,14 @@ export interface TargetEntry {
    */
   content?: string;
   /**
+   * Absolute path to the source file.  Set for pass-through flows (where
+   * source content == target content) so the conflict resolver can lazily
+   * read and compare only when an 'exists-unowned' check is actually needed.
+   * Takes precedence over `content` when both are undefined — the resolver
+   * reads the source on demand instead of requiring an eager read.
+   */
+  sourceAbsPath?: string;
+  /**
    * The resolved `flow.to` pattern that produced this target path.
    * Used to derive the namespace insertion point (the base directory of the
    * pattern, i.e. everything before the first glob character).
@@ -767,9 +775,18 @@ export async function resolveConflictsForTargets(
       continue;
     }
 
-    // Check content difference if we have content
-    if (target.content !== undefined) {
-      const contentDiffers = await hasContentDifference(absTarget, target.content);
+    // Check content difference — use provided content, or lazily read from
+    // sourceAbsPath for pass-through flows (avoids eager reads during planning)
+    let contentToCompare = target.content;
+    if (contentToCompare === undefined && target.sourceAbsPath) {
+      try {
+        contentToCompare = await readTextFile(target.sourceAbsPath, 'utf8');
+      } catch {
+        // Read failed — leave undefined, fall through to exists-unowned
+      }
+    }
+    if (contentToCompare !== undefined) {
+      const contentDiffers = await hasContentDifference(absTarget, contentToCompare);
       if (!contentDiffers) {
         classifications.push({ type: 'none' });
         continue;
