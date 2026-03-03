@@ -202,10 +202,10 @@ export function formatSaveMessage(report: SaveReport): string {
   const lines: string[] = [];
   
   if (report.filesSaved === 0 && report.errors.length === 0) {
-    return `✓ Saved ${report.packageName}\n  No changes detected`;
+    return `Saved ${report.packageName}\n  No changes detected`;
   }
-  
-  lines.push(`✓ Saved ${report.packageName}`);
+
+  lines.push(`Saved ${report.packageName}`);
   
   if (report.filesCreated > 0) {
     lines.push(`  ${report.filesCreated} file(s) created`);

@@ -152,7 +152,7 @@ export async function executeSavePipeline(
     logger.info(`No workspace changes detected for ${packageName}`);
     return createSuccessResult(
       packageName,
-      `✓ Saved ${packageName}\n  No workspace changes detected`
+      `Saved ${packageName}\n  No workspace changes detected`
     );
   }
 
@@ -167,7 +167,7 @@ export async function executeSavePipeline(
     logger.info(`No workspace changes detected for ${packageName}`);
     return createSuccessResult(
       packageName,
-      `✓ Saved ${packageName}\n  No workspace changes detected`
+      `Saved ${packageName}\n  No workspace changes detected`
     );
   }
 

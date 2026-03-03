@@ -20,7 +20,12 @@ export async function setupSaveCommand(args: any[]): Promise<void> {
     programOpts,
   };
 
-  const ctx = await createCliExecutionContext();
+  const interactive = !nameArg;
+  const ctx = await createCliExecutionContext({
+    cwd: programOpts.cwd,
+    interactive,
+    outputMode: interactive ? 'rich' : 'plain',
+  });
   const result = await runDirectSaveFlow(nameArg, options, traverseOpts, ctx);
 
   if (result.cancelled) {
