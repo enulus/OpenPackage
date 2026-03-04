@@ -114,7 +114,7 @@ describe('save-merged-file-parity', () => {
       }
       
       // Analyze group - should detect no change needed
-      const analysis = await analyzeGroup(group, false, workspaceRoot);
+      const analysis = await analyzeGroup(group, {}, workspaceRoot);
       
       // The key assertion: Should detect no change needed because
       // the extracted package contribution matches the source
@@ -205,7 +205,7 @@ describe('save-merged-file-parity', () => {
       }
       
       // Analyze group - should detect change
-      const analysis = await analyzeGroup(group, false, workspaceRoot);
+      const analysis = await analyzeGroup(group, {}, workspaceRoot);
       
       // Should detect that workspace has changes (auto-write single candidate)
       assert.strictEqual(analysis.type, 'auto-write');
@@ -285,7 +285,7 @@ describe('save-merged-file-parity', () => {
         group.local = await materializeLocalCandidate(group.localRef, packageRoot) ?? undefined;
       }
       
-      const analysis = await analyzeGroup(group, false, workspaceRoot);
+      const analysis = await analyzeGroup(group, {}, workspaceRoot);
       
       // Should detect no change - both keys match
       assert.strictEqual(analysis.type, 'no-change-needed');

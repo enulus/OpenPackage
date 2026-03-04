@@ -8,6 +8,31 @@
 
 import type { OutputPort, UnifiedSpinner } from './output.js';
 
+/**
+ * Silent output adapter. All methods are no-ops.
+ * Used to suppress spinner/info output during --json execution.
+ */
+export const silentOutput: OutputPort = {
+  info(): void {},
+  step(): void {},
+  connector(): void {},
+  message(): void {},
+  success(): void {},
+  error(): void {},
+  warn(): void {},
+  note(): void {},
+  async confirm(): Promise<boolean> {
+    return false;
+  },
+  spinner(): UnifiedSpinner {
+    return {
+      start() {},
+      stop() {},
+      message() {},
+    };
+  },
+};
+
 export const consoleOutput: OutputPort = {
   info(message: string): void {
     console.log(message);

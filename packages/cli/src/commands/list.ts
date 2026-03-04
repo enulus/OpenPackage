@@ -12,6 +12,7 @@ import {
 } from '@opkg/core/core/list/scope-data-collector.js';
 import { dim, printDepsView, printResourcesView } from '@opkg/core/core/list/list-printers.js';
 import type { EnhancedResourceGroup, ResourceScope } from '@opkg/core/core/list/list-tree-renderer.js';
+import { printJson } from '../utils/json-output.js';
 
 interface ListOptions {
   global?: boolean;
@@ -21,6 +22,37 @@ interface ListOptions {
   untracked?: boolean;
   platforms?: string[];
   deps?: boolean;
+  json?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// JSON serialization helpers
+// ---------------------------------------------------------------------------
+
+function serializeResourcesView(mergedResources: EnhancedResourceGroup[], showFiles: boolean) {
+  return mergedResources.map(group => ({
+    resourceType: group.resourceType,
+    resources: group.resources.map(r => ({
+      name: r.name,
+      status: r.status,
+      scopes: [...r.scopes],
+      packages: r.packages ? [...r.packages] : [],
+      ...(showFiles ? { files: r.files.map(f => ({ source: f.source, target: f.target, status: f.status, scope: f.scope })) } : {}),
+    })),
+  }));
+}
+
+function serializeDepsView(results: Array<{ scope: ResourceScope; result: any }>, showFiles: boolean) {
+  return results.map(({ scope, result }) => ({
+    scope,
+    packages: (result.data.packages ?? []).map((pkg: any) => ({
+      name: pkg.packageName ?? pkg.name,
+      version: pkg.version,
+      state: pkg.state ?? 'installed',
+      dependencies: pkg.dependencies ?? [],
+      ...(showFiles && pkg.files ? { files: pkg.files } : {}),
+    })),
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -72,6 +104,10 @@ async function listCommand(
   );
 
   if (results.length === 0) {
+    if (options.json) {
+      printJson([]);
+      return { success: true };
+    }
     if (packageName) {
       console.log(dim(`Package '${packageName}' is not installed.`));
     } else if (options.deps) {
@@ -82,10 +118,105 @@ async function listCommand(
     return { success: true };
   }
 
-  // --- Compute header ---
+  // --- Deps view ---
+  if (options.deps) {
+    if (options.json) {
+      printJson(serializeDepsView(results, !!options.files));
+      return { success: true };
+    }
+    // --- Compute header ---
+    let listHeaderInfo: HeaderInfo | undefined;
+    if (packageName) {
+      const firstResult = results[0].result;
+      const targetPkg = firstResult.data.targetPackage;
+      listHeaderInfo = targetPkg
+        ? {
+            name: targetPkg.name,
+            version: targetPkg.version !== '0.0.0' ? targetPkg.version : undefined,
+            path: firstResult.headerPath,
+            type: firstResult.headerType
+          }
+        : {
+            name: packageName,
+            version: undefined,
+            path: firstResult.headerPath,
+            type: firstResult.headerType
+          };
+    } else if (showProject) {
+      const projectContext = await createCliExecutionContext({
+        global: false,
+        cwd: programOpts.cwd
+      });
+      listHeaderInfo = await resolveWorkspaceHeader(projectContext);
+    } else {
+      listHeaderInfo = results.length > 0
+        ? {
+            name: results[0].result.headerName,
+            version: results[0].result.headerVersion,
+            path: results[0].result.headerPath,
+            type: results[0].result.headerType
+          }
+        : undefined;
+    }
+    printDepsView(results, !!options.files, listHeaderInfo);
+    return { success: true };
+  }
+
+  // --- Resources view (default) ---
+  const scopedResources: Array<{ scope: ResourceScope; groups: EnhancedResourceGroup[] }> = [];
+
+  for (const { scope, result } of results) {
+    // When listing a specific package, don't include untracked files
+    const untrackedData = packageName || options.tracked ? undefined : result.data.untrackedFiles;
+    const merged = mergeTrackedAndUntrackedResources(result.tree, untrackedData, scope);
+    if (merged.length > 0) {
+      scopedResources.push({ scope, groups: merged });
+    }
+  }
+
+  if (scopedResources.length === 0) {
+    if (options.json) {
+      printJson([]);
+      return { success: true };
+    }
+    if (packageName) {
+      console.log(dim(`No resources found for package '${packageName}'.`));
+    } else if (options.untracked) {
+      console.log(dim('No untracked resources found.'));
+    } else {
+      console.log(dim('No resources found.'));
+    }
+    return { success: true };
+  }
+
+  let mergedResources = mergeResourcesAcrossScopes(scopedResources);
+
+  if (options.untracked) {
+    mergedResources = mergedResources
+      .map(group => ({
+        ...group,
+        resources: group.resources.filter(r => r.status === 'untracked')
+      }))
+      .filter(group => group.resources.length > 0);
+
+    if (mergedResources.length === 0) {
+      if (options.json) {
+        printJson([]);
+        return { success: true };
+      }
+      console.log(dim('No untracked resources found.'));
+      return { success: true };
+    }
+  }
+
+  if (options.json) {
+    printJson(serializeResourcesView(mergedResources, !!options.files));
+    return { success: true };
+  }
+
+  // --- Compute header for human-readable output ---
   let listHeaderInfo: HeaderInfo | undefined;
   if (packageName) {
-    // For specific package, use the package's own header from the first result
     const firstResult = results[0].result;
     const targetPkg = firstResult.data.targetPackage;
     listHeaderInfo = targetPkg
@@ -116,51 +247,6 @@ async function listCommand(
           type: results[0].result.headerType
         }
       : undefined;
-  }
-
-  // --- Deps view ---
-  if (options.deps) {
-    printDepsView(results, !!options.files, listHeaderInfo);
-    return { success: true };
-  }
-
-  // --- Resources view (default) ---
-  const scopedResources: Array<{ scope: ResourceScope; groups: EnhancedResourceGroup[] }> = [];
-
-  for (const { scope, result } of results) {
-    // When listing a specific package, don't include untracked files
-    const untrackedData = packageName || options.tracked ? undefined : result.data.untrackedFiles;
-    const merged = mergeTrackedAndUntrackedResources(result.tree, untrackedData, scope);
-    if (merged.length > 0) {
-      scopedResources.push({ scope, groups: merged });
-    }
-  }
-
-  if (scopedResources.length === 0) {
-    if (packageName) {
-      console.log(dim(`No resources found for package '${packageName}'.`));
-    } else if (options.untracked) {
-      console.log(dim('No untracked resources found.'));
-    } else {
-      console.log(dim('No resources found.'));
-    }
-    return { success: true };
-  }
-
-  let mergedResources = mergeResourcesAcrossScopes(scopedResources);
-
-  if (options.untracked) {
-    mergedResources = mergedResources
-      .map(group => ({
-        ...group,
-        resources: group.resources.filter(r => r.status === 'untracked')
-      }))
-      .filter(group => group.resources.length > 0);
-
-    if (mergedResources.length === 0) {
-      console.log(dim('No untracked resources found.'));
-      return { success: true };
-    }
   }
 
   printResourcesView(mergedResources, !!options.files, listHeaderInfo);

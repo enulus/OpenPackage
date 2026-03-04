@@ -161,6 +161,10 @@ program
   .argument('<resource-spec>', 'resource or package name to save workspace changes for')
   .description('Save workspace edits back to mutable package source')
   .option('-f, --force', 'auto-select newest when conflicts occur')
+  .option('--dry-run', 'preview changes without writing to source')
+  .option('--conflicts <strategy>', 'conflict resolution: newest, skip, or auto')
+  .option('--prefer <platform>', 'prefer specified platform version for conflicts')
+  .option('--json', 'output results as JSON')
   .action(withErrorHandling(async (...args: any[]) => {
     const { setupSaveCommand } = await import('./commands/save.js');
     await setupSaveCommand(args);
@@ -203,6 +207,7 @@ program
   .option('--local', 'resolve and install using only local registry versions, skipping remote metadata and pulls')
   .option('--profile <profile>', 'profile to use for authentication')
   .option('--api-key <key>', 'API key for authentication (overrides profile)')
+  .option('--json', 'output results as JSON')
   .action(withErrorHandling(async (...args: any[]) => {
     const { setupInstallCommand } = await import('./commands/install.js');
     await setupInstallCommand(args);
@@ -216,6 +221,7 @@ program
   .option('-g, --global', 'uninstall from home directory (~/) instead of current workspace')
   .option('--dry-run', 'preview changes without applying them')
   .option('-i, --interactive', 'interactively select items to uninstall')
+  .option('--json', 'output results as JSON')
   .action(withErrorHandling(async (...args: any[]) => {
     const { setupUninstallCommand } = await import('./commands/uninstall.js');
     await setupUninstallCommand(args);
@@ -235,6 +241,7 @@ program
   .option('-t, --tracked', 'show only tracked resources (skip untracked scan)')
   .option('-u, --untracked', 'show only untracked resources')
   .option('-p, --platforms <platforms...>', 'filter by specific platforms (e.g., cursor, claude)')
+  .option('--json', 'output results as JSON')
   .action(withErrorHandling(async (...args: any[]) => {
     const { setupListCommand } = await import('./commands/list.js');
     await setupListCommand(args);

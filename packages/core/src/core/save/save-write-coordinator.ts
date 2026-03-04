@@ -50,10 +50,11 @@ export async function writeResolution(
   registryPath: string,
   resolution: ResolutionResult,
   localCandidate?: SaveCandidate,
-  workspaceRoot?: string
+  workspaceRoot?: string,
+  dryRun?: boolean
 ): Promise<WriteResult[]> {
   const results: WriteResult[] = [];
-  
+
   // Write universal content (if selected)
   if (resolution.selection) {
     const universalResult = await writeUniversal(
@@ -61,25 +62,27 @@ export async function writeResolution(
       registryPath,
       resolution.selection,
       localCandidate,
-      workspaceRoot
+      workspaceRoot,
+      dryRun
     );
     results.push(universalResult);
   } else {
     // No universal selected - log this (user chose only platform-specific)
     logger.debug(`No universal content selected for ${registryPath} - keeping original untouched`);
   }
-  
+
   // Write platform-specific content
   for (const platformCandidate of resolution.platformSpecific) {
     const platformResult = await writePlatformSpecific(
       packageRoot,
       registryPath,
       platformCandidate,
-      workspaceRoot
+      workspaceRoot,
+      dryRun
     );
     results.push(platformResult);
   }
-  
+
   return results;
 }
 
@@ -103,7 +106,8 @@ async function writeUniversal(
   registryPath: string,
   candidate: SaveCandidate,
   localCandidate?: SaveCandidate,
-  workspaceRoot?: string
+  workspaceRoot?: string,
+  dryRun?: boolean
 ): Promise<WriteResult> {
   const targetPath = join(packageRoot, registryPath);
   
@@ -129,15 +133,23 @@ async function writeUniversal(
       success: true
     };
   }
-  
+
+  // Dry-run: report what would happen without writing
+  if (dryRun) {
+    return {
+      operation,
+      success: true
+    };
+  }
+
   // Perform write
   const writeResult = await safeWrite(targetPath, preparedContent.content);
-  
+
   if (writeResult.success) {
     const action = operation.operation === 'create' ? 'Created' : 'Updated';
     logger.debug(`${action} ${registryPath}${preparedContent.wasExtracted ? ' (extracted package contribution)' : ''}`);
   }
-  
+
   return {
     operation,
     success: writeResult.success,
@@ -162,7 +174,8 @@ async function writePlatformSpecific(
   packageRoot: string,
   registryPath: string,
   candidate: SaveCandidate,
-  workspaceRoot?: string
+  workspaceRoot?: string,
+  dryRun?: boolean
 ): Promise<WriteResult> {
   const platform = candidate.platform;
   
@@ -233,7 +246,15 @@ async function writePlatformSpecific(
       logger.debug(`Could not read existing file ${platformRegistryPath}: ${error}`);
     }
   }
-  
+
+  // Dry-run: report what would happen without writing
+  if (dryRun) {
+    return {
+      operation,
+      success: true
+    };
+  }
+
   // Perform write
   const writeResult = await safeWrite(targetPath, preparedContent.content);
   
