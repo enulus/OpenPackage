@@ -21,10 +21,12 @@ import {
   executeBatchUninstall,
   type UninstallChoiceValue,
 } from '@opkg/core/core/uninstall/workspace-resource-collector.js';
+import { printJson } from '../utils/json-output.js';
 
 interface UninstallCommandOptions extends UninstallOptions {
   global?: boolean;
   interactive?: boolean;
+  json?: boolean;
 }
 
 async function uninstallCommand(
@@ -53,6 +55,15 @@ async function uninstallCommand(
     traverseOpts,
     (opts) => createCliExecutionContext({ ...opts, outputMode: opts.interactive ? 'rich' : 'plain' }),
   );
+
+  if (options.json) {
+    printJson({
+      success: !result.cancelled && result.uninstalledCount > 0,
+      cancelled: result.cancelled,
+      uninstalledCount: result.uninstalledCount,
+    });
+    return;
+  }
 
   if (result.cancelled) {
     const ctx = await createCliExecutionContext({ interactive: false, outputMode: 'plain' });
@@ -88,6 +99,10 @@ async function handleListUninstall(
 
   if (totalItems === 0) {
     s.stop('No installed resources found');
+    if (options.json) {
+      printJson({ success: true, uninstalledCount: 0 });
+      return;
+    }
     out.note('Run `opkg install --interactive` to install resources.', 'Info');
     return;
   }
@@ -100,6 +115,10 @@ async function handleListUninstall(
   );
 
   if (!selected || selected.length === 0) {
+    if (options.json) {
+      printJson({ success: false, cancelled: true, uninstalledCount: 0 });
+      return;
+    }
     out.info('Uninstall cancelled');
     return;
   }
@@ -114,6 +133,16 @@ async function handleListUninstall(
     (opts) => createCliExecutionContext({ ...opts, outputMode: opts.interactive ? 'rich' : 'plain' }),
     executeUninstallCandidate
   );
+
+  if (options.json) {
+    printJson({
+      success: true,
+      uninstalledCount: summary.uninstalledCount,
+      typeCounts: Object.fromEntries(summary.typeCounts),
+      removedFiles: summary.allRemovedFiles.map(f => join(f.targetDir, f.path)),
+    });
+    return;
+  }
 
   // Display results
   const breakdown = Array.from(summary.typeCounts.entries())

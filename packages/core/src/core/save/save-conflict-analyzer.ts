@@ -2,7 +2,7 @@ import { FILE_PATTERNS } from '../../constants/index.js';
 import { calculateConvertedHash, convertSourceToWorkspace, ensureComparableHash } from './save-conversion-helper.js';
 import { extractPackageContribution, extractContentByKeys } from './save-merge-extractor.js';
 import { logger } from '../../utils/logger.js';
-import type { SaveCandidate, SaveCandidateGroup, ResolutionStrategy } from './save-types.js';
+import type { SaveCandidate, SaveCandidateGroup, ResolutionStrategy, SaveConflictStrategy } from './save-types.js';
 
 /**
  * Conflict analysis and resolution strategy determination
@@ -60,35 +60,51 @@ export interface ConflictAnalysis {
   
   /** Recommended resolution strategy based on analysis */
   recommendedStrategy: ResolutionStrategy;
+
+  /** Reason a conflict was skipped (set when --conflicts skip/auto or --prefer miss) */
+  skippedReason?: 'conflict-skipped' | 'no-preferred-platform';
+}
+
+/**
+ * Options for analyzeGroup
+ */
+export interface AnalyzeGroupOptions {
+  /** Conflict resolution strategy (from --conflicts flag) */
+  conflictStrategy?: SaveConflictStrategy;
+  /** Preferred platform (from --prefer flag) */
+  preferPlatform?: string;
 }
 
 /**
  * Analyze a candidate group and determine resolution strategy
- * 
+ *
  * This is the primary entry point for conflict analysis. It examines the
  * workspace candidates in a group and determines:
  * 1. What type of conflict (if any) exists
  * 2. Whether the change can be auto-resolved
  * 3. What resolution strategy should be used
- * 
+ *
  * **Decision Flow**:
  * ```
  * No workspace candidates → no-action-needed (skip)
  * Single workspace, matches source → no-change-needed (skip)
  * Single workspace, differs from source → auto-write (write-single)
  * Multiple identical workspace → auto-write (write-single after dedup)
- * Multiple differing, force=true → needs-resolution (force-newest)
- * Multiple differing, force=false → needs-resolution (interactive)
+ * --prefer matches single → auto-write (write-single)
+ * --conflicts newest → needs-resolution (force-newest)
+ * --conflicts skip → skip with skippedReason
+ * --conflicts auto → skip with skippedReason
+ * No --conflicts → needs-resolution (interactive)
  * ```
- * 
+ *
  * @param group - The candidate group to analyze
- * @param force - Whether force mode is enabled (auto-select newest)
+ * @param options - Analysis options (conflict strategy, preferred platform)
  * @param workspaceRoot - Workspace root for conversion context
  * @returns Complete conflict analysis with recommended strategy
  */
 export async function analyzeGroup(
   group: SaveCandidateGroup,
-  force: boolean,
+  options: AnalyzeGroupOptions,
   workspaceRoot: string
 ): Promise<ConflictAnalysis> {
   const registryPath = group.registryPath;
@@ -192,9 +208,50 @@ export async function analyzeGroup(
   }
   
   // Multiple differing workspace candidates - needs resolution
-  // In force mode, auto-select newest; otherwise require user interaction
-  const recommendedStrategy: ResolutionStrategy = force ? 'force-newest' : 'interactive';
-  
+  // Try --prefer first: if a preferred platform matches exactly one candidate, auto-write it
+  if (options.preferPlatform) {
+    const preferred = uniqueWorkspace.filter(
+      c => c.platform === options.preferPlatform
+    );
+    if (preferred.length === 1) {
+      return {
+        registryPath,
+        type: 'auto-write',
+        workspaceCandidateCount,
+        uniqueWorkspaceCandidates: preferred,
+        hasLocalCandidate: hasLocal,
+        localMatchesWorkspace: false,
+        isRootFile,
+        hasPlatformCandidates,
+        recommendedStrategy: 'write-single'
+      };
+    }
+    // No match for preferred platform — fall through to --conflicts
+  }
+
+  // Dispatch based on --conflicts strategy
+  let recommendedStrategy: ResolutionStrategy;
+  let skippedReason: 'conflict-skipped' | 'no-preferred-platform' | undefined;
+
+  switch (options.conflictStrategy) {
+    case 'newest':
+      recommendedStrategy = 'force-newest';
+      break;
+    case 'skip':
+      recommendedStrategy = 'skip';
+      skippedReason = 'conflict-skipped';
+      break;
+    case 'auto':
+      // True conflicts get skipped (unambiguous already handled above)
+      recommendedStrategy = 'skip';
+      skippedReason = 'conflict-skipped';
+      break;
+    default:
+      // No strategy specified — interactive (backward-compatible)
+      recommendedStrategy = 'interactive';
+      break;
+  }
+
   return {
     registryPath,
     type: 'needs-resolution',
@@ -204,7 +261,8 @@ export async function analyzeGroup(
     localMatchesWorkspace: false,
     isRootFile,
     hasPlatformCandidates,
-    recommendedStrategy
+    recommendedStrategy,
+    skippedReason
   };
 }
 

@@ -8,6 +8,14 @@
 import type { Platform } from '../platforms.js';
 
 /**
+ * Conflict resolution strategy for save operations
+ * - 'newest': pick workspace candidate with most recent mtime (same as --force)
+ * - 'skip': skip groups with multiple differing candidates entirely
+ * - 'auto': auto-write unambiguous, skip true conflicts with report
+ */
+export type SaveConflictStrategy = 'newest' | 'skip' | 'auto';
+
+/**
  * Lightweight reference to a local source file (path metadata only, no content).
  * Used during the grouping phase to avoid reading file content eagerly.
  */

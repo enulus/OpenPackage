@@ -54,7 +54,7 @@ describe('save-conflict-analyzer', () => {
   describe('analyzeGroup', () => {
     it('should return no-action-needed when no workspace candidates', async () => {
       const group = createGroup('tools/search.md', undefined, []);
-      const analysis = await analyzeGroup(group, false, dummyWorkspaceRoot);
+      const analysis = await analyzeGroup(group, {}, dummyWorkspaceRoot);
 
       assert.strictEqual(analysis.type, 'no-action-needed');
       assert.strictEqual(analysis.workspaceCandidateCount, 0);
@@ -79,7 +79,7 @@ describe('save-conflict-analyzer', () => {
         [workspaceCandidate]
       );
 
-      const analysis = await analyzeGroup(group, false, dummyWorkspaceRoot);
+      const analysis = await analyzeGroup(group, {}, dummyWorkspaceRoot);
 
       assert.strictEqual(analysis.type, 'no-change-needed');
       assert.strictEqual(analysis.localMatchesWorkspace, true);
@@ -104,7 +104,7 @@ describe('save-conflict-analyzer', () => {
         [workspaceCandidate]
       );
 
-      const analysis = await analyzeGroup(group, false, dummyWorkspaceRoot);
+      const analysis = await analyzeGroup(group, {}, dummyWorkspaceRoot);
 
       assert.strictEqual(analysis.type, 'auto-write');
       assert.strictEqual(analysis.workspaceCandidateCount, 1);
@@ -134,7 +134,7 @@ describe('save-conflict-analyzer', () => {
       ];
 
       const group = createGroup('tools/search.md', undefined, candidates);
-      const analysis = await analyzeGroup(group, false, dummyWorkspaceRoot);
+      const analysis = await analyzeGroup(group, {}, dummyWorkspaceRoot);
 
       assert.strictEqual(analysis.type, 'auto-write');
       assert.strictEqual(analysis.workspaceCandidateCount, 3);
@@ -157,7 +157,7 @@ describe('save-conflict-analyzer', () => {
       ];
 
       const group = createGroup('tools/search.md', undefined, candidates);
-      const analysis = await analyzeGroup(group, false, dummyWorkspaceRoot); // force = false
+      const analysis = await analyzeGroup(group, {}, dummyWorkspaceRoot); // force = false
 
       assert.strictEqual(analysis.type, 'needs-resolution');
       assert.strictEqual(analysis.workspaceCandidateCount, 2);
@@ -180,7 +180,7 @@ describe('save-conflict-analyzer', () => {
       ];
 
       const group = createGroup('tools/search.md', undefined, candidates);
-      const analysis = await analyzeGroup(group, true, dummyWorkspaceRoot); // force = true
+      const analysis = await analyzeGroup(group, { conflictStrategy: 'newest' }, dummyWorkspaceRoot); // force = true
 
       assert.strictEqual(analysis.type, 'needs-resolution');
       assert.strictEqual(analysis.recommendedStrategy, 'force-newest');
@@ -193,7 +193,7 @@ describe('save-conflict-analyzer', () => {
       });
 
       const group = createGroup('AGENTS.md', undefined, [candidate]);
-      const analysis = await analyzeGroup(group, false, dummyWorkspaceRoot);
+      const analysis = await analyzeGroup(group, {}, dummyWorkspaceRoot);
 
       assert.strictEqual(analysis.isRootFile, true);
     });
@@ -209,7 +209,7 @@ describe('save-conflict-analyzer', () => {
       ];
 
       const group = createGroup('tools/search.md', undefined, candidates);
-      const analysis = await analyzeGroup(group, false, dummyWorkspaceRoot);
+      const analysis = await analyzeGroup(group, {}, dummyWorkspaceRoot);
 
       assert.strictEqual(analysis.hasPlatformCandidates, true);
     });
@@ -220,7 +220,7 @@ describe('save-conflict-analyzer', () => {
       });
 
       const group = createGroup('tools/search.md', undefined, [candidate]);
-      const analysis = await analyzeGroup(group, false, dummyWorkspaceRoot);
+      const analysis = await analyzeGroup(group, {}, dummyWorkspaceRoot);
 
       assert.strictEqual(analysis.hasPlatformCandidates, false);
     });
@@ -424,7 +424,7 @@ describe('save-conflict-analyzer', () => {
     it('should handle complex scenario with multiple groups', async () => {
       // Scenario 1: No workspace candidates
       const group1 = createGroup('file1.md', undefined, []);
-      const analysis1 = await analyzeGroup(group1, false, dummyWorkspaceRoot);
+      const analysis1 = await analyzeGroup(group1, {}, dummyWorkspaceRoot);
       assert.strictEqual(analysis1.type, 'no-action-needed');
 
       // Scenario 2: Workspace matches local
@@ -433,7 +433,7 @@ describe('save-conflict-analyzer', () => {
         createCandidate({ contentHash: 'same' }),
         [createCandidate({ contentHash: 'same' })]
       );
-      const analysis2 = await analyzeGroup(group2, false, dummyWorkspaceRoot);
+      const analysis2 = await analyzeGroup(group2, {}, dummyWorkspaceRoot);
       assert.strictEqual(analysis2.type, 'no-change-needed');
 
       // Scenario 3: Multiple identical workspace
@@ -445,7 +445,7 @@ describe('save-conflict-analyzer', () => {
           createCandidate({ contentHash: 'same', platform: 'claude' })
         ]
       );
-      const analysis3 = await analyzeGroup(group3, false, dummyWorkspaceRoot);
+      const analysis3 = await analyzeGroup(group3, {}, dummyWorkspaceRoot);
       assert.strictEqual(analysis3.type, 'auto-write');
       assert.strictEqual(analysis3.uniqueWorkspaceCandidates!.length, 1);
 
@@ -458,12 +458,12 @@ describe('save-conflict-analyzer', () => {
           createCandidate({ contentHash: 'hash-b', mtime: 2000 })
         ]
       );
-      const analysis4 = await analyzeGroup(group4, false, dummyWorkspaceRoot);
+      const analysis4 = await analyzeGroup(group4, {}, dummyWorkspaceRoot);
       assert.strictEqual(analysis4.type, 'needs-resolution');
       assert.strictEqual(analysis4.recommendedStrategy, 'interactive');
 
       // Same scenario with force mode
-      const analysis4Force = await analyzeGroup(group4, true, dummyWorkspaceRoot);
+      const analysis4Force = await analyzeGroup(group4, { conflictStrategy: 'newest' }, dummyWorkspaceRoot);
       assert.strictEqual(analysis4Force.recommendedStrategy, 'force-newest');
     });
   });

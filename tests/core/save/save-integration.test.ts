@@ -353,7 +353,7 @@ This is a test rule.`;
 
       // Phase 2: Analyze conflicts
       const { analyzeGroup } = await import('../../../packages/core/src/core/save/save-conflict-analyzer.js');
-      const analysis = await analyzeGroup(activeGroups[0], false, join(testDir, 'workspace'));
+      const analysis = await analyzeGroup(activeGroups[0], {}, join(testDir, 'workspace'));
 
       // Should be needs-resolution (multiple differing candidates)
       assert.strictEqual(analysis.type, 'needs-resolution');
@@ -471,7 +471,7 @@ This is a test rule.`;
       );
       const activeGroups = filterGroupsWithWorkspace(allGroups);
 
-      const analysis = await analyzeGroup(activeGroups[0], false, join(testDir, 'workspace'));
+      const analysis = await analyzeGroup(activeGroups[0], {}, join(testDir, 'workspace'));
 
       // Should auto-resolve (all candidates identical after dedup)
       assert.strictEqual(analysis.type, 'auto-write');

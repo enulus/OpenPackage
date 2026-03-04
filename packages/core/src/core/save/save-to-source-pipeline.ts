@@ -24,7 +24,8 @@ import { logger } from '../../utils/logger.js';
 import { resolveOutput, resolvePrompt } from '../ports/resolve.js';
 import { buildCandidates, materializeLocalCandidate } from './save-candidate-builder.js';
 import { buildCandidateGroups, filterGroupsWithWorkspace } from './save-group-builder.js';
-import { analyzeGroup } from './save-conflict-analyzer.js';
+import { analyzeGroup, type AnalyzeGroupOptions } from './save-conflict-analyzer.js';
+import { normalizeSaveOptions } from './save-options-normalizer.js';
 import { executeResolution } from './save-resolution-executor.js';
 import { pruneExistingPlatformCandidates } from './save-platform-handler.js';
 import { writeResolution } from './save-write-coordinator.js';
@@ -36,7 +37,7 @@ import {
   createErrorResult
 } from './save-result-reporter.js';
 import type { ConflictAnalysis } from './save-conflict-analyzer.js';
-import type { WriteResult } from './save-types.js';
+import type { WriteResult, SaveConflictStrategy } from './save-types.js';
 
 /**
  * Options for save-to-source pipeline
@@ -44,6 +45,12 @@ import type { WriteResult } from './save-types.js';
 export interface SaveToSourceOptions {
   /** Enable force mode (auto-select newest when conflicts occur) */
   force?: boolean;
+  /** Preview changes without writing to source */
+  dryRun?: boolean;
+  /** Conflict resolution strategy */
+  conflicts?: SaveConflictStrategy;
+  /** Prefer specified platform version for conflicts */
+  prefer?: string;
 }
 
 /**
@@ -180,11 +187,18 @@ export async function executeSavePipeline(
 
   logger.debug(`Processing ${finalGroups.length} group(s) with workspace candidates`);
 
+  // Normalize options (resolve --force alias, validate --conflicts)
+  const normalized = normalizeSaveOptions(options);
+  const analyzeOpts: AnalyzeGroupOptions = {
+    conflictStrategy: normalized.conflicts,
+    preferPlatform: normalized.prefer,
+  };
+
   // Phase 6: Analyze all groups first, then split into auto-resolvable vs interactive
   const groupAnalyses = await Promise.all(
     finalGroups.map(async group => ({
       group,
-      analysis: await analyzeGroup(group, options.force ?? false, cwd)
+      analysis: await analyzeGroup(group, analyzeOpts, cwd)
     }))
   );
 
@@ -214,7 +228,7 @@ export async function executeSavePipeline(
       autoResolvable.map(async ({ group, analysis }) => {
         const resolution = await executeResolution(group, analysis, packageRoot, cwd, resolveOutput(ctx), resolvePrompt(ctx));
         if (!resolution) return null;
-        return writeResolution(packageRoot, group.registryPath, resolution, group.local, cwd);
+        return writeResolution(packageRoot, group.registryPath, resolution, group.local, cwd, options.dryRun);
       })
     );
     for (const result of autoResults) {
@@ -230,14 +244,14 @@ export async function executeSavePipeline(
       continue;
     }
     const writeResults = await writeResolution(
-      packageRoot, group.registryPath, resolution, group.local, cwd
+      packageRoot, group.registryPath, resolution, group.local, cwd, options.dryRun
     );
     allWriteResults.push(writeResults);
   }
 
   // Phase 7: Build and format report
   logger.debug('Building save report');
-  const report = buildSaveReport(packageName, analyses, allWriteResults);
+  const report = buildSaveReport(packageName, analyses, allWriteResults, options.dryRun);
 
   // Phase 8: Return result
   return createCommandResult(report);

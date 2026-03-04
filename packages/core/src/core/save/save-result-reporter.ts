@@ -27,31 +27,40 @@ import type { WriteResult } from './save-types.js';
 export interface SaveReport {
   /** Package name that was saved */
   packageName: string;
-  
+
+  /** Whether this was a dry-run (no files written) */
+  dryRun?: boolean;
+
   /** Total number of candidate groups processed */
   totalGroups: number;
-  
+
   /** Number of groups that required action (not skipped) */
   groupsWithAction: number;
-  
+
   /** Total files written successfully */
   filesSaved: number;
-  
+
   /** Files created (new) */
   filesCreated: number;
-  
+
   /** Files updated (existing) */
   filesUpdated: number;
-  
+
   /** Platform-specific files written */
   platformSpecificFiles: number;
-  
+
   /** Number of interactive resolutions (user prompts) */
   interactiveResolutions: number;
-  
+
+  /** Number of conflicts skipped due to --conflicts skip/auto */
+  conflictsSkipped: number;
+
+  /** Details of skipped conflicts */
+  skippedConflicts: Array<{ registryPath: string; candidateCount: number; reason: string }>;
+
   /** Write errors that occurred */
   errors: Array<{ path: string; error: Error }>;
-  
+
   /** All write results (for detailed reporting) */
   writeResults: WriteResult[];
 }
@@ -70,21 +79,22 @@ export interface SaveReport {
 export function buildSaveReport(
   packageName: string,
   analyses: ConflictAnalysis[],
-  allWriteResults: WriteResult[][]
+  allWriteResults: WriteResult[][],
+  dryRun?: boolean
 ): SaveReport {
   // Count groups
   const totalGroups = analyses.length;
   const groupsWithAction = analyses.filter(
     a => a.type !== 'no-action-needed' && a.type !== 'no-change-needed'
   ).length;
-  
+
   // Flatten write results
   const flatResults = allWriteResults.flat();
-  
+
   // Count successful writes
   const successfulWrites = flatResults.filter(r => r.success);
   const filesSaved = successfulWrites.length;
-  
+
   // Count created vs updated
   const filesCreated = successfulWrites.filter(
     r => r.operation.operation === 'create'
@@ -92,17 +102,26 @@ export function buildSaveReport(
   const filesUpdated = successfulWrites.filter(
     r => r.operation.operation === 'update'
   ).length;
-  
+
   // Count platform-specific files
   const platformSpecificFiles = successfulWrites.filter(
     r => r.operation.isPlatformSpecific
   ).length;
-  
+
   // Count interactive resolutions
   const interactiveResolutions = analyses.filter(
     a => a.recommendedStrategy === 'interactive' && a.type === 'needs-resolution'
   ).length;
-  
+
+  // Count skipped conflicts
+  const skippedConflicts = analyses
+    .filter(a => a.skippedReason)
+    .map(a => ({
+      registryPath: a.registryPath,
+      candidateCount: a.uniqueWorkspaceCandidates.length,
+      reason: a.skippedReason!
+    }));
+
   // Extract errors
   const errors = flatResults
     .filter(r => !r.success)
@@ -110,9 +129,10 @@ export function buildSaveReport(
       path: r.operation.registryPath,
       error: r.error || new Error('Unknown write error')
     }));
-  
+
   return {
     packageName,
+    dryRun,
     totalGroups,
     groupsWithAction,
     filesSaved,
@@ -120,6 +140,8 @@ export function buildSaveReport(
     filesUpdated,
     platformSpecificFiles,
     interactiveResolutions,
+    conflictsSkipped: skippedConflicts.length,
+    skippedConflicts,
     errors,
     writeResults: flatResults
   };
@@ -200,29 +222,36 @@ export function createErrorResult(error: string): CommandResult {
  */
 export function formatSaveMessage(report: SaveReport): string {
   const lines: string[] = [];
-  
+  const prefix = report.dryRun ? '(dry-run) Would save' : 'Saved';
+
   if (report.filesSaved === 0 && report.errors.length === 0) {
-    return `Saved ${report.packageName}\n  No changes detected`;
+    return `${prefix} ${report.packageName}\n  No changes detected`;
   }
 
-  lines.push(`Saved ${report.packageName}`);
-  
+  lines.push(`${prefix} ${report.packageName}`);
+
   if (report.filesCreated > 0) {
-    lines.push(`  ${report.filesCreated} file(s) created`);
+    const verb = report.dryRun ? 'would be created' : 'created';
+    lines.push(`  ${report.filesCreated} file(s) ${verb}`);
   }
-  
+
   if (report.filesUpdated > 0) {
-    lines.push(`  ${report.filesUpdated} file(s) updated`);
+    const verb = report.dryRun ? 'would be updated' : 'updated';
+    lines.push(`  ${report.filesUpdated} file(s) ${verb}`);
   }
-  
+
   if (report.platformSpecificFiles > 0) {
     lines.push(`  ${report.platformSpecificFiles} platform-specific file(s)`);
   }
-  
+
   if (report.interactiveResolutions > 0) {
     lines.push(`  ${report.interactiveResolutions} interactive resolution(s)`);
   }
-  
+
+  if (report.conflictsSkipped > 0) {
+    lines.push(`  ${report.conflictsSkipped} conflict(s) skipped`);
+  }
+
   if (report.errors.length > 0) {
     lines.push('');
     lines.push(`⚠️  ${report.errors.length} error(s) occurred:`);
@@ -230,16 +259,17 @@ export function formatSaveMessage(report: SaveReport): string {
       lines.push(`  • ${err.path}: ${err.error.message}`);
     });
   }
-  
+
   const successfulWrites = report.writeResults.filter(r => r.success);
   if (successfulWrites.length > 0) {
     lines.push('');
-    lines.push('  Files saved:');
-    
+    const filesLabel = report.dryRun ? 'Files that would be saved:' : 'Files saved:';
+    lines.push(`  ${filesLabel}`);
+
     const sorted = [...successfulWrites].sort((a, b) =>
       a.operation.registryPath.localeCompare(b.operation.registryPath)
     );
-    
+
     for (const result of sorted) {
       const { registryPath, isPlatformSpecific, platform } = result.operation;
       const label = isPlatformSpecific && platform
@@ -248,13 +278,56 @@ export function formatSaveMessage(report: SaveReport): string {
       lines.push(`   ├── ${label}`);
     }
   }
-  
-  if (report.filesSaved > 0) {
+
+  if (report.skippedConflicts.length > 0) {
+    lines.push('');
+    lines.push('  Skipped conflicts:');
+    for (const conflict of report.skippedConflicts) {
+      lines.push(`   ├── ${conflict.registryPath} (${conflict.candidateCount} candidates, ${conflict.reason})`);
+    }
+  }
+
+  if (report.filesSaved > 0 && !report.dryRun) {
     lines.push('');
     lines.push('💡 Changes saved to package source.');
     lines.push('   To sync changes to workspace, run:');
     lines.push(`     opkg install ${report.packageName}`);
   }
-  
+
   return lines.join('\n');
+}
+
+/**
+ * Convert SaveReport to a JSON-serializable output object.
+ * Used by `opkg save --json`.
+ */
+export function toSaveJsonOutput(report: SaveReport): Record<string, unknown> {
+  return {
+    success: true,
+    packageName: report.packageName,
+    dryRun: report.dryRun ?? false,
+    summary: {
+      totalGroups: report.totalGroups,
+      groupsWithAction: report.groupsWithAction,
+      filesSaved: report.filesSaved,
+      filesCreated: report.filesCreated,
+      filesUpdated: report.filesUpdated,
+      platformSpecificFiles: report.platformSpecificFiles,
+      conflictsSkipped: report.conflictsSkipped,
+    },
+    files: report.writeResults
+      .filter(r => r.success)
+      .map(r => ({
+        registryPath: r.operation.registryPath,
+        operation: r.operation.operation,
+        success: r.success,
+        platform: r.operation.platform ?? null,
+        isPlatformSpecific: r.operation.isPlatformSpecific,
+      })),
+    skippedConflicts: report.skippedConflicts,
+    errors: report.errors.map(e => ({
+      path: e.path,
+      message: e.error.message,
+    })),
+  };
 }

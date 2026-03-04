@@ -29,7 +29,7 @@ export type {
   SearchProgressEvent,
   LifecycleProgressEvent,
 } from './core/ports/progress.js';
-export { consoleOutput } from './core/ports/console-output.js';
+export { consoleOutput, silentOutput } from './core/ports/console-output.js';
 export { nonInteractivePrompt, NonInteractivePromptError } from './core/ports/console-prompt.js';
 export { consoleProgress, silentProgress } from './core/ports/console-progress.js';
 export { resolveOutput, resolvePrompt, resolveProgress } from './core/ports/resolve.js';
@@ -93,11 +93,13 @@ export {
 // Save / Set Pipelines
 // ============================================================================
 
-export { runSaveToSourcePipeline } from './core/save/save-to-source-pipeline.js';
+export { runSaveToSourcePipeline, type SaveToSourceOptions } from './core/save/save-to-source-pipeline.js';
 export {
   runDirectSaveFlow,
   type DirectSaveResult,
 } from './core/save/direct-save-flow.js';
+export type { SaveConflictStrategy } from './core/save/save-types.js';
+export { toSaveJsonOutput } from './core/save/save-result-reporter.js';
 export { runSetPipeline } from './core/set/set-pipeline.js';
 
 // ============================================================================
