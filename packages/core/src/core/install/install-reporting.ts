@@ -32,6 +32,8 @@ export interface InstallReportData {
   namespacedFiles?: string[];
   /** Files that were physically relocated on disk during namespace resolution */
   relocatedFiles?: RelocatedFile[];
+  /** Absolute paths of files that were auto-claimed (content identical, unowned on disk) */
+  claimedFiles?: string[];
   /** When true, use compact note-based display for file lists (interactive mode) */
   interactive?: boolean;
   /** Package names that were replaced during subsumption resolution (upgrade from resource-scoped installs) */
@@ -88,14 +90,15 @@ export function displayInstallationResults(data: InstallReportData, output: Outp
     errorCount,
     errors,
     isDependencyInstall = true,
-    namespaced,
     namespacedFiles,
+    claimedFiles,
     relocatedFiles,
     interactive = false,
     replacedResources,
   } = data;
 
   const namespacedSet = new Set(namespacedFiles ?? []);
+  const claimedSet = new Set(claimedFiles ?? []);
   const dim = (text: string) => `\x1b[2m${text}\x1b[0m`;
 
   // Check if installation actually succeeded
@@ -163,7 +166,9 @@ export function displayInstallationResults(data: InstallReportData, output: Outp
     const sortedFiles = [...installedFiles].sort((a, b) => a.localeCompare(b));
     renderFileList(sortedFiles.map(f => {
       const display = formatPathForDisplay(f);
-      return namespacedSet.has(f) ? `${display} ${dim('[namespaced]')}` : display;
+      return namespacedSet.has(f) ? `${display} ${dim('[namespaced]')}`
+        : claimedSet.has(f) ? `${display} ${dim('[claimed]')}`
+        : display;
     }), header, output, interactive);
   }
 
@@ -173,7 +178,9 @@ export function displayInstallationResults(data: InstallReportData, output: Outp
     const sortedFiles = [...updatedFiles].sort((a, b) => a.localeCompare(b));
     renderFileList(sortedFiles.map(f => {
       const display = formatPathForDisplay(f);
-      return namespacedSet.has(f) ? `${display} ${dim('[namespaced]')}` : display;
+      return namespacedSet.has(f) ? `${display} ${dim('[namespaced]')}`
+        : claimedSet.has(f) ? `${display} ${dim('[claimed]')}`
+        : display;
     }), header, output, interactive);
   }
 

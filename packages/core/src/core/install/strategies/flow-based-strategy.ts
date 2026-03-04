@@ -5,7 +5,7 @@
  * Used for universal format packages.
  */
 
-import { join, relative, dirname, basename } from 'path';
+import { join, relative, dirname, basename, extname } from 'path';
 import type { Platform } from '../../platforms.js';
 import type { PackageFormat } from '../format-detector.js';
 import type { InstallOptions } from '../../../types/index.js';
@@ -34,6 +34,9 @@ import {
   type TargetEntry,
 } from '../conflicts/file-conflict-resolver.js';
 import { normalizePathForProcessing } from '../../../utils/path-normalization.js';
+import { readTextFile } from '../../../utils/fs.js';
+import { MARKDOWN_EXTENSIONS } from '../../../constants/index.js';
+import { mergeInlinePlatformOverride } from '../../platform-yaml-merge.js';
 import { logger } from '../../../utils/logger.js';
 import { readWorkspaceIndex } from '../../../utils/workspace-index-yml.js';
 
@@ -117,7 +120,7 @@ export class FlowBasedInstallStrategy extends BaseStrategy {
         }
 
         // Resolve conflicts — get back the filtered set of allowed targets
-        const { allowedTargets, warnings, packageWasNamespaced, namespaceDir, relocatedFiles } = await resolveConflictsForTargets(
+        const { allowedTargets, warnings, packageWasNamespaced, namespaceDir, relocatedFiles, claimedFiles } = await resolveConflictsForTargets(
           workspaceRoot,
           targets,
           ownershipContext,
@@ -166,6 +169,7 @@ export class FlowBasedInstallStrategy extends BaseStrategy {
         // Attach namespace metadata to the result
         result.namespaced = wasNamespaced;
         result.relocatedFiles = conflictRelocatedFiles;
+        result.claimedFiles = claimedFiles;
 
         this.logResults(result, context);
         return result;
@@ -249,18 +253,38 @@ export class FlowBasedInstallStrategy extends BaseStrategy {
           const targetRelRaw = relative(flowContext.workspaceRoot, targetAbs);
           const targetRel = targetRelRaw.replace(/\\/g, '/');
 
-          // For pass-through non-merge flows, provide the source path so the
-          // conflict resolver can lazily read & compare only when needed.
-          // Uses the same detection as the executor's dispatch (needsParsing).
-          const canCompareContent = !isMergeFlow
-            && isPassThroughFlow(flow, sourceAbs, targetAbs, flowContext);
+          // Always provide sourceAbsPath for non-merge flows so the conflict
+          // resolver can fall back to a raw-source comparison when needed.
+          const provideSourcePath = !isMergeFlow;
+
+          // For non-pass-through markdown flows during a platform install the
+          // executor will apply mergeInlinePlatformOverride().  Build a lazy
+          // callback so the conflict resolver can compare the *transformed*
+          // output (not just the raw source) against what's already on disk.
+          let resolveOutputContent: (() => Promise<string>) | undefined;
+          if (
+            provideSourcePath
+            && !isPassThroughFlow(flow, sourceAbs, targetAbs, flowContext)
+            && MARKDOWN_EXTENSIONS.has(extname(sourceAbs).toLowerCase())
+            && flowContext.platform
+            && flowContext.direction === 'install'
+          ) {
+            const capturedSourceAbs = sourceAbs;
+            const capturedPlatform = flowContext.platform;
+            const capturedWorkspaceRoot = flowContext.workspaceRoot;
+            resolveOutputContent = async () => {
+              const raw = await readTextFile(capturedSourceAbs, 'utf8');
+              return mergeInlinePlatformOverride(raw, capturedPlatform, capturedWorkspaceRoot);
+            };
+          }
 
           entries.push({
             relPath: targetRel,
             absPath: targetAbs,
             flowToPattern: resolvedToPattern,
             isMergeFlow,
-            sourceAbsPath: canCompareContent ? sourceAbs : undefined,
+            sourceAbsPath: provideSourcePath ? sourceAbs : undefined,
+            resolveOutputContent,
           });
         } catch {
           // If target resolution fails for a source, skip it — the executor

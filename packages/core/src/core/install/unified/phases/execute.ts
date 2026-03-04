@@ -24,6 +24,8 @@ export interface ExecutionResult {
   namespacedFiles?: string[];
   /** Files that were physically relocated on disk during namespace resolution */
   relocatedFiles?: RelocatedFile[];
+  /** Absolute paths of files that were auto-claimed (content identical, unowned on disk) */
+  claimedFiles?: string[];
 }
 
 /**

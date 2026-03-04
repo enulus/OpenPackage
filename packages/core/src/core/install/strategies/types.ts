@@ -74,6 +74,8 @@ export interface FlowInstallResult {
   namespaced?: boolean;
   /** Files that were physically relocated on disk during namespace resolution */
   relocatedFiles?: RelocatedFile[];
+  /** Workspace-relative paths of files that were auto-claimed (content identical, unowned on disk) */
+  claimedFiles?: string[];
 }
 
 export interface FlowConflictReport {

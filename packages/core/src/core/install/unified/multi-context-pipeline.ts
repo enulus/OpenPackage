@@ -158,6 +158,7 @@ export function mergeInstallReportData(
   const errors = list.flatMap(r => r.errors ?? []);
   const namespacedFiles = list.flatMap(r => r.namespacedFiles ?? []);
   const relocatedFiles = list.flatMap(r => r.relocatedFiles ?? []);
+  const claimedFiles = list.flatMap(r => r.claimedFiles ?? []);
   const replacedResources = list.flatMap(r => r.replacedResources ?? []);
 
   return {
@@ -172,10 +173,11 @@ export function mergeInstallReportData(
     },
     errorCount,
     errors,
+    namespaced: namespacedFiles.length > 0 || undefined,
     namespacedFiles: namespacedFiles.length > 0 ? namespacedFiles : undefined,
     relocatedFiles,
+    claimedFiles: claimedFiles.length > 0 ? claimedFiles : undefined,
     replacedResources: replacedResources.length > 0 ? replacedResources : undefined,
-    namespaced: list.some(r => r.namespaced),
     resolvedPackages: first.resolvedPackages
   };
 }

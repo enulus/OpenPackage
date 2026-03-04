@@ -34,6 +34,7 @@ export async function reportResultsPhase(
     namespaced: installResult.namespaced,
     namespacedFiles: installResult.namespacedFiles,
     relocatedFiles: installResult.relocatedFiles,
+    claimedFiles: installResult.claimedFiles,
     interactive: ctx.execution.outputMode === 'rich',
     replacedResources: ctx._replacedResources,
   };

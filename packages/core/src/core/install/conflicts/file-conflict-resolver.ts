@@ -96,6 +96,16 @@ export interface TargetEntry {
    */
   sourceAbsPath?: string;
   /**
+   * Lazily compute the *transformed* output content for this target.
+   * Used by non-pass-through flows (e.g. markdown with platform overrides)
+   * where the on-disk source differs from what the executor would write.
+   * The conflict resolver uses a three-tier cascade:
+   *   1. `content` (eager, set by caller)
+   *   2. `resolveOutputContent()` (lazy, transformed output)
+   *   3. `sourceAbsPath` read (lazy, raw source — pass-through only)
+   */
+  resolveOutputContent?: () => Promise<string>;
+  /**
    * The resolved `flow.to` pattern that produced this target path.
    * Used to derive the namespace insertion point (the base directory of the
    * pattern, i.e. everything before the first glob character).
@@ -142,6 +152,8 @@ export interface ConflictResolutionResult {
    * own namespace subdirectories to make room for the incoming package.
    */
   relocatedFiles: RelocatedFile[];
+  /** Workspace-relative paths of files that were auto-claimed (unowned on disk, content identical) */
+  claimedFiles: string[];
 }
 
 // ============================================================================
@@ -699,6 +711,7 @@ export async function resolveConflictsForTargets(
   indexWriteCollector?: IndexWriteCollector
 ): Promise<ConflictResolutionResult> {
   const warnings: string[] = [];
+  const claimedFiles: string[] = [];
   const interactive = canPrompt ?? options.interactive ?? false;
   const isDryRun = Boolean(options.dryRun);
 
@@ -775,9 +788,18 @@ export async function resolveConflictsForTargets(
       continue;
     }
 
-    // Check content difference — use provided content, or lazily read from
-    // sourceAbsPath for pass-through flows (avoids eager reads during planning)
+    // Check content difference — three-tier cascade:
+    //   1. `content` (eager, set by caller)
+    //   2. `resolveOutputContent()` (lazy, transformed output)
+    //   3. `sourceAbsPath` read (lazy, raw source — pass-through fallback)
     let contentToCompare = target.content;
+    if (contentToCompare === undefined && target.resolveOutputContent) {
+      try {
+        contentToCompare = await target.resolveOutputContent();
+      } catch {
+        // Callback failed — fall through to sourceAbsPath
+      }
+    }
     if (contentToCompare === undefined && target.sourceAbsPath) {
       try {
         contentToCompare = await readTextFile(target.sourceAbsPath, 'utf8');
@@ -788,6 +810,7 @@ export async function resolveConflictsForTargets(
     if (contentToCompare !== undefined) {
       const contentDiffers = await hasContentDifference(absTarget, contentToCompare);
       if (!contentDiffers) {
+        claimedFiles.push(target.relPath);
         classifications.push({ type: 'none' });
         continue;
       }
@@ -955,6 +978,7 @@ export async function resolveConflictsForTargets(
     warnings,
     packageWasNamespaced: shouldNamespacePackage,
     namespaceDir: shouldNamespacePackage ? installingSlug : undefined,
-    relocatedFiles
+    relocatedFiles,
+    claimedFiles
   };
 }
