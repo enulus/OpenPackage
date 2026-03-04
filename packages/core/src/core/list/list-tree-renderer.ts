@@ -9,7 +9,7 @@ export type { ResourceScope } from '../resources/scope-traversal.js';
  * Enhanced file mapping with status and scope
  */
 export interface EnhancedFileMapping extends ListFileMapping {
-  status: 'tracked' | 'modified' | 'clean' | 'untracked' | 'missing';
+  status: 'tracked' | 'modified' | 'clean' | 'outdated' | 'diverged' | 'untracked' | 'missing';
   scope: ResourceScope;
 }
 
@@ -20,7 +20,7 @@ export interface EnhancedResourceInfo {
   name: string;
   resourceType: string;
   files: EnhancedFileMapping[];
-  status: 'tracked' | 'modified' | 'clean' | 'partial' | 'untracked' | 'missing' | 'mixed';
+  status: 'tracked' | 'modified' | 'clean' | 'outdated' | 'diverged' | 'partial' | 'untracked' | 'missing' | 'mixed';
   scopes: Set<ResourceScope>;
   /** Package(s) this resource belongs to (tracked resources only) */
   packages?: Set<string>;

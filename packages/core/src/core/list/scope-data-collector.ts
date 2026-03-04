@@ -17,8 +17,8 @@ import type { EnhancedFileMapping, EnhancedResourceInfo, EnhancedResourceGroup, 
 // Types
 // ---------------------------------------------------------------------------
 
-type FileStatus = 'tracked' | 'modified' | 'clean' | 'untracked' | 'missing';
-type ResourceStatus = 'tracked' | 'modified' | 'clean' | 'partial' | 'untracked' | 'missing' | 'mixed';
+type FileStatus = 'tracked' | 'modified' | 'clean' | 'outdated' | 'diverged' | 'untracked' | 'missing';
+type ResourceStatus = 'tracked' | 'modified' | 'clean' | 'outdated' | 'diverged' | 'partial' | 'untracked' | 'missing' | 'mixed';
 
 export interface ScopeResult {
   headerName: string;
@@ -200,12 +200,16 @@ function calculateResourceStatus(files: EnhancedFileMapping[]): ResourceStatus {
 
   const hasTracked = files.some(f => f.status === 'tracked');
   const hasModified = files.some(f => f.status === 'modified');
+  const hasOutdated = files.some(f => f.status === 'outdated');
+  const hasDiverged = files.some(f => f.status === 'diverged');
   const hasClean = files.some(f => f.status === 'clean');
   const hasUntracked = files.some(f => f.status === 'untracked');
   const hasMissing = files.some(f => f.status === 'missing');
 
-  // Content-status-aware logic
+  // Content-status-aware logic — priority: diverged > modified > outdated
+  if (hasDiverged) return 'diverged';
   if (hasModified) return 'modified';
+  if (hasOutdated) return 'outdated';
   if (hasClean && !hasTracked && !hasUntracked && !hasMissing) return 'clean';
   if (hasClean && hasMissing && !hasUntracked) return 'partial';
 
@@ -244,6 +248,10 @@ export function mergeTrackedAndUntrackedResources(
                 fileStatus = 'missing';
               } else if (f.contentStatus === 'modified') {
                 fileStatus = 'modified';
+              } else if (f.contentStatus === 'outdated') {
+                fileStatus = 'outdated';
+              } else if (f.contentStatus === 'diverged') {
+                fileStatus = 'diverged';
               } else if (f.contentStatus === 'clean') {
                 fileStatus = 'clean';
               } else {

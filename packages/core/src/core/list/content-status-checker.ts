@@ -21,7 +21,7 @@ import type { WorkspaceIndexFileMapping } from '../../types/workspace-index.js';
 import type { FlowContext } from '../../types/flows.js';
 import { logger } from '../../utils/logger.js';
 
-export type ContentStatus = 'modified' | 'clean' | 'merged';
+export type ContentStatus = 'modified' | 'clean' | 'outdated' | 'diverged' | 'merged';
 
 /**
  * Check content status for all tracked files in a package.
@@ -51,20 +51,6 @@ export async function checkContentStatus(
 
       const isMerged: boolean = isMergedMapping(mapping);
 
-      // Fast path: use stored install-time hash when available (skip merged files —
-      // their hash reflects the full file at one package's install time, not just that
-      // package's contribution, so key-based comparison is needed instead)
-      if (isComplexMapping(mapping) && mapping.hash && !isMerged) {
-        try {
-          const workspaceContent = await readTextFile(absTarget);
-          const workspaceHash = await calculateFileHash(workspaceContent);
-          results.set(key, workspaceHash === mapping.hash ? 'clean' : 'modified');
-          continue;
-        } catch (error) {
-          logger.debug(`Hash comparison failed for ${absTarget}, falling back: ${error}`);
-        }
-      }
-
       if (isMerged) {
         const status = await checkMergedFileStatus(
           absTarget,
@@ -73,12 +59,16 @@ export async function checkContentStatus(
         );
         results.set(key, status);
       } else {
-        const status = await checkSimpleFileStatus(
-          absTarget,
-          path.join(packageSourceRoot, sourceKey),
-          targetDir
-        );
-        results.set(key, status);
+        const installHash = isComplexMapping(mapping) ? mapping.hash : undefined;
+        const absSource = path.join(packageSourceRoot, sourceKey);
+
+        if (installHash) {
+          const status = await checkThreeWayStatus(absTarget, absSource, installHash, targetDir);
+          results.set(key, status);
+        } else {
+          const status = await checkLegacyStatus(absTarget, absSource, targetDir);
+          results.set(key, status);
+        }
       }
     }
   }
@@ -87,7 +77,7 @@ export async function checkContentStatus(
 }
 
 /**
- * Compare a simple (non-merged) file: hash workspace vs source.
+ * Compute the hash of a source file as it would appear after install.
  *
  * For markdown files deployed to a platform directory, runs the source through
  * the flow executor's own loadSourceFile → serializeTargetContent path — the
@@ -95,7 +85,80 @@ export async function checkContentStatus(
  * YAML re-serialization, and any future install-time transforms without
  * maintaining a separate replica of the pipeline.
  */
-async function checkSimpleFileStatus(
+async function computeSourceHash(
+  absSourcePath: string,
+  absWorkspacePath: string,
+  targetDir: string
+): Promise<string> {
+  const ext = path.extname(absSourcePath).toLowerCase();
+
+  if (MARKDOWN_EXTENSIONS.has(ext)) {
+    try {
+      const platformInfo = mapPlatformFileToUniversal(absWorkspacePath, targetDir);
+      const executor = new DefaultFlowExecutor();
+      const context: FlowContext = {
+        workspaceRoot: targetDir,
+        packageRoot: path.dirname(absSourcePath),
+        platform: platformInfo?.platform ?? 'claude',
+        packageName: '',
+        direction: 'install',
+        variables: {}
+      };
+      const loaded = await executor.loadSourceFile(absSourcePath, context);
+      const serialized = executor.serializeTargetContent(loaded.data, loaded.format);
+      return calculateFileHash(serialized);
+    } catch {
+      const sourceContent = await readTextFile(absSourcePath);
+      return calculateFileHash(sourceContent);
+    }
+  }
+
+  const sourceContent = await readTextFile(absSourcePath);
+  return calculateFileHash(sourceContent);
+}
+
+/**
+ * Three-way status check using the install-time hash as pivot.
+ *
+ * Compares workspace and source against the stored install hash to determine
+ * which side(s) changed since the last install.
+ */
+async function checkThreeWayStatus(
+  absWorkspacePath: string,
+  absSourcePath: string,
+  installHash: string,
+  targetDir: string
+): Promise<ContentStatus> {
+  try {
+    const workspaceContent = await readTextFile(absWorkspacePath);
+    const workspaceHash = await calculateFileHash(workspaceContent);
+    const workspaceChanged = workspaceHash !== installHash;
+
+    // If source is missing, only workspace side matters
+    if (!(await exists(absSourcePath))) {
+      return workspaceChanged ? 'modified' : 'clean';
+    }
+
+    const sourceHash = await computeSourceHash(absSourcePath, absWorkspacePath, targetDir);
+    const sourceChanged = sourceHash !== installHash;
+
+    if (!workspaceChanged && !sourceChanged) return 'clean';
+    if (workspaceChanged && !sourceChanged) return 'modified';
+    if (!workspaceChanged && sourceChanged) return 'outdated';
+    return 'diverged';
+  } catch (error) {
+    logger.debug(`Three-way check failed for ${absWorkspacePath}: ${error}`);
+    return 'clean';
+  }
+}
+
+/**
+ * Legacy two-way status check when no install hash is available.
+ *
+ * Without an install-time pivot we cannot tell which side changed,
+ * so any difference is reported as 'diverged'.
+ */
+async function checkLegacyStatus(
   absWorkspacePath: string,
   absSourcePath: string,
   targetDir: string
@@ -106,43 +169,12 @@ async function checkSimpleFileStatus(
     }
 
     const workspaceContent = await readTextFile(absWorkspacePath);
-
-    // For markdown files, simulate the install pipeline so that expected
-    // serialization changes (YAML scalar style, platform frontmatter) don't
-    // produce false positives.
-    const ext = path.extname(absSourcePath).toLowerCase();
-    let sourceHash: string;
-
-    if (MARKDOWN_EXTENSIONS.has(ext)) {
-      try {
-        const platformInfo = mapPlatformFileToUniversal(absWorkspacePath, targetDir);
-        const executor = new DefaultFlowExecutor();
-        // Build a minimal FlowContext — loadSourceFile only needs platform + direction
-        const context: FlowContext = {
-          workspaceRoot: targetDir,
-          packageRoot: path.dirname(absSourcePath),
-          platform: platformInfo?.platform ?? 'claude',
-          packageName: '',
-          direction: 'install',
-          variables: {}
-        };
-        const loaded = await executor.loadSourceFile(absSourcePath, context);
-        const serialized = executor.serializeTargetContent(loaded.data, loaded.format);
-        sourceHash = await calculateFileHash(serialized);
-      } catch {
-        // Transform simulation failed — fall back to raw source comparison
-        const sourceContent = await readTextFile(absSourcePath);
-        sourceHash = await calculateFileHash(sourceContent);
-      }
-    } else {
-      const sourceContent = await readTextFile(absSourcePath);
-      sourceHash = await calculateFileHash(sourceContent);
-    }
-
     const workspaceHash = await calculateFileHash(workspaceContent);
-    return workspaceHash === sourceHash ? 'clean' : 'modified';
+    const sourceHash = await computeSourceHash(absSourcePath, absWorkspacePath, targetDir);
+
+    return workspaceHash === sourceHash ? 'clean' : 'diverged';
   } catch (error) {
-    logger.debug(`Content check failed for ${absWorkspacePath}: ${error}`);
+    logger.debug(`Legacy content check failed for ${absWorkspacePath}: ${error}`);
     return 'clean';
   }
 }

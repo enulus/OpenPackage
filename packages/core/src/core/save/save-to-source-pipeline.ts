@@ -14,11 +14,13 @@
  * @module save-to-source-pipeline
  */
 
+import path from 'path';
+
 import type { CommandResult } from '../../types/index.js';
 import type { ExecutionContext } from '../../types/execution-context.js';
 import type { WorkspaceIndexFileMapping } from '../../types/workspace-index.js';
 import { assertMutableSourceOrThrow } from '../source-mutability.js';
-import { readWorkspaceIndex } from '../../utils/workspace-index-yml.js';
+import { readWorkspaceIndex, writeWorkspaceIndex } from '../../utils/workspace-index-yml.js';
 import { resolvePackageSource } from '../source-resolution/resolve-package-source.js';
 import { logger } from '../../utils/logger.js';
 import { resolveOutput, resolvePrompt } from '../ports/resolve.js';
@@ -36,6 +38,9 @@ import {
   createSuccessResult,
   createErrorResult
 } from './save-result-reporter.js';
+import { calculateFileHash } from '../../utils/hash-utils.js';
+import { readTextFile, exists } from '../../utils/fs.js';
+import { getTargetPath, isComplexMapping } from '../../utils/workspace-index-helpers.js';
 import type { ConflictAnalysis } from './save-conflict-analyzer.js';
 import type { WriteResult, SaveConflictStrategy } from './save-types.js';
 
@@ -249,11 +254,16 @@ export async function executeSavePipeline(
     allWriteResults.push(writeResults);
   }
 
-  // Phase 7: Build and format report
+  // Phase 7: Update workspace index hashes so three-way pivot resets after save
+  if (!options.dryRun) {
+    await updateWorkspaceHashes(cwd, packageName, filesMapping, allWriteResults);
+  }
+
+  // Phase 8: Build and format report
   logger.debug('Building save report');
   const report = buildSaveReport(packageName, analyses, allWriteResults, options.dryRun);
 
-  // Phase 8: Return result
+  // Phase 9: Return result
   return createCommandResult(report);
 }
 
@@ -348,4 +358,74 @@ export async function validateSavePreconditions(
     packageRoot: source.absolutePath,
     filesMapping: pkgIndex.files
   };
+}
+
+/**
+ * Update workspace index hashes after a successful save.
+ *
+ * For each successfully written file, recompute the workspace file's hash
+ * and store it in the index. This resets the three-way pivot so subsequent
+ * `list --status` reports the file as clean.
+ */
+async function updateWorkspaceHashes(
+  cwd: string,
+  packageName: string,
+  filesMapping: Record<string, (string | WorkspaceIndexFileMapping)[]>,
+  allWriteResults: WriteResult[][]
+): Promise<void> {
+  try {
+    // Collect registry paths of successfully written files
+    const writtenPaths = new Set<string>();
+    for (const results of allWriteResults) {
+      for (const wr of results) {
+        if (wr.success && wr.operation.operation !== 'skip') {
+          writtenPaths.add(wr.operation.registryPath);
+        }
+      }
+    }
+
+    if (writtenPaths.size === 0) return;
+
+    const record = await readWorkspaceIndex(cwd);
+    const pkg = record.index.packages?.[packageName];
+    if (!pkg?.files) return;
+
+    let updated = false;
+    for (const [sourceKey, targets] of Object.entries(pkg.files)) {
+      if (!Array.isArray(targets)) continue;
+
+      // Check if this source key was part of a successful write
+      if (!writtenPaths.has(sourceKey)) continue;
+
+      for (let i = 0; i < targets.length; i++) {
+        const mapping = targets[i];
+        const targetPath = getTargetPath(mapping);
+        const absTarget = path.join(cwd, targetPath);
+
+        if (!(await exists(absTarget))) continue;
+
+        try {
+          const content = await readTextFile(absTarget);
+          const hash = await calculateFileHash(content);
+
+          if (isComplexMapping(mapping)) {
+            mapping.hash = hash;
+          } else {
+            // Upgrade simple string mapping to object form to store hash
+            targets[i] = { target: mapping, hash };
+          }
+          updated = true;
+        } catch (error) {
+          logger.debug(`Failed to update hash for ${absTarget}: ${error}`);
+        }
+      }
+    }
+
+    if (updated) {
+      await writeWorkspaceIndex(record);
+      logger.debug(`Updated workspace index hashes for ${packageName}`);
+    }
+  } catch (error) {
+    logger.debug(`Failed to update workspace hashes: ${error}`);
+  }
 }

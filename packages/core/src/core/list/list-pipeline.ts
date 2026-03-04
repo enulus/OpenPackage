@@ -24,7 +24,7 @@ export interface ListFileMapping {
   source: string;
   target: string;
   exists: boolean;
-  contentStatus?: 'modified' | 'clean' | 'merged';
+  contentStatus?: 'modified' | 'clean' | 'outdated' | 'diverged' | 'merged';
 }
 
 /**
@@ -60,6 +60,8 @@ export interface ListPackageReport {
   resourceGroups?: ListResourceGroup[];
   dependencies?: string[];
   modifiedCount?: number;
+  outdatedCount?: number;
+  divergedCount?: number;
   isRegistryPackage?: boolean;
 }
 
@@ -376,21 +378,29 @@ async function checkPackageStatus(
 
   // Content status comparison (when --status is active and source exists)
   let modifiedCount: number | undefined;
+  let outdatedCount: number | undefined;
+  let divergedCount: number | undefined;
   let isRegistryPackageFlag: boolean | undefined;
   if (statusEnabled && sourceExists) {
     isRegistryPackageFlag = isRegistryPath(sourceRoot);
     try {
       const statusMap = await checkContentStatus(targetDir, sourceRoot, filesMapping);
       let modified = 0;
+      let outdated = 0;
+      let diverged = 0;
       for (const file of fileList) {
         const key = `${file.source}::${file.target}`;
         const cs = statusMap.get(key);
         if (cs) {
           file.contentStatus = cs;
           if (cs === 'modified') modified++;
+          if (cs === 'outdated') outdated++;
+          if (cs === 'diverged') diverged++;
         }
       }
       modifiedCount = modified;
+      outdatedCount = outdated;
+      divergedCount = diverged;
     } catch (error) {
       logger.debug(`Content status check failed for ${pkgName}: ${error}`);
     }
@@ -464,6 +474,8 @@ async function checkPackageStatus(
     resourceGroups,
     dependencies,
     modifiedCount,
+    outdatedCount,
+    divergedCount,
     isRegistryPackage: isRegistryPackageFlag
   };
 }

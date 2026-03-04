@@ -62,11 +62,20 @@ function formatPackageLine(pkg: ListPackageReport, statusEnabled?: boolean): str
     stateSuffix = dim(' (missing)');
   }
 
-  // Show [N modified] for mutable packages with modifications
-  let statusTag = '';
-  if (statusEnabled && !pkg.isRegistryPackage && pkg.modifiedCount && pkg.modifiedCount > 0) {
-    statusTag = ' ' + yellow(`[${pkg.modifiedCount} modified]`);
+  // Show status tags for mutable packages with changes
+  const statusTags: string[] = [];
+  if (statusEnabled && !pkg.isRegistryPackage) {
+    if (pkg.modifiedCount && pkg.modifiedCount > 0) {
+      statusTags.push(yellow(`[${pkg.modifiedCount} modified]`));
+    }
+    if (pkg.outdatedCount && pkg.outdatedCount > 0) {
+      statusTags.push(cyan(`[${pkg.outdatedCount} outdated]`));
+    }
+    if (pkg.divergedCount && pkg.divergedCount > 0) {
+      statusTags.push(red(`[${pkg.divergedCount} diverged]`));
+    }
   }
+  const statusTag = statusTags.length > 0 ? ' ' + statusTags.join(' ') : '';
 
   return `${pkg.name}${version}${stateSuffix}${statusTag}`;
 }
@@ -97,8 +106,12 @@ function printFileList(
     let label: string;
     if (!file.exists) {
       label = `${dim(file.target)} ${red('[MISSING]')}`;
+    } else if (statusEnabled && file.contentStatus === 'diverged') {
+      label = `${dim(file.target)} ${red('[diverged]')}`;
     } else if (statusEnabled && file.contentStatus === 'modified') {
       label = `${dim(file.target)} ${yellow('[modified]')}`;
+    } else if (statusEnabled && file.contentStatus === 'outdated') {
+      label = `${dim(file.target)} ${cyan('[outdated]')}`;
     } else if (statusEnabled && file.contentStatus === 'merged') {
       label = `${dim(file.target)} ${dim('[merged]')}`;
     } else {
@@ -278,13 +291,17 @@ export function printResourcesView(
     }),
     ...(statusEnabled && {
       getFileStatusTag: (file: EnhancedFileMapping) => {
+        if (file.status === 'diverged') return red('[diverged]');
         if (file.status === 'modified') return yellow('[modified]');
+        if (file.status === 'outdated') return cyan('[outdated]');
         if (file.status === 'untracked') return dim('[untracked]');
         if (file.contentStatus === 'merged') return dim('[merged]');
         return undefined;
       },
       getResourceStatusTag: (resource: EnhancedResourceInfo) => {
+        if (resource.status === 'diverged') return red('[diverged]');
         if (resource.status === 'modified') return yellow('[modified]');
+        if (resource.status === 'outdated') return cyan('[outdated]');
         if (resource.status === 'untracked') return dim('[untracked]');
         if (resource.status === 'missing') return red('[MISSING]');
         return undefined;
