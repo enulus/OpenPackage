@@ -424,6 +424,129 @@ describe('resolveConflictsForTargets — namespace strategy', () => {
     );
   });
 
+  it('resolveOutputContent claims identical transformed content', async () => {
+    const testDir = join(tmpDir, 'resolve-output-identical');
+    await fs.mkdir(testDir, { recursive: true });
+    // Existing file on disk matches what the callback will return
+    await write('resolve-output-identical/rules/skill.md', 'transformed content');
+
+    const ownershipCtx = await buildOwnershipContext(testDir, 'pkg-ro1', null);
+    const targets: TargetEntry[] = [
+      {
+        relPath: 'rules/skill.md',
+        absPath: join(testDir, 'rules/skill.md'),
+        flowToPattern: 'rules/**',
+        isMergeFlow: false,
+        // No `content` — forces the resolver to call resolveOutputContent
+        resolveOutputContent: async () => 'transformed content',
+      }
+    ];
+
+    const options: InstallOptions = { conflictStrategy: 'namespace' };
+    const result = await resolveConflictsForTargets(
+      testDir, targets, ownershipCtx, options, 'pkg-ro1'
+    );
+
+    // Content matches → claimed, no namespacing
+    assert.strictEqual(result.packageWasNamespaced, false);
+    assert.strictEqual(result.claimedFiles.length, 1);
+    assert.strictEqual(result.claimedFiles[0], 'rules/skill.md');
+    assert.strictEqual(result.allowedTargets.length, 1);
+    assert.strictEqual(result.allowedTargets[0].relPath, 'rules/skill.md');
+  });
+
+  it('resolveOutputContent detects different content', async () => {
+    const testDir = join(tmpDir, 'resolve-output-different');
+    await fs.mkdir(testDir, { recursive: true });
+    await write('resolve-output-different/rules/skill.md', 'existing on disk');
+
+    const ownershipCtx = await buildOwnershipContext(testDir, 'pkg-ro2', null);
+    const targets: TargetEntry[] = [
+      {
+        relPath: 'rules/skill.md',
+        absPath: join(testDir, 'rules/skill.md'),
+        flowToPattern: 'rules/**',
+        isMergeFlow: false,
+        resolveOutputContent: async () => 'different transformed output',
+      }
+    ];
+
+    const options: InstallOptions = { conflictStrategy: 'namespace' };
+    const result = await resolveConflictsForTargets(
+      testDir, targets, ownershipCtx, options, 'pkg-ro2'
+    );
+
+    // Content differs → conflict, triggers namespacing
+    assert.strictEqual(result.packageWasNamespaced, true);
+    assert.strictEqual(result.allowedTargets.length, 1);
+    assert.ok(
+      result.allowedTargets[0].relPath.includes('pkg-ro2'),
+      `Expected namespaced path but got: ${result.allowedTargets[0].relPath}`
+    );
+  });
+
+  it('resolveOutputContent failure falls back to sourceAbsPath', async () => {
+    const testDir = join(tmpDir, 'resolve-output-fallback');
+    await fs.mkdir(testDir, { recursive: true });
+    const sourceContent = 'source file content';
+    // Existing file on disk matches raw source
+    await write('resolve-output-fallback/rules/skill.md', sourceContent);
+    // Write a source file to read via sourceAbsPath fallback
+    const sourceFile = join(testDir, '.source-skill.md');
+    await fs.writeFile(sourceFile, sourceContent, 'utf8');
+
+    const ownershipCtx = await buildOwnershipContext(testDir, 'pkg-ro3', null);
+    const targets: TargetEntry[] = [
+      {
+        relPath: 'rules/skill.md',
+        absPath: join(testDir, 'rules/skill.md'),
+        flowToPattern: 'rules/**',
+        isMergeFlow: false,
+        resolveOutputContent: async () => { throw new Error('callback failure'); },
+        sourceAbsPath: sourceFile,
+      }
+    ];
+
+    const options: InstallOptions = { conflictStrategy: 'namespace' };
+    const result = await resolveConflictsForTargets(
+      testDir, targets, ownershipCtx, options, 'pkg-ro3'
+    );
+
+    // Callback failed but sourceAbsPath read succeeds → content matches → claimed
+    assert.strictEqual(result.packageWasNamespaced, false);
+    assert.strictEqual(result.claimedFiles.length, 1);
+    assert.strictEqual(result.claimedFiles[0], 'rules/skill.md');
+  });
+
+  it('content field takes priority over resolveOutputContent', async () => {
+    const testDir = join(tmpDir, 'content-priority');
+    await fs.mkdir(testDir, { recursive: true });
+    await write('content-priority/rules/skill.md', 'matching content');
+
+    let callbackInvoked = false;
+    const ownershipCtx = await buildOwnershipContext(testDir, 'pkg-ro4', null);
+    const targets: TargetEntry[] = [
+      {
+        relPath: 'rules/skill.md',
+        absPath: join(testDir, 'rules/skill.md'),
+        flowToPattern: 'rules/**',
+        isMergeFlow: false,
+        content: 'matching content',
+        resolveOutputContent: async () => { callbackInvoked = true; return 'should not be used'; },
+      }
+    ];
+
+    const options: InstallOptions = { conflictStrategy: 'namespace' };
+    const result = await resolveConflictsForTargets(
+      testDir, targets, ownershipCtx, options, 'pkg-ro4'
+    );
+
+    // content field matches → claimed, callback never invoked
+    assert.strictEqual(result.packageWasNamespaced, false);
+    assert.strictEqual(result.claimedFiles.length, 1);
+    assert.strictEqual(callbackInvoked, false, 'resolveOutputContent should not be called when content is set');
+  });
+
   it('gh@ repo-level package: namespaceDir uses repo name', async () => {
     const testDir = join(tmpDir, 'gh-repo-slug-test');
     await fs.mkdir(testDir, { recursive: true });

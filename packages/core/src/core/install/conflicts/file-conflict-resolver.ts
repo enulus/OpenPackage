@@ -96,6 +96,16 @@ export interface TargetEntry {
    */
   sourceAbsPath?: string;
   /**
+   * Lazily compute the *transformed* output content for this target.
+   * Used by non-pass-through flows (e.g. markdown with platform overrides)
+   * where the on-disk source differs from what the executor would write.
+   * The conflict resolver uses a three-tier cascade:
+   *   1. `content` (eager, set by caller)
+   *   2. `resolveOutputContent()` (lazy, transformed output)
+   *   3. `sourceAbsPath` read (lazy, raw source — pass-through only)
+   */
+  resolveOutputContent?: () => Promise<string>;
+  /**
    * The resolved `flow.to` pattern that produced this target path.
    * Used to derive the namespace insertion point (the base directory of the
    * pattern, i.e. everything before the first glob character).
@@ -778,9 +788,18 @@ export async function resolveConflictsForTargets(
       continue;
     }
 
-    // Check content difference — use provided content, or lazily read from
-    // sourceAbsPath for pass-through flows (avoids eager reads during planning)
+    // Check content difference — three-tier cascade:
+    //   1. `content` (eager, set by caller)
+    //   2. `resolveOutputContent()` (lazy, transformed output)
+    //   3. `sourceAbsPath` read (lazy, raw source — pass-through fallback)
     let contentToCompare = target.content;
+    if (contentToCompare === undefined && target.resolveOutputContent) {
+      try {
+        contentToCompare = await target.resolveOutputContent();
+      } catch {
+        // Callback failed — fall through to sourceAbsPath
+      }
+    }
     if (contentToCompare === undefined && target.sourceAbsPath) {
       try {
         contentToCompare = await readTextFile(target.sourceAbsPath, 'utf8');
