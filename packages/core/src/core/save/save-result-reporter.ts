@@ -107,8 +107,8 @@ export function buildSaveReport(
   // Flatten write results
   const flatResults = allWriteResults.flat();
 
-  // Count successful writes
-  const successfulWrites = flatResults.filter(r => r.success);
+  // Count successful writes (exclude 'skip' — source already had correct content)
+  const successfulWrites = flatResults.filter(r => r.success && r.operation.operation !== 'skip');
   const filesSaved = successfulWrites.length;
 
   // Count created vs updated
@@ -284,10 +284,6 @@ export function formatSaveMessage(report: SaveReport): string {
     lines.push(`  ${report.filesOutdated} file(s) outdated (source updated since install)`);
   }
 
-  if (report.filesDiverged > 0) {
-    lines.push(`  ${report.filesDiverged} file(s) diverged (both sides changed)`);
-  }
-
   if (report.platformSpecificFiles > 0) {
     lines.push(`  ${report.platformSpecificFiles} platform-specific file(s)`);
   }
@@ -342,14 +338,6 @@ export function formatSaveMessage(report: SaveReport): string {
       lines.push(`   ├── ${filePath}`);
     }
     lines.push(`  Run 'opkg install ${report.packageName}' to sync latest source changes`);
-  }
-
-  if (report.divergedFilePaths.length > 0) {
-    lines.push('');
-    lines.push('  Diverged files (both workspace and source changed):');
-    for (const filePath of report.divergedFilePaths) {
-      lines.push(`   ├── ${filePath}`);
-    }
   }
 
   if (report.filesSaved > 0 && !report.dryRun) {

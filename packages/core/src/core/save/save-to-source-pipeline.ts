@@ -39,7 +39,6 @@ import {
   createErrorResult
 } from './save-result-reporter.js';
 import { checkContentStatus } from '../list/content-status-checker.js';
-import { computeSourceHash } from '../../utils/install-hash.js';
 import { calculateFileHash } from '../../utils/hash-utils.js';
 import { readTextFile, exists } from '../../utils/fs.js';
 import { getTargetPath, isComplexMapping } from '../../utils/workspace-index-helpers.js';
@@ -324,8 +323,10 @@ export async function executeSavePipeline(
   }
 
   // Phase 7: Update workspace index hashes so three-way pivot resets after save
+  // Only update targets that were in the active mapping (not filtered-out clean/outdated ones).
+  // Updating all targets would break the pivot for non-modified workspace files.
   if (!options.dryRun) {
-    await updateWorkspaceHashes(cwd, packageName, packageRoot, filesMapping, allWriteResults);
+    await updateWorkspaceHashes(cwd, packageName, packageRoot, activeFilesMapping, allWriteResults);
   }
 
   // Phase 8: Build and format report
@@ -432,29 +433,47 @@ export async function validateSavePreconditions(
 /**
  * Update workspace index hashes after a successful save.
  *
- * For each successfully written file, recompute the workspace file's hash
- * and store it in the index. This resets the three-way pivot so subsequent
- * `list --status` reports the file as clean.
+ * Only updates targets that were active in the save (i.e., in activeFilesMapping).
+ * Non-active targets (clean files filtered out by status pre-filter) keep their
+ * existing pivot hashes — updating them would make them appear "modified" relative
+ * to the new source even though their workspace content hasn't changed.
+ *
+ * Uses hash(workspace_file) as the pivot rather than computeSourceHash(source),
+ * because the workspace file is the ground truth after save (it hasn't changed),
+ * and markdown round-trip through the install pipeline can alter frontmatter
+ * formatting, producing a hash that doesn't match the workspace.
  */
 async function updateWorkspaceHashes(
   cwd: string,
   packageName: string,
-  packageRoot: string,
-  filesMapping: Record<string, (string | WorkspaceIndexFileMapping)[]>,
+  _packageRoot: string,
+  activeFilesMapping: Record<string, (string | WorkspaceIndexFileMapping)[]>,
   allWriteResults: WriteResult[][]
 ): Promise<void> {
   try {
-    // Collect registry paths of successfully written files
+    // Collect registry paths of successfully processed files (including skips).
+    // A 'skip' means the source already has the correct content (from a prior save),
+    // but the workspace pivot hash may still be stale and needs updating.
     const writtenPaths = new Set<string>();
     for (const results of allWriteResults) {
       for (const wr of results) {
-        if (wr.success && wr.operation.operation !== 'skip') {
+        if (wr.success) {
           writtenPaths.add(wr.operation.registryPath);
         }
       }
     }
 
     if (writtenPaths.size === 0) return;
+
+    // Build set of target paths that were active in this save.
+    // Only these targets should have their pivot hashes updated.
+    const activeTargets = new Set<string>();
+    for (const targets of Object.values(activeFilesMapping)) {
+      if (!Array.isArray(targets)) continue;
+      for (const mapping of targets) {
+        activeTargets.add(getTargetPath(mapping));
+      }
+    }
 
     const record = await readWorkspaceIndex(cwd);
     const pkg = record.index.packages?.[packageName];
@@ -470,22 +489,20 @@ async function updateWorkspaceHashes(
       for (let i = 0; i < targets.length; i++) {
         const mapping = targets[i];
         const targetPath = getTargetPath(mapping);
-        const absTarget = path.join(cwd, targetPath);
 
+        // Only update targets that were active in the save
+        if (!activeTargets.has(targetPath)) continue;
+
+        const absTarget = path.join(cwd, targetPath);
         if (!(await exists(absTarget))) continue;
 
         try {
-          // Use computeSourceHash to match what list --status computes,
-          // ensuring the pivot hash is consistent with status checks.
-          const absSource = path.join(packageRoot, sourceKey);
-          let hash: string;
-          if (await exists(absSource)) {
-            hash = await computeSourceHash(absSource, absTarget, cwd);
-          } else {
-            // Source may not exist yet (new file) — use workspace content
-            const content = await readTextFile(absTarget);
-            hash = await calculateFileHash(content);
-          }
+          // Use hash(workspace_file) as pivot — the workspace is the ground
+          // truth after save (it hasn't changed). computeSourceHash(source)
+          // can produce a different hash for markdown files due to frontmatter
+          // re-serialization in the install pipeline round-trip.
+          const content = await readTextFile(absTarget);
+          const hash = await calculateFileHash(content);
 
           if (isComplexMapping(mapping)) {
             mapping.hash = hash;
