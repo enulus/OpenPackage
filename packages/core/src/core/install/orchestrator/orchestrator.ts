@@ -23,7 +23,8 @@ import {
   installMarketplacePlugins,
   validatePluginNames,
   resolvePluginContentRoots,
-  type MarketplaceManifest
+  type MarketplaceManifest,
+  type ResolvedPluginInfo
 } from '../marketplace-handler.js';
 import { resolvePlatforms } from '../platform-resolution.js';
 import { classifyInput } from '../preprocessing/input-classifier.js';
@@ -348,12 +349,18 @@ export class InstallOrchestrator {
    
     const spinner = out.spinner();
     spinner.start('Loading marketplace');
-   
-   const marketplace = await parseMarketplace(
-     context.source.pluginMetadata.manifestPath, 
-     { repoPath: context.source.contentRoot }
-   );
-   
+
+    let marketplace: MarketplaceManifest;
+    try {
+      marketplace = await parseMarketplace(
+        context.source.pluginMetadata.manifestPath,
+        { repoPath: context.source.contentRoot }
+      );
+    } catch (error) {
+      spinner.stop();
+      throw error;
+    }
+
     spinner.stop(`Marketplace: ${marketplace.name}`);
    
    // Marketplace already has interactive plugin selection (promptPluginSelection, promptInstallMode).
@@ -531,40 +538,45 @@ export class InstallOrchestrator {
     // Resolve content roots for all plugins
     const s = out.spinner();
     s.start(`Discovering resources across ${pluginNames.length} plugin${pluginNames.length === 1 ? '' : 's'}`);
-    
-    const resolvedPlugins = await resolvePluginContentRoots(
-      context.source.contentRoot!,
-      marketplace,
-      pluginNames,
-      context.source.gitUrl!,
-      context.source.gitRef,
-      commitSha,
-      options,
-      execContext
-    );
-    
-    if (resolvedPlugins.length === 0) {
-      s.stop('No plugins resolved');
-      out.warn('Could not resolve any plugins for resource discovery');
-      return { success: true, data: { installed: 0, skipped: 0 } };
+
+    let resolvedPlugins: ResolvedPluginInfo[];
+    const allResources: DiscoveredResource[] = [];
+    try {
+      resolvedPlugins = await resolvePluginContentRoots(
+        context.source.contentRoot!,
+        marketplace,
+        pluginNames,
+        context.source.gitUrl!,
+        context.source.gitRef,
+        commitSha,
+        options,
+        execContext
+      );
+
+      if (resolvedPlugins.length === 0) {
+        s.stop('No plugins resolved');
+        out.warn('Could not resolve any plugins for resource discovery');
+        return { success: true, data: { installed: 0, skipped: 0 } };
+      }
+
+      // Discover resources in each plugin and merge
+      for (const plugin of resolvedPlugins) {
+        const discovery = await discoverResources(plugin.basePath, plugin.repoRoot);
+
+        // Prefix display names with plugin name when multiple plugins
+        if (resolvedPlugins.length > 1) {
+          for (const resource of discovery.all) {
+            resource.displayName = `${plugin.pluginEntry.name}/${resource.displayName}`;
+          }
+        }
+
+        allResources.push(...discovery.all);
+      }
+    } catch (error) {
+      s.stop();
+      throw error;
     }
-   
-   // Discover resources in each plugin and merge
-   const allResources: DiscoveredResource[] = [];
-   
-   for (const plugin of resolvedPlugins) {
-     const discovery = await discoverResources(plugin.basePath, plugin.repoRoot);
-     
-     // Prefix display names with plugin name when multiple plugins
-     if (resolvedPlugins.length > 1) {
-       for (const resource of discovery.all) {
-         resource.displayName = `${plugin.pluginEntry.name}/${resource.displayName}`;
-       }
-     }
-     
-     allResources.push(...discovery.all);
-   }
-   
+
    // Build merged discovery result
    const byType = new Map<ResourceType, DiscoveredResource[]>();
    for (const resource of allResources) {
@@ -572,7 +584,7 @@ export class InstallOrchestrator {
      existing.push(resource);
      byType.set(resource.resourceType, existing);
    }
-   
+
    const mergedDiscovery: ResourceDiscoveryResult = {
      all: allResources,
      byType,
@@ -580,13 +592,13 @@ export class InstallOrchestrator {
      basePath: resolvedPlugins[0].basePath,
      repoRoot: resolvedPlugins[0].repoRoot
    };
-   
+
    if (mergedDiscovery.total === 0) {
      s.stop('No resources found');
       out.warn('No installable resources found across the specified plugins');
      return { success: true, data: { installed: 0, skipped: 0 } };
    }
-   
+
    s.stop(`Found ${mergedDiscovery.total} resource${mergedDiscovery.total === 1 ? '' : 's'}`);
    
    // Interactive selection

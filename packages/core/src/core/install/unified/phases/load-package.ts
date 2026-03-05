@@ -7,38 +7,48 @@ import type { InstallationContext } from '../context.js';
 import { getLoaderForSource } from '../../sources/loader-factory.js';
 import { addError, getSourceDisplayName } from '../context-helpers.js';
 import { logger } from '../../../../utils/logger.js';
-import type { OutputPort } from '../../../ports/output.js';
+import type { OutputPort, UnifiedSpinner } from '../../../ports/output.js';
 import { resolveOutput } from '../../../ports/resolve.js';
 import { applyBaseDetection, computePathScoping } from '../../preprocessing/base-resolver.js';
 
 /**
  * Load package from source
  */
-export async function loadPackagePhase(ctx: InstallationContext, output?: OutputPort): Promise<void> {
+export async function loadPackagePhase(ctx: InstallationContext, output?: OutputPort, externalSpinner?: UnifiedSpinner): Promise<void> {
   // Skip if context already has loaded data (preprocessed by strategy)
   // NOTE: We require resolvedPackages to be populated too; otherwise later phases break.
   if (ctx.source.contentRoot && ctx.source.packageName && ctx.resolvedPackages.length > 0) {
     return;
   }
-  
+
   const out = output ?? resolveOutput(ctx.execution);
-  const spinner = out.spinner();
-  
+  // When an external spinner is provided (from the pipeline), reuse it —
+  // only update messages, don't start/stop (the caller owns the lifecycle).
+  const spinner = externalSpinner ?? out.spinner();
+  const isOwned = !externalSpinner;
+
   try {
     // Get appropriate loader
     const loader = getLoaderForSource(ctx.source);
-    
+
     // Display loading message with spinner
     const displayName = getSourceDisplayName(ctx);
     const spinnerMsg = `Loading ${displayName}`;
-    spinner.start(spinnerMsg);
-    
+    if (isOwned) {
+      spinner.start(spinnerMsg);
+    } else {
+      spinner.message(spinnerMsg);
+    }
+
     // Load package (pass spinner so inner operations can update its message)
     const loaded = await loader.load(ctx.source, ctx.options, ctx.execution, spinner);
-    
-    // Stop spinner silently; the report phase will display the "Installed <name>@<version>" header
-    // so that both root packages and pre-loaded dependencies get consistent output.
-    spinner.stop();
+
+    // Stop spinner silently when we own it; the report phase will display the
+    // "Installed <name>@<version>" header so output is consistent.
+    // When using an external spinner, the caller manages the lifecycle.
+    if (isOwned) {
+      spinner.stop();
+    }
 
     // Update context
     ctx.source.packageName = loaded.packageName;
@@ -134,7 +144,9 @@ export async function loadPackagePhase(ctx: InstallationContext, output?: Output
     logger.info(`Loaded ${loaded.packageName}@${effectiveVersion} from ${loaded.source}`);
     
   } catch (error) {
-    spinner.stop();
+    if (isOwned) {
+      spinner.stop();
+    }
     const errorMsg = `Failed to load package: ${error}`;
     addError(ctx, errorMsg);
     throw new Error(errorMsg);

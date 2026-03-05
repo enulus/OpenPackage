@@ -114,7 +114,8 @@ export async function resolveWave(options: WaveResolverOptions): Promise<WaveRes
 
   // 5. Wave loop
   spinner?.start('Resolving dependencies');
-  
+
+  try {
   while (queue.length > 0) {
     waveNumber++;
 
@@ -348,10 +349,15 @@ export async function resolveWave(options: WaveResolverOptions): Promise<WaveRes
   };
 
   spinner?.stop(`Resolved ${resolved.size} dependencies in ${waveNumber} wave${waveNumber !== 1 ? 's' : ''}`);
-  
+
   logger.info(`Wave resolution complete: ${resolved.size} packages in ${waveNumber} waves`);
 
   return { graph, versionSolution };
+
+  } catch (error) {
+    spinner?.stop();
+    throw error;
+  }
 }
 
 /**

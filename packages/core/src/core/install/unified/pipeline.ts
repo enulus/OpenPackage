@@ -1,5 +1,6 @@
 import type { CommandResult } from '../../../types/index.js';
 import type { InstallationContext } from './context.js';
+import type { UnifiedSpinner } from '../../ports/output.js';
 import { loadPackagePhase } from './phases/load-package.js';
 import { convertPhase } from './phases/convert.js';
 import { processConflictsPhase } from './phases/conflicts.js';
@@ -89,17 +90,27 @@ export async function runUnifiedInstallPipeline(
     packageName: ctx.source.packageName
   });
   
+  const out = resolveOutput(ctx.execution);
+  const displayName = ctx.source.packageName || 'package';
   let tempConversionRoot: string | null = null;
+
+  // Spinner 1: covers phases 0–2 (workspace manifest, load, subsumption, convert).
+  // Stopped before the conflict phase which may prompt the user.
+  let spinner1: UnifiedSpinner | undefined;
   try {
+    spinner1 = out.spinner();
+    spinner1.start(`Installing ${displayName}`);
+
     // Phase 0: Ensure workspace manifest exists (auto-create if needed)
     // Only for install mode, not apply mode (apply requires existing installation)
     if (ctx.mode === 'install') {
       await createWorkspacePackageYml(ctx.targetDir);
     }
-    
+
     // Phase 1: Load package from source (always)
-    await loadPackagePhase(ctx);
-    
+    // Pass spinner1 so loadPackagePhase updates our message instead of creating its own.
+    await loadPackagePhase(ctx, undefined, spinner1);
+
     // Assert context is complete after load phase
     assertPipelineContextComplete(ctx);
 
@@ -107,53 +118,76 @@ export async function runUnifiedInstallPipeline(
     // Must run after load (packageName is now set) and before convert (avoid wasted work).
     const subsumptionOutcome = await subsumptionPhase(ctx);
     if (subsumptionOutcome === 'skip') {
+      spinner1.stop();
       return createAlreadyCoveredResult(ctx);
     }
 
     // Phase 2: Convert package format if needed.
+    // After load phase, ctx.source.packageName is guaranteed set by assertPipelineContextComplete.
+    spinner1.message(`Preparing ${ctx.source.packageName}`);
     await convertPhase(ctx);
 
     tempConversionRoot = ctx._tempConversionRoot ?? null;
-    
-    // Phase 4: Process conflicts (always)
+
+    spinner1.stop();
+  } catch (error) {
+    spinner1?.stop();
+    // convertPhase may have created a temp dir before failing
+    await cleanupTempDirectory(ctx._tempConversionRoot ?? null);
+    throw error;
+  }
+
+  // Phases 4–7: wrapped in try/finally for temp directory cleanup.
+  // cleanupTempDirectory(null) is a no-op, so this is safe even on early returns
+  // before tempConversionRoot is set.
+  let spinner2: UnifiedSpinner | undefined;
+  try {
+    // Phase 4: Process conflicts (may prompt — no spinner active)
     const shouldProceed = await processConflictsPhase(ctx);
     if (!shouldProceed) {
       return createCancellationResult(ctx);
     }
-    
+
+    // Spinner 2: covers phases 5–6 (file installation, manifest update).
+    spinner2 = out.spinner();
+    spinner2.start(`Installing ${ctx.source.packageName}`);
+
     // Phase 5: Execute installation (always)
     const installResult = await executeInstallationPhase(ctx);
-    
+
     // Check for complete failure
     if (installResult.hadErrors && !installResult.installedAnyFiles) {
+      spinner2.stop();
       return {
         success: false,
         error: `Failed to install ${ctx.source.packageName}: ${ctx.errors.join('; ')}`
       };
     }
-    
+
     // Phase 6: Update manifest (skip for apply)
     if (shouldUpdateManifest(ctx)) {
       await updateManifestPhase(ctx);
     }
-    
+
+    spinner2.stop();
+
     // Phase 7: Report results (always)
     return await reportResultsPhase(ctx, installResult);
-    
+
   } catch (error) {
+    spinner2?.stop();
+
     logger.debug(`Pipeline failed for ${ctx.source.packageName}:`, error);
-    
-    const out = resolveOutput(ctx.execution);
+
     const errorMessage = error instanceof Error ? error.message : String(error);
     out.error(`Failed to install ${ctx.source.packageName}: ${errorMessage}`);
-    
+
     return {
       success: false,
       error: errorMessage,
       warnings: ctx.warnings.length > 0 ? ctx.warnings : undefined
     };
   } finally {
-    // Cleanup any temp conversion directory created during convert phase
     await cleanupTempDirectory(tempConversionRoot);
   }
 }
