@@ -12,7 +12,12 @@ import type { SaveToSourceOptions } from '@opkg/core/core/save/save-to-source-pi
 import { normalizeSaveOptions } from '@opkg/core/core/save/save-options-normalizer.js';
 import { toSaveJsonOutput } from '@opkg/core/core/save/save-result-reporter.js';
 import { runDirectSaveFlow } from '@opkg/core/core/save/direct-save-flow.js';
-import { runSaveAllFlow, discoverModifiedPackages } from '@opkg/core/core/save/save-all-flow.js';
+import {
+  runSaveAllFlow,
+  discoverModifiedPackages,
+  type SaveAllResult,
+} from '@opkg/core/core/save/save-all-flow.js';
+import { getTreeConnector } from '@opkg/core/utils/formatters.js';
 import { createCliExecutionContext } from '../cli/context.js';
 import { resolveOutput } from '@opkg/core/core/ports/resolve.js';
 import type { OutputPort } from '@opkg/core/core/ports/output.js';
@@ -62,7 +67,7 @@ export async function setupSaveCommand(args: any[]): Promise<void> {
       if (totals.packagesWithChanges === 0 && totals.packagesFailed > 0) {
         throw new Error(allResult.summary);
       }
-      out.success(allResult.summary);
+      printSaveAllResults(allResult, !!pipelineOptions.dryRun, out);
 
       if (totals.packagesProcessed === 0) {
         await printOtherScopeHint(options.global, programOpts.cwd, out);
@@ -120,6 +125,49 @@ export async function setupSaveCommand(args: any[]): Promise<void> {
     }
     if (result.result.data?.message) {
       out.success(result.result.data.message);
+    }
+  }
+}
+
+interface SaveFileEntry {
+  registryPath: string;
+  operation: string;
+}
+
+function printSaveAllResults(
+  allResult: SaveAllResult,
+  dryRun: boolean,
+  out: OutputPort,
+): void {
+  const prefix = dryRun ? '(dry-run) ' : '';
+
+  for (const pkg of allResult.json.packages) {
+    if (pkg.status === 'saved') {
+      const resultData = pkg.result as Record<string, unknown> | undefined;
+      const files = ((resultData?.files) as SaveFileEntry[] | undefined) ?? [];
+      const actionFiles = files.filter(f => f.operation !== 'skip');
+      out.success(`${prefix}Saved ${pkg.packageName} (${actionFiles.length} files)`);
+      for (let i = 0; i < actionFiles.length; i++) {
+        const connector = getTreeConnector(i === actionFiles.length - 1);
+        const label = actionFiles[i].operation === 'create' ? '(created)' : '(updated)';
+        out.info(`  ${connector}${actionFiles[i].registryPath} ${label}`);
+      }
+    } else if (pkg.status === 'error') {
+      out.error(`✗ ${pkg.packageName}: ${pkg.error}`);
+    } else {
+      out.info(`- ${pkg.packageName}: no changes`);
+    }
+  }
+
+  const { totals } = allResult.json;
+  if (totals.packagesWithChanges > 0 || totals.packagesFailed > 0) {
+    if (totals.packagesWithChanges > 0) {
+      out.success(
+        `${prefix}Saved ${totals.packagesWithChanges} package(s), ${totals.totalFilesSaved} file(s) total`,
+      );
+    }
+    if (totals.packagesFailed > 0) {
+      out.warn(`${totals.packagesFailed} package(s) failed`);
     }
   }
 }
