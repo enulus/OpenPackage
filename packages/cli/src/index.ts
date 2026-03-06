@@ -105,9 +105,15 @@ program
     }
   });
 
+// Default action when no subcommand is given (bare `opkg` or `opkg --cwd /path`)
+program.action(withErrorHandling(async () => {
+  const { runDefaultView } = await import('./commands/default.js');
+  await runDefaultView(program.opts().cwd);
+}));
+
 // =============================================================================
 // LAZY-LOADED COMMANDS
-// 
+//
 // Each command defines its arguments/options inline (cheap string metadata),
 // but defers loading the handler module until the command is actually invoked.
 // This means `opkg install foo` only loads install-related code, not all 15
@@ -432,13 +438,7 @@ export async function run(): Promise<void> {
     // Initialize OpenPackage directories
     await initializeOpenPackage();
     
-    // If no arguments provided (just 'opkg'), show help and exit successfully
-    if (process.argv.length <= 2) {
-      program.outputHelp();
-      process.exit(0);
-    }
-    
-    // Parse command line arguments
+    // Parse command line arguments (default action handles bare `opkg`)
     await program.parseAsync();
     
   } catch (error) {
