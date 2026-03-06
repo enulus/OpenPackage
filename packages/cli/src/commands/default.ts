@@ -128,8 +128,9 @@ function printScopeSummary(summary: ScopeSummary): void {
 // ---------------------------------------------------------------------------
 
 export async function runDefaultView(cwd?: string): Promise<void> {
-  // Print ASCII art
+  // Print ASCII art + version
   console.log(bold(ASCII_ART));
+  console.log(dim(`opkg@${getVersion()}`));
   console.log();
 
   // Collect resource data from both scopes (reuses list pipeline)
@@ -153,8 +154,7 @@ export async function runDefaultView(cwd?: string): Promise<void> {
 
   if (results.length === 0) {
     console.log(dim('No resources installed. Run `opkg install <package>` to get started.'));
-    console.log();
-    console.log(dim(`opkg@${getVersion()}`));
+    printHints();
     return;
   }
 
@@ -185,6 +185,12 @@ export async function runDefaultView(cwd?: string): Promise<void> {
     if (i < summaries.length - 1) console.log();
   }
 
+  printHints();
+}
+
+function printHints(): void {
   console.log();
-  console.log(dim(`opkg@${getVersion()}`));
+  console.log(dim('Manage   install, uninstall, list'));
+  console.log(dim('Author   new, add, remove, sync'));
+  console.log(dim('Help     opkg <command> -h'));
 }
