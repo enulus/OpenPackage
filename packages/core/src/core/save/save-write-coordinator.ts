@@ -18,7 +18,7 @@
 import { dirname, join } from 'path';
 import { ensureDir, exists, readTextFile, writeTextFile } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
-import { createPlatformSpecificRegistryPath } from '../platform/platform-specific-paths.js';
+import { createPlatformSpecificRegistryPath, isPlatformSpecific } from '../platform/platform-specific-paths.js';
 import { extractPackageContribution } from './save-merge-extractor.js';
 import { allocateTempSubdir } from './save-conversion-helper.js';
 import { getPlatformDefinition, getGlobalImportFlows, type Platform } from '../platforms.js';
@@ -584,7 +584,7 @@ async function prepareContentForWrite(
     
     // Apply import flow transformations if candidate has platform info
     let finalContent = extractResult.extractedContent;
-    if (candidate.platform && candidate.platform !== 'ai' && workspaceRoot) {
+    if (isPlatformSpecific(candidate.platform) && workspaceRoot) {
       logger.info(
         `Attempting import transformation for merged file`,
         {
@@ -594,10 +594,10 @@ async function prepareContentForWrite(
           hasWorkspaceRoot: !!workspaceRoot
         }
       );
-      
+
       const transformResult = await applyImportTransformation(
         extractResult.extractedContent,
-        candidate.platform,
+        candidate.platform!,
         registryPath,
         candidate.displayPath,
         workspaceRoot

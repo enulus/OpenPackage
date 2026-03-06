@@ -2,6 +2,10 @@ import { FILE_PATTERNS } from '../../constants/index.js';
 import type { Platform } from '../../types/platform.js';
 import { getPlatformDefinition } from '../platforms.js';
 
+export function isPlatformSpecific(platform?: Platform | 'ai'): boolean {
+  return platform !== undefined && platform !== 'ai';
+}
+
 function joinSegments(segments: string[]): string {
   return segments.filter(Boolean).join('/');
 }

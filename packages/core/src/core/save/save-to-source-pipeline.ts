@@ -299,7 +299,7 @@ export async function executeSavePipeline(
     logger.debug(`Processing ${autoResolvable.length} auto-resolvable group(s) in parallel`);
     const autoResults = await Promise.all(
       autoResolvable.map(async ({ group, analysis }) => {
-        const resolution = await executeResolution(group, analysis, packageRoot, cwd, resolveOutput(ctx), resolvePrompt(ctx));
+        const resolution = await executeResolution(group, analysis, packageRoot, cwd, resolvePrompt(ctx));
         if (!resolution) return null;
         return writeResolution(packageRoot, group.registryPath, resolution, group.local, cwd, options.dryRun);
       })
@@ -310,8 +310,13 @@ export async function executeSavePipeline(
   }
 
   // Process interactive groups serially (require user input)
+  if (interactive.length > 0) {
+    const out = resolveOutput(ctx);
+    out.warn(`${interactive.length} conflict(s) to resolve\n`);
+  }
+
   for (const { group, analysis } of interactive) {
-    const resolution = await executeResolution(group, analysis, packageRoot, cwd, resolveOutput(ctx), resolvePrompt(ctx));
+    const resolution = await executeResolution(group, analysis, packageRoot, cwd, resolvePrompt(ctx));
     if (!resolution) {
       logger.debug(`No resolution returned for ${group.registryPath}`);
       continue;

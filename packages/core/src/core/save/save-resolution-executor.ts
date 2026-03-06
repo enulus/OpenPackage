@@ -3,7 +3,6 @@ import type { ConflictAnalysis } from './save-conflict-analyzer.js';
 import { getNewestCandidate, sortCandidatesByMtime } from './save-conflict-analyzer.js';
 import { resolveInteractively } from './save-interactive-resolver.js';
 import type { SaveCandidate, SaveCandidateGroup, ResolutionResult } from './save-types.js';
-import type { OutputPort } from '../ports/output.js';
 import type { PromptPort } from '../ports/prompt.js';
 
 /**
@@ -46,7 +45,6 @@ export async function executeResolution(
   analysis: ConflictAnalysis,
   packageRoot: string,
   workspaceRoot: string,
-  output?: OutputPort,
   prompt?: PromptPort
 ): Promise<ResolutionResult | null> {
   const strategy = analysis.recommendedStrategy;
@@ -74,11 +72,9 @@ export async function executeResolution(
       return resolveInteractive(
         group.registryPath,
         sortedCandidates,
-        analysis.isRootFile,
         group,
         packageRoot,
         workspaceRoot,
-        output,
         prompt
       );
     
@@ -213,21 +209,18 @@ function resolveForce(
 async function resolveInteractive(
   registryPath: string,
   candidates: SaveCandidate[],
-  isRootFile: boolean,
   group: SaveCandidateGroup,
   packageRoot: string,
   workspaceRoot: string,
-  output?: OutputPort,
   prompt?: PromptPort
 ): Promise<ResolutionResult> {
   const result = await resolveInteractively({
     registryPath,
     workspaceCandidates: candidates,
-    isRootFile,
     group,
     packageRoot,
     workspaceRoot
-  }, output, prompt);
+  }, prompt);
   
   return {
     selection: result.selectedCandidate,

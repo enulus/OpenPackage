@@ -1,4 +1,5 @@
 import { FILE_PATTERNS } from '../../constants/index.js';
+import { isPlatformSpecific } from '../platform/platform-specific-paths.js';
 import { calculateConvertedHash, convertSourceToWorkspace, ensureComparableHash } from './save-conversion-helper.js';
 import { extractPackageContribution, extractContentByKeys } from './save-merge-extractor.js';
 import { logger } from '../../utils/logger.js';
@@ -145,7 +146,7 @@ export async function analyzeGroup(
   // Check if any candidates are platform-specific
   // Platform-specific candidates may need separate handling
   const hasPlatformCandidates = workspaceCandidates.some(
-    c => c.platform && c.platform !== 'ai'
+    c => isPlatformSpecific(c.platform)
   );
   
   // Early exit: No workspace candidates means nothing to save
@@ -170,17 +171,33 @@ export async function analyzeGroup(
   
   // Check if workspace content is identical to source (after conversion)
   // Only applicable when there's exactly one unique workspace candidate
-  const localMatchesWorkspace = hasLocal && uniqueWorkspace.length === 1 
-    ? await checkConvertedParity(uniqueWorkspace[0], group.local!, workspaceRoot)
-    : false;
+  let localMatchesWorkspace = false;
+  if (hasLocal && uniqueWorkspace.length === 1) {
+    try {
+      localMatchesWorkspace = await checkConvertedParity(uniqueWorkspace[0], group.local!, workspaceRoot);
+    } catch (error) {
+      logger.debug(`Parity check failed for ${uniqueWorkspace[0].displayPath}: ${error}`);
+    }
+  }
   
   if (hasLocal && uniqueWorkspace.length > 1) {
     const parityResults = await Promise.all(
-      uniqueWorkspace.map(async candidate => ({
-        workspacePath: candidate.displayPath,
-        platform: candidate.platform || 'none',
-        matchesLocal: await checkConvertedParity(candidate, group.local!, workspaceRoot)
-      }))
+      uniqueWorkspace.map(async candidate => {
+        try {
+          return {
+            workspacePath: candidate.displayPath,
+            platform: candidate.platform || 'none',
+            matchesLocal: await checkConvertedParity(candidate, group.local!, workspaceRoot)
+          };
+        } catch (error) {
+          logger.debug(`Parity check failed for ${candidate.displayPath}: ${error}`);
+          return {
+            workspacePath: candidate.displayPath,
+            platform: candidate.platform || 'none',
+            matchesLocal: false
+          };
+        }
+      })
     );
     
     if (parityResults.every(result => result.matchesLocal)) {
@@ -312,7 +329,7 @@ async function checkConvertedParity(
   const workspaceHash = await ensureComparableHash(workspace, workspaceRoot);
 
   if (workspace.mergeStrategy && workspace.mergeKeys && workspace.mergeKeys.length > 0) {
-    if (workspace.platform && workspace.platform !== 'ai') {
+    if (isPlatformSpecific(workspace.platform)) {
       const forward = await convertSourceToWorkspace(
         local.content,
         workspace.platform as any,
