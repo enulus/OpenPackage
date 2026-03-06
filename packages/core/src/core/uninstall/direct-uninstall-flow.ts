@@ -8,13 +8,9 @@
 
 import type { UninstallOptions } from '../../types/index.js';
 import type { ExecutionContext } from '../../types/execution-context.js';
-import { resolveByName, formatCandidateTitle, formatCandidateDescription } from '../resources/resource-resolver.js';
-import type { ResolutionCandidate } from '../resources/resource-resolver.js';
-import { traverseScopesFlat, type ResourceScope } from '../resources/scope-traversal.js';
-import { disambiguate } from '../resources/disambiguation-prompt.js';
-import { parseWhichQuery } from '../which/which-pipeline.js';
+import type { ResourceScope } from '../resources/scope-traversal.js';
+import { resolveResourceSpec } from '../resources/resource-spec.js';
 import { executeUninstallCandidate } from './uninstall-executor.js';
-import { resolveOutput, resolvePrompt } from '../ports/resolve.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -53,25 +49,6 @@ export async function runDirectUninstallFlow(
   traverseOpts: { programOpts?: Record<string, any>; globalOnly?: boolean; projectOnly?: boolean },
   createContext: (opts: { global: boolean; cwd?: string; interactive: boolean }) => Promise<ExecutionContext>
 ): Promise<DirectUninstallResult> {
-  // Parse optional type qualifier (e.g. "skills/skill-dev" → name: "skill-dev", typeFilter: "skill")
-  const query = parseWhichQuery(name);
-
-  const candidates = await traverseScopesFlat<ResolutionCandidate>(
-    traverseOpts,
-    async ({ scope, context }) => {
-      const result = await resolveByName(query.name, context.targetDir, scope);
-      return result.candidates;
-    }
-  );
-
-  // If type-qualified, filter by resource type
-  let filtered = candidates;
-  if (query.typeFilter) {
-    filtered = candidates.filter(
-      c => c.kind === 'resource' && c.resource?.resourceType === query.typeFilter
-    );
-  }
-
   // Create a temporary context for prompt/output port access during disambiguation
   const disambiguationCtx = await createContext({
     global: traverseOpts.globalOnly ?? false,
@@ -79,21 +56,10 @@ export async function runDirectUninstallFlow(
     interactive: true,
   });
 
-  const selected = await disambiguate(
-    name,
-    filtered,
-    (c) => ({
-      title: formatCandidateTitle(c),
-      description: formatCandidateDescription(c),
-      value: c,
-    }),
-    {
-      notFoundMessage: `"${name}" not found as a resource or package.\nRun \`opkg ls\` to see installed resources.`,
-      promptMessage: 'Select which to uninstall:',
-    },
-    resolveOutput(disambiguationCtx),
-    resolvePrompt(disambiguationCtx)
-  );
+  const selected = await resolveResourceSpec(name, traverseOpts, {
+    notFoundMessage: `"${name}" not found as a resource or package.\nRun \`opkg ls\` to see installed resources.`,
+    promptMessage: 'Select which to uninstall:',
+  }, disambiguationCtx);
 
   if (selected.length === 0) {
     return { uninstalledCount: 0, cancelled: true, uninstalledItems: [] };
@@ -101,7 +67,7 @@ export async function runDirectUninstallFlow(
 
   const uninstalledItems: DirectUninstallResult['uninstalledItems'] = [];
 
-  for (const candidate of selected) {
+  for (const { candidate } of selected) {
     const ctx = await createContext({
       global: candidate.resource?.scope === 'global' || candidate.package?.scope === 'global',
       cwd: traverseOpts.programOpts?.cwd,

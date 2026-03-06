@@ -13,6 +13,7 @@ import type { CommandResult } from '../../types/index.js';
 import { classifyAddInput, type AddInputClassification, type AddClassifyOptions } from './add-input-classifier.js';
 import { runAddDependencyFlow, type AddDependencyResult, type AddDependencyOptions } from './add-dependency-flow.js';
 import { runAddToSourcePipeline, runAddToSourcePipelineBatch, type AddToSourceResult, type AddToSourceOptions } from './add-to-source-pipeline.js';
+import { classifyResourceSpec, resolveResourceSpec } from '../resources/resource-spec.js';
 import { exists } from '../../utils/fs.js';
 
 // ---------------------------------------------------------------------------
@@ -61,6 +62,33 @@ export async function processAddResource(
   cwd: string,
   execContext: ExecutionContext
 ): Promise<AddResourceResult> {
+  // Check if input is a resource reference (e.g., `agents/ui-designer`)
+  const spec = classifyResourceSpec(resourceSpec);
+  if (spec.kind === 'resource-ref') {
+    if (options.dev) {
+      throw new Error('--dev can only be used when adding a dependency, not when copying files');
+    }
+    const traverseOpts = { programOpts: { cwd }, projectOnly: true };
+    const resolved = await resolveResourceSpec(resourceSpec, traverseOpts, {
+      notFoundMessage: `"${resourceSpec}" not found as a resource.\nRun \`opkg ls\` to see installed resources.`,
+      promptMessage: 'Select which resource to add:',
+      multi: false,
+    }, execContext);
+
+    if (resolved.length === 0) {
+      throw new Error(`No resource found for "${resourceSpec}".`);
+    }
+
+    const { candidate, targetDir } = resolved[0];
+    const resource = candidate.resource!;
+    const absPath = resource.sourcePath || join(targetDir, resource.targetFiles[0]);
+    const result = await runAddToSourcePipeline(options.to, absPath, { ...options, execContext });
+    if (!result.success) {
+      throw new Error(result.error || 'Add operation failed');
+    }
+    return { kind: 'workspace-resource', result };
+  }
+
   const classification = await classifyAddInput(resourceSpec, cwd, {
     copy: options.copy,
     dev: options.dev,

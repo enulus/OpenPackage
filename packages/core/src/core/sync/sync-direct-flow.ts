@@ -9,15 +9,9 @@
  */
 
 import type { ExecutionContext } from '../../types/execution-context.js';
-import type { WorkspaceIndexFileMapping } from '../../types/workspace-index.js';
 import type { SyncOptions, SyncPackageResult } from './sync-types.js';
-import { resolveByName, type ResolutionCandidate } from '../resources/resource-resolver.js';
-import { traverseScopesFlat } from '../resources/scope-traversal.js';
 import type { TraverseScopesOptions } from '../resources/scope-traversal.js';
-import { disambiguate } from '../resources/disambiguation-prompt.js';
-import { parseWhichQuery } from '../which/which-pipeline.js';
-import { formatScopeTag } from '../../utils/formatters.js';
-import { resolveOutput, resolvePrompt } from '../ports/resolve.js';
+import { resolveResourceSpec } from '../resources/resource-spec.js';
 import { runSyncPipeline } from './sync-pipeline.js';
 
 // ---------------------------------------------------------------------------
@@ -29,42 +23,6 @@ export interface DirectSyncResult {
   result?: SyncPackageResult;
   cancelled?: boolean;
   error?: string;
-}
-
-interface PairedCandidate {
-  candidate: ResolutionCandidate;
-  targetDir: string;
-}
-
-// ---------------------------------------------------------------------------
-// Formatters
-// ---------------------------------------------------------------------------
-
-function formatTitle(candidate: ResolutionCandidate): string {
-  if (candidate.kind === 'package') {
-    const pkg = candidate.package!;
-    const version = pkg.version && pkg.version !== '0.0.0' ? ` (v${pkg.version})` : '';
-    const scopeTag = formatScopeTag(pkg.scope);
-    return `${pkg.packageName}${version} (package, ${pkg.resourceCount} resources)${scopeTag}`;
-  }
-  const r = candidate.resource!;
-  const fromPkg = r.packageName ? `, from ${r.packageName}` : '';
-  const scopeTag = formatScopeTag(r.scope);
-  return `${r.resourceName} (${r.resourceType}${fromPkg})${scopeTag}`;
-}
-
-function formatDescription(candidate: ResolutionCandidate): string {
-  const files = candidate.kind === 'package'
-    ? candidate.package!.targetFiles
-    : candidate.resource!.targetFiles;
-  if (files.length === 0) return 'no files';
-  const displayFiles = files.slice(0, 5);
-  const remaining = files.length - displayFiles.length;
-  let desc = displayFiles.join('\n');
-  if (remaining > 0) {
-    desc += `\n+${remaining} more`;
-  }
-  return desc;
 }
 
 // ---------------------------------------------------------------------------
@@ -85,51 +43,11 @@ export async function runDirectSyncFlow(
   traverseOpts: TraverseScopesOptions,
   ctx?: ExecutionContext,
 ): Promise<DirectSyncResult> {
-  // Parse optional type qualifier
-  const query = parseWhichQuery(nameArg);
-
-  // Resolve candidates across scopes
-  const paired: PairedCandidate[] = [];
-
-  await traverseScopesFlat<null>(
-    traverseOpts,
-    async ({ scope, context }) => {
-      const result = await resolveByName(query.name, context.targetDir, scope);
-      for (const c of result.candidates) {
-        paired.push({ candidate: c, targetDir: context.targetDir });
-      }
-      return [null];
-    },
-  );
-
-  // If type-qualified, filter by resource type
-  let filtered = paired;
-  if (query.typeFilter) {
-    filtered = filtered.filter(
-      p => p.candidate.kind === 'resource' && p.candidate.resource?.resourceType === query.typeFilter,
-    );
-  }
-
-  // Disambiguate
-  const out = resolveOutput(ctx);
-  const prm = resolvePrompt(ctx);
-
-  const selected = await disambiguate(
-    nameArg,
-    filtered,
-    (p) => ({
-      title: formatTitle(p.candidate),
-      description: formatDescription(p.candidate),
-      value: p,
-    }),
-    {
-      notFoundMessage: `"${nameArg}" not found as a resource or package.\nRun \`opkg ls\` to see installed resources.`,
-      promptMessage: 'Select which to sync:',
-      multi: false,
-    },
-    out,
-    prm,
-  );
+  const selected = await resolveResourceSpec(nameArg, traverseOpts, {
+    notFoundMessage: `"${nameArg}" not found as a resource or package.\nRun \`opkg ls\` to see installed resources.`,
+    promptMessage: 'Select which to sync:',
+    multi: false,
+  }, ctx);
 
   if (selected.length === 0) {
     return { success: false, cancelled: true };

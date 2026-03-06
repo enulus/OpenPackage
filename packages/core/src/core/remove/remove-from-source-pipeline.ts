@@ -9,6 +9,7 @@ import { collectRemovalEntries, type RemovalEntry } from './removal-collector.js
 import { classifyRemoveInput } from './remove-input-classifier.js';
 import { runRemoveDependencyFlow } from './remove-dependency-flow.js';
 import { confirmRemoval } from './removal-confirmation.js';
+import { classifyResourceSpec, resolveResourceSpec } from '../resources/resource-spec.js';
 import { exists, remove } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
 import { UserCancellationError } from '../../utils/errors.js';
@@ -109,6 +110,84 @@ export async function runRemoveFromSourcePipeline(
       sourceType: source.sourceType,
       inputPath: resolvedPath
     });
+  }
+
+  // Check if input is a resource reference (e.g., `agents/ui-designer`)
+  const spec = classifyResourceSpec(resolvedPath);
+  if (spec.kind === 'resource-ref') {
+    const traverseOpts = { programOpts: { cwd }, projectOnly: sourceType === 'workspace' };
+    const resolved = await resolveResourceSpec(resolvedPath, traverseOpts, {
+      notFoundMessage: `"${resolvedPath}" not found as a resource.\nRun \`opkg ls\` to see installed resources.`,
+      promptMessage: 'Select which resource to remove:',
+      multi: false,
+    }, options.execContext);
+
+    if (resolved.length === 0) {
+      return { success: false, error: `No resource found for "${resolvedPath}".` };
+    }
+
+    const resource = resolved[0].candidate.resource!;
+
+    // Collect removal entries from resource's sourceKeys
+    const entries: RemovalEntry[] = [];
+    for (const sourceKey of resource.sourceKeys) {
+      const absPath = join(packageRootDir, sourceKey);
+      if (await exists(absPath)) {
+        entries.push({ packagePath: absPath, registryPath: sourceKey });
+      }
+    }
+
+    if (entries.length === 0) {
+      return { success: false, error: `No source files found for resource "${resolvedPath}".` };
+    }
+
+    options.beforeConfirm?.({ packageName: resolvedName, sourcePath: packageRootDir });
+
+    try {
+      await confirmRemoval(resolvedName, entries, options);
+    } catch (error) {
+      if (error instanceof UserCancellationError) throw error;
+      return { success: false, error: error instanceof Error ? error.message : 'Removal cancelled by user.' };
+    }
+
+    if (options.dryRun) {
+      return {
+        success: true,
+        data: {
+          packageName: resolvedName,
+          filesRemoved: entries.length,
+          sourcePath: packageRootDir,
+          sourceType,
+          removedPaths: entries.map(e => e.registryPath),
+          removalType: 'files',
+        },
+      };
+    }
+
+    const removedPaths: string[] = [];
+    const removedAbsolutePaths: string[] = [];
+    for (const entry of entries) {
+      if (await exists(entry.packagePath)) {
+        await remove(entry.packagePath);
+        removedPaths.push(entry.registryPath);
+        removedAbsolutePaths.push(entry.packagePath);
+        logger.debug('Removed file', { path: entry.packagePath });
+      }
+    }
+
+    await cleanupEmptyParents(packageRootDir, removedAbsolutePaths);
+
+    return {
+      success: true,
+      data: {
+        packageName: resolvedName,
+        filesRemoved: removedPaths.length,
+        sourcePath: packageRootDir,
+        sourceType,
+        removedPaths,
+        removalType: 'files',
+      },
+    };
   }
 
   // Classify input: file/directory path vs. dependency (./ = file, bare name = dep-first)
