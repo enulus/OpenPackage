@@ -122,10 +122,9 @@ export class InstallOrchestrator {
     try {
       preprocessResult = await strategy.preprocess(context, options, execContext, spinner);
     } finally {
-      // Stop the spinner regardless of success/failure.
-      // On success the strategy may have updated its message to a completion note;
-      // we stop silently so the pipeline or route handler can print its own output.
-      spinner?.stop();
+      // Stop the spinner with a completion note so clack renders a meaningful
+      // bullet instead of a blank ◇ (clack always renders the submit symbol).
+      spinner?.stop(input ? `Loaded ${input}` : undefined);
     }
     
     // Step 6: Route based on result
