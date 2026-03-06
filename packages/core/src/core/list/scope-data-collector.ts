@@ -342,7 +342,9 @@ export function mergeTrackedAndUntrackedResources(
 }
 
 /**
- * Merge resources from multiple scopes, deduplicating by resource name.
+ * Merge resources from multiple scopes, keeping resources from different scopes
+ * as separate entries even when they share the same name.
+ * Resources within the same scope are still deduplicated by name.
  */
 export function mergeResourcesAcrossScopes(
   scopedResources: Array<{ scope: ResourceScope; groups: EnhancedResourceGroup[] }>
@@ -357,16 +359,17 @@ export function mergeResourcesAcrossScopes(
       const resourcesMap = typeMap.get(group.resourceType)!;
 
       for (const resource of group.resources) {
-        if (!resourcesMap.has(resource.name)) {
-          resourcesMap.set(resource.name, {
+        // Key by scope + name so same-named resources in different scopes stay separate
+        const key = `${scope}:${resource.name}`;
+        if (!resourcesMap.has(key)) {
+          resourcesMap.set(key, {
             ...resource,
             scopes: new Set([scope]),
             files: [...resource.files],
             packages: resource.packages ? new Set(resource.packages) : undefined
           });
         } else {
-          const existing = resourcesMap.get(resource.name)!;
-          existing.scopes.add(scope);
+          const existing = resourcesMap.get(key)!;
           existing.files.push(...resource.files);
           existing.status = calculateResourceStatus(existing.files);
           if (resource.packages) {
