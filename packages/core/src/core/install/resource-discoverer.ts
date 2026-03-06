@@ -17,6 +17,9 @@ import { logger } from '../../utils/logger.js';
 import { extractMarkdownResourceMetadata } from '../resources/markdown-metadata.js';
 import { defaultNameFromPath, defaultNameFromSkillDir, preferFrontmatterName } from '../resources/resource-naming.js';
 import { getMarkerFilename, isMarkerFile } from '../resources/resource-registry.js';
+import { loadMarketplaceManifest } from './plugin-detector.js';
+import type { MarketplaceManifest } from './marketplace-handler.js';
+import { DIR_PATTERNS, FILE_PATTERNS } from '../../constants/index.js';
 import type {
   DiscoveredResource,
   ResourceDiscoveryResult,
@@ -48,8 +51,9 @@ export async function discoverResources(
   const rules = await discoverRules(basePathResolved, repoRootResolved);
   const hooks = await discoverHooks(basePathResolved, repoRootResolved);
   const mcp = await discoverMCP(basePathResolved, repoRootResolved);
-  
-  allResources.push(...agents, ...skills, ...commands, ...rules, ...hooks, ...mcp);
+  const { plugins, manifest: marketplaceManifest } = await discoverPlugins(basePathResolved);
+
+  allResources.push(...agents, ...skills, ...commands, ...rules, ...hooks, ...mcp, ...plugins);
   
   // Group by type
   const byType = new Map<ResourceType, DiscoveredResource[]>();
@@ -66,7 +70,8 @@ export async function discoverResources(
     commands: commands.length,
     rules: rules.length,
     hooks: hooks.length,
-    mcp: mcp.length
+    mcp: mcp.length,
+    plugins: plugins.length
   });
   
   return {
@@ -74,7 +79,8 @@ export async function discoverResources(
     byType,
     total: allResources.length,
     basePath: basePathResolved,
-    repoRoot: repoRootResolved
+    repoRoot: repoRootResolved,
+    marketplaceManifest
   };
 }
 
@@ -293,6 +299,30 @@ async function discoverMCP(
   }
   
   return resources;
+}
+
+/**
+ * Discover marketplace plugin entries from .claude-plugin/marketplace.json.
+ * Returns the parsed manifest alongside discovered resources so callers
+ * can stash it on the discovery result (avoids re-loading later).
+ */
+async function discoverPlugins(
+  basePath: string
+): Promise<{ plugins: DiscoveredResource[]; manifest: MarketplaceManifest | null }> {
+  const manifest = await loadMarketplaceManifest(basePath);
+  if (!manifest) return { plugins: [], manifest: null };
+
+  const plugins = manifest.plugins.map(plugin => ({
+    resourceType: 'plugin' as ResourceType,
+    resourcePath: plugin.name,
+    displayName: plugin.name,
+    description: plugin.description,
+    version: plugin.version,
+    filePath: join(basePath, DIR_PATTERNS.CLAUDE_PLUGIN, FILE_PATTERNS.MARKETPLACE_JSON),
+    installKind: 'plugin' as const,
+  }));
+
+  return { plugins, manifest };
 }
 
 /**

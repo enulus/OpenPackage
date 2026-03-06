@@ -631,7 +631,7 @@ export class InstallOrchestrator {
        name: resolvedPlugins.length > 1 
          ? s.displayName.replace(`${plugin.pluginEntry.name}/`, '')
          : s.displayName,
-       resourceType: s.resourceType as 'agent' | 'skill' | 'command' | 'rule',
+       resourceType: s.resourceType,
        resourcePath: s.resourcePath,
        basePath: resolve(plugin.basePath),
        resourceKind: s.installKind,

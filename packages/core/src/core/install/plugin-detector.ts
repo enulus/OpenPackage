@@ -3,7 +3,8 @@ import { promises as fs } from 'fs';
 import { exists, readTextFile } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
 import { DIR_PATTERNS, FILE_PATTERNS } from '../../constants/index.js';
-import type { MarketplacePluginEntry } from './marketplace-handler.js';
+import type { MarketplacePluginEntry, MarketplaceManifest } from './marketplace-handler.js';
+import { parseMarketplace } from './marketplace-handler.js';
 
 export type PluginType = 'individual' | 'marketplace' | 'marketplace-defined';
 
@@ -132,6 +133,23 @@ export async function hasPluginContent(dirPath: string): Promise<boolean> {
   }
   
   return false;
+}
+
+/**
+ * Load and parse the marketplace manifest from a package directory.
+ * Returns null if no marketplace.json exists or parsing fails.
+ *
+ * @param basePath - Absolute path to the package/repository root
+ * @returns Parsed marketplace manifest or null
+ */
+export async function loadMarketplaceManifest(basePath: string): Promise<MarketplaceManifest | null> {
+  const manifestPath = join(basePath, DIR_PATTERNS.CLAUDE_PLUGIN, FILE_PATTERNS.MARKETPLACE_JSON);
+  if (!(await exists(manifestPath))) return null;
+  try {
+    return await parseMarketplace(manifestPath, { repoPath: basePath });
+  } catch {
+    return null;
+  }
 }
 
 /**

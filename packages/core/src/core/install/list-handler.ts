@@ -15,6 +15,7 @@ import { runMultiContextPipeline } from './unified/multi-context-pipeline.js';
 import { getLoaderForSource } from './sources/loader-factory.js';
 import { applyBaseDetection } from './preprocessing/base-resolver.js';
 import { createResolvedPackageFromLoaded } from './preprocessing/context-population.js';
+import { installMarketplacePlugins } from './marketplace-handler.js';
 import type { InstallationContext } from './unified/context.js';
 import type { NormalizedInstallOptions } from './orchestrator/types.js';
 import type { ExecutionContext, CommandResult } from '../../types/index.js';
@@ -111,43 +112,84 @@ export async function handleListSelection(
       data: { installed: 0, skipped: 0 }
     };
   }
-  
-  // Convert selected resources to ResourceInstallationSpec format
-  const resourceSpecs: ResourceInstallationSpec[] = selected.map(s => ({
-    name: s.displayName,
-    resourceType: s.resourceType as 'agent' | 'skill' | 'command' | 'rule',
-    resourcePath: s.resourcePath,
-    basePath: resolve(basePath),
-    resourceKind: s.installKind,
-    matchedBy: 'filename' as const,
-    resourceVersion: s.version
-  }));
-  
-  // Build resource contexts for installation
-  const resourceContexts = buildResourceInstallContexts(
-    context,
-    resourceSpecs,
-    repoRoot
-  ).map(rc => {
-    // Ensure path-based loader can resolve repo-relative resourcePath
-    if (rc.source.type === 'path') {
-      rc.source.localPath = repoRoot;
+
+  // Partition selected resources: plugins vs regular resources
+  const selectedPlugins = selected.filter(s => s.resourceType === 'plugin');
+  const selectedResources = selected.filter(s => s.resourceType !== 'plugin');
+
+  let totalInstalled = 0;
+  let totalSkipped = 0;
+  let anyError: string | undefined;
+
+  // Install regular resources through the existing pipeline
+  if (selectedResources.length > 0) {
+    const resourceSpecs: ResourceInstallationSpec[] = selectedResources.map(s => ({
+      name: s.displayName,
+      resourceType: s.resourceType,
+      resourcePath: s.resourcePath,
+      basePath: resolve(basePath),
+      resourceKind: s.installKind,
+      matchedBy: 'filename' as const,
+      resourceVersion: s.version
+    }));
+
+    const resourceContexts = buildResourceInstallContexts(
+      context,
+      resourceSpecs,
+      repoRoot
+    ).map(rc => {
+      if (rc.source.type === 'path') {
+        rc.source.localPath = repoRoot;
+      }
+      return rc;
+    });
+
+    const result = await runMultiContextPipeline(resourceContexts, {
+      groupReport: true,
+      groupReportPackageName: context.source.packageName
+    });
+
+    totalInstalled += result.data?.installed || 0;
+    totalSkipped += result.data?.skipped || 0;
+    if (!result.success) anyError = result.error;
+  }
+
+  // Install plugins through the marketplace flow
+  if (selectedPlugins.length > 0) {
+    const marketplace = discovery.marketplaceManifest;
+    if (marketplace) {
+      const gitUrl = context.source.gitUrl || '';
+      const gitRef = context.source.gitRef;
+      const commitSha = (context.source as any)._commitSha || '';
+
+      for (const plugin of selectedPlugins) {
+        const pluginResult = await installMarketplacePlugins(
+          basePath,
+          marketplace,
+          plugin.displayName,
+          'full',
+          gitUrl,
+          gitRef,
+          commitSha,
+          options,
+          execContext
+        );
+        if (pluginResult.success) {
+          totalInstalled++;
+        } else {
+          totalSkipped++;
+          if (!anyError) anyError = pluginResult.error;
+        }
+      }
     }
-    return rc;
-  });
-  
-  // Run multi-context pipeline with grouped report for multi-resource selection
-  const result = await runMultiContextPipeline(resourceContexts, {
-    groupReport: true,
-    groupReportPackageName: context.source.packageName
-  });
-  
+  }
+
   return {
-    success: result.success,
-    error: result.error,
+    success: !anyError,
+    error: anyError,
     data: {
-      installed: result.data?.installed || 0,
-      skipped: result.data?.skipped || 0
+      installed: totalInstalled,
+      skipped: totalSkipped
     }
   };
 }

@@ -13,6 +13,7 @@ import { logger } from '../../utils/logger.js';
 import type { OutputPort } from '../ports/output.js';
 import { resolveOutput } from '../ports/resolve.js';
 import { isMarkerFile, getMarkerFilename } from '../resources/resource-registry.js';
+import type { ResourceType } from './resource-types.js';
 
 /**
  * Result of a resource match
@@ -48,7 +49,7 @@ export interface ResourceInstallationSpec {
   name: string;
 
   /** Resource type */
-  resourceType: 'agent' | 'skill' | 'command' | 'rule';
+  resourceType: ResourceType;
 
   /** Path to resource relative to repo root */
   resourcePath: string;
@@ -57,7 +58,7 @@ export interface ResourceInstallationSpec {
   basePath: string;
 
   /** Resource kind for scoping */
-  resourceKind: 'file' | 'directory';
+  resourceKind: 'file' | 'directory' | 'plugin';
 
   /** How the resource was matched */
   matchedBy: 'frontmatter' | 'filename' | 'dirname';

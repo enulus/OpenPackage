@@ -3,6 +3,7 @@
  */
 
 import { type InstallableResourceTypeId } from '../resources/resource-registry.js';
+import type { MarketplaceManifest } from './marketplace-handler.js';
 
 /**
  * Type of resource that can be discovered and installed
@@ -32,8 +33,8 @@ export interface DiscoveredResource {
   filePath: string;
   
   /** Installation kind */
-  installKind: 'file' | 'directory';
-  
+  installKind: 'file' | 'directory' | 'plugin';
+
   /** How the resource was matched (for debugging) */
   matchedBy?: 'frontmatter' | 'filename' | 'dirname';
 }
@@ -56,6 +57,9 @@ export interface ResourceDiscoveryResult {
   
   /** Repository root path */
   repoRoot: string;
+
+  /** Marketplace manifest if detected during discovery (avoids re-loading) */
+  marketplaceManifest?: MarketplaceManifest | null;
 }
 
 /**
@@ -75,8 +79,8 @@ export interface SelectedResource {
   filePath: string;
   
   /** Installation kind */
-  installKind: 'file' | 'directory';
-  
+  installKind: 'file' | 'directory' | 'plugin';
+
   /** Version */
   version?: string;
 }

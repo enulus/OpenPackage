@@ -12,7 +12,7 @@ import { logger } from '../../utils/logger.js';
 import { generateGitHubPackageName } from '../../utils/plugin-naming.js';
 import { getPackageVersionPath } from '../directory.js';
 import type { ListPackageReport, ListFileMapping, ListResourceGroup } from './list-pipeline.js';
-import { groupFilesIntoResources } from './list-pipeline.js';
+import { groupFilesIntoResources, appendMarketplacePluginGroup } from './list-pipeline.js';
 import type { ViewMetadataEntry } from './view-metadata.js';
 import { extractMetadataFromManifest } from './view-metadata.js';
 
@@ -109,7 +109,8 @@ async function resolveRegistryList(
       if (fileList.length > 0) {
         resourceGroups = groupFilesIntoResources(fileList);
       }
-      
+      resourceGroups = await appendMarketplacePluginGroup(resourceGroups, packagePath);
+
       // Read manifest for metadata
       const { join } = await import('path');
       const manifestPath = join(packagePath, 'openpackage.yml');
@@ -213,7 +214,9 @@ async function resolveGitList(
   }
   
   // Generate resource groups from file list
-  const resourceGroups = fileList.length > 0 ? groupFilesIntoResources(fileList) : undefined;
+  let resourceGroups: ListResourceGroup[] | undefined = fileList.length > 0 ? groupFilesIntoResources(fileList) : undefined;
+  resourceGroups = await appendMarketplacePluginGroup(resourceGroups, contentRoot);
+
   const finalMetadata = metadata ?? extractMetadataFromManifest({ name, version });
 
   return {

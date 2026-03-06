@@ -17,6 +17,7 @@ import { isPlatformId, getAllPlatforms, getPlatformDefinition } from '../platfor
 import { normalizePlatforms } from '../platform/platform-mapper.js';
 import { DIR_TO_TYPE, RESOURCE_TYPE_ORDER, toPluralKey, type ResourceTypeId } from '../resources/resource-registry.js';
 import { classifySourceKeyBatch } from '../resources/resource-classifier.js';
+import { loadMarketplaceManifest } from '../install/plugin-detector.js';
 
 export type PackageSyncState = 'synced' | 'partial' | 'missing';
 
@@ -286,6 +287,31 @@ export function groupFilesIntoResources(fileList: ListFileMapping[]): ListResour
     groups.push({ resourceType: `${type}s`, resources });
   }
 
+  return groups;
+}
+
+/**
+ * Append marketplace plugin entries as a resource group.
+ * Plugins are metadata-only entries from .claude-plugin/marketplace.json,
+ * not files, so they must be appended after file-based grouping.
+ */
+export async function appendMarketplacePluginGroup(
+  resourceGroups: ListResourceGroup[] | undefined,
+  packageDir: string,
+): Promise<ListResourceGroup[] | undefined> {
+  const marketplace = await loadMarketplaceManifest(packageDir);
+  if (!marketplace || marketplace.plugins.length === 0) return resourceGroups;
+
+  const pluginGroup: ListResourceGroup = {
+    resourceType: 'plugins',
+    resources: marketplace.plugins.map(p => ({
+      name: `plugins/${p.name}`,
+      resourceType: 'plugins',
+      files: [],
+    })),
+  };
+  const groups = resourceGroups ?? [];
+  groups.push(pluginGroup);
   return groups;
 }
 

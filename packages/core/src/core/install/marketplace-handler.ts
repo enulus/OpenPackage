@@ -292,7 +292,7 @@ async function installPluginPartial(
   // Convert selected resources to ResourceInstallationSpec format
   const resourceSpecs: ResourceInstallationSpec[] = selected.map(s => ({
     name: s.displayName,
-    resourceType: s.resourceType as 'agent' | 'skill' | 'command' | 'rule',
+    resourceType: s.resourceType,
     resourcePath: s.resourcePath,
     basePath: resolve(pluginDir),
     resourceKind: s.installKind,

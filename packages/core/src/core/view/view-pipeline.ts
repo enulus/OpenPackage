@@ -14,7 +14,7 @@ import { detectEntityType } from '../../utils/entity-detector.js';
 import { formatPathForDisplay } from '../../utils/formatters.js';
 import { logger } from '../../utils/logger.js';
 import { collectFiles } from '../list/remote-list-resolver.js';
-import { groupFilesIntoResources, type ListFileMapping, type ListPackageReport } from '../list/list-pipeline.js';
+import { groupFilesIntoResources, appendMarketplacePluginGroup, type ListFileMapping, type ListPackageReport } from '../list/list-pipeline.js';
 import { extractMetadataFromManifest, type ViewMetadataEntry } from '../list/list-printers.js';
 import { resolveDeclaredPath } from '../../utils/path-resolution.js';
 import { classifyInput } from '../install/preprocessing/index.js';
@@ -109,7 +109,8 @@ async function buildLocalPackageResult(
     target: join(packageDir, f),
     exists: true
   }));
-  const resourceGroups = fileList.length > 0 ? groupFilesIntoResources(fileList) : undefined;
+  let resourceGroups = fileList.length > 0 ? groupFilesIntoResources(fileList) : undefined;
+  resourceGroups = await appendMarketplacePluginGroup(resourceGroups, packageDir);
 
   const headerType = await detectEntityType(packageDir);
 

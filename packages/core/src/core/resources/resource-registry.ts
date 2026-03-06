@@ -11,7 +11,8 @@ const DEFINITIONS: readonly ResourceTypeDef[] = [
   { id: 'skill',   dirName: 'skills',   marker: 'SKILL.md',  labelPlural: 'Skills',             pluralKey: 'skills',   order: 3, installable: true  },
   { id: 'hook',    dirName: 'hooks',    marker: null,         labelPlural: 'Hooks',              pluralKey: 'hooks',    order: 4, installable: true  },
   { id: 'mcp',     dirName: null,       marker: null,         labelPlural: 'MCP Servers',        pluralKey: 'mcps',     order: 5, installable: true  },
-  { id: 'other',   dirName: null,       marker: null,         labelPlural: 'Other',              pluralKey: 'other',    order: 6, installable: false },
+  { id: 'plugin',  dirName: null,       marker: null,         labelPlural: 'Plugins',            pluralKey: 'plugins',  order: 6, installable: true  },
+  { id: 'other',   dirName: null,       marker: null,         labelPlural: 'Other',              pluralKey: 'other',    order: 7, installable: false },
 ] as const;
 
 const BY_ID = new Map<ResourceTypeId, ResourceTypeDef>(

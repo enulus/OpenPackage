@@ -2,7 +2,7 @@
  * Shared resource types extracted from core/resources/resource-registry.ts
  */
 
-export type ResourceTypeId = 'rule' | 'agent' | 'command' | 'skill' | 'hook' | 'mcp' | 'other';
+export type ResourceTypeId = 'rule' | 'agent' | 'command' | 'skill' | 'hook' | 'mcp' | 'plugin' | 'other';
 
 export type InstallableResourceTypeId = Exclude<ResourceTypeId, 'other'>;
 

@@ -30,7 +30,7 @@ export interface ResolvedResource {
   /** Absolute path to source file/directory (source-side builder only) */
   sourcePath?: string;
   /** Install kind - file or directory (source-side builder only) */
-  installKind?: 'file' | 'directory';
+  installKind?: 'file' | 'directory' | 'plugin';
 }
 
 export interface ResolvedPackage {
