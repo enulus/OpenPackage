@@ -126,7 +126,6 @@ export function buildCandidateGroups(
  * Tries these strategies in order:
  * 1. Exact match (already tried before calling this)
  * 2. Match with different extension (e.g., mcp.json → mcp.jsonc)
- * 3. Match basename without extension (e.g., opencode.json → mcp.json)
  * 
  * @param registryPath - Workspace registry path to match
  * @param localRefs - All source refs
@@ -146,25 +145,13 @@ function findSourceFileByFallback(
     logger.debug(`  Fallback match: ${registryPath} → ${candidates[0].registryPath} (same basename)`);
     return candidates[0].registryPath;
   }
-  
-  const fileName = registryPath.split('/').pop() || '';
-  const fileNameBase = fileName.replace(/\.[^.]+$/, '');
-  
-  if (fileNameBase) {
-    const fileNameCandidates = localRefs.filter(c => {
-      const sourceFileName = c.registryPath.split('/').pop() || '';
-      const sourceFileNameBase = sourceFileName.replace(/\.[^.]+$/, '');
-      return sourceFileNameBase === fileNameBase;
-    });
-    
-    if (fileNameCandidates.length === 1) {
-      logger.debug(
-        `  Fallback match: ${registryPath} → ${fileNameCandidates[0].registryPath} (same filename)`
-      );
-      return fileNameCandidates[0].registryPath;
-    }
-  }
-  
+
+  // NOTE: Filename-only matching (ignoring directory) was intentionally removed.
+  // It caused false grouping when files with the same name exist in different
+  // directories (e.g., skills/skill-dev/SKILL.md vs skills/skill-dev/test-greeter/SKILL.md).
+  // The isCrossExtensionMatch guard prevents this in export flow matching, but applying
+  // it here would make this strategy identical to the basename match above.
+
   return null;
 }
 
