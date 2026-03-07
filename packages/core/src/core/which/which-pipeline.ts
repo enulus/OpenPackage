@@ -9,7 +9,8 @@
 import { resolveByName, type ResolutionCandidate } from '../resources/resource-resolver.js';
 import { traverseScopesFlat, type TraverseScopesOptions, type ResourceScope } from '../resources/scope-traversal.js';
 import { readWorkspaceIndex } from '../../utils/workspace-index-yml.js';
-import { normalizeType } from '../resources/resource-registry.js';
+import { normalizeType, getMarkerFilename, toPluralKey, type ResourceTypeId } from '../resources/resource-registry.js';
+import type { ResolvedResource } from '../resources/resource-builder.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -130,7 +131,13 @@ export async function resolveWhich(
         const pkgEntry = indexRecord.index.packages[resource.packageName];
         if (pkgEntry) {
           result.packageVersion = pkgEntry.version;
-          result.packageSourcePath = pkgEntry.path;
+          const relativePath = computeResourceRelativePath(resource);
+          if (relativePath) {
+            const basePath = pkgEntry.path.replace(/\/+$/, '');
+            result.packageSourcePath = `${basePath}/${relativePath}`;
+          } else {
+            result.packageSourcePath = pkgEntry.path;
+          }
         }
       } catch {
         // Provenance enrichment is best-effort
@@ -141,4 +148,34 @@ export async function resolveWhich(
   }
 
   return results;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute the resource's relative path within its package.
+ *
+ * - Marker-based types (skills): directory path via pluralKey/resourceName
+ * - File-based types (agents, rules, etc.): first sourceKey (preserves extension)
+ * - MCP: first sourceKey (e.g. "mcp.json")
+ */
+function computeResourceRelativePath(resource: ResolvedResource): string | undefined {
+  const resourceType = resource.resourceType as ResourceTypeId;
+
+  // Marker-based types → directory path (e.g. "skills/skill-dev")
+  if (getMarkerFilename(resourceType)) {
+    return `${toPluralKey(resourceType)}/${resource.resourceName}`;
+  }
+
+  // File-based types → use first source key (preserves extension)
+  if (resource.sourceKeys.size > 0) {
+    return resource.sourceKeys.values().next().value;
+  }
+
+  // Fallback → reconstruct from type/name
+  const pluralKey = toPluralKey(resourceType);
+  if (pluralKey === 'other') return undefined;
+  return `${pluralKey}/${resource.resourceName}`;
 }
