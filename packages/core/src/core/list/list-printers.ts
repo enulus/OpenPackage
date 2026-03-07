@@ -190,14 +190,26 @@ export function printDepsView(
     return;
   }
 
-  // Option 1: When workspace is the header, exclude it from the tree to avoid duplication.
-  // Its files are shown under the header when -f is used.
+  // Collect workspace root names from ALL scope results — these are self-entries
+  // representing each scope's root, not real dependency packages.
+  const workspaceRootNames = new Set<string>();
+  for (const { result } of results) {
+    if (result.headerType === 'workspace' && result.headerName) {
+      workspaceRootNames.add(result.headerName);
+    }
+  }
+
+  // Also include the display header's workspace name
   let workspaceEntry: DepsPackageEntry | undefined;
   if (headerInfo?.type === 'workspace' && headerInfo.name) {
+    workspaceRootNames.add(headerInfo.name);
+    // Preserve the header workspace entry so its files can be shown with -f
     workspaceEntry = packageMap.get(headerInfo.name);
-    if (workspaceEntry) {
-      packageMap.delete(headerInfo.name);
-    }
+  }
+
+  // Remove all workspace root entries from the dependency display
+  for (const name of workspaceRootNames) {
+    packageMap.delete(name);
   }
 
   // Print header showing workspace/package name and path
