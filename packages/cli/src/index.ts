@@ -79,8 +79,8 @@ program
       
       // Usage section with common commands
       output += 'Usage:\n\n';
-      output += 'opkg install           install packages from openpackage.yml\n';
-      output += 'opkg install <pkg>     install a specific package\n';
+      output += 'opkg install [pkg]     install resource or package\n';
+      output += 'opkg list              list installed resources\n';
       output += 'opkg new               create a new package\n';
       output += 'opkg <command> -h      help on <command>\n\n';
       
@@ -90,9 +90,9 @@ program
       
       // All commands section - ultra compact
       output += 'All commands:\n\n';
-      output += '    install, uninstall, list,\n';
+      output += '    install, uninstall, list, which,\n';
       output += '    new, add, remove, sync, set,\n';
-      output += '    publish, unpublish, search, view, which,\n';
+      output += '    publish, unpublish, search, view,\n';
       output += '    login, logout, config\n\n';
       
       // Version
