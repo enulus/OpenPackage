@@ -10,6 +10,7 @@ import { buildWorkspaceResources, type ResolvedResource, type ResolvedPackage } 
 import { traverseScopes, type ResourceScope } from '../resources/scope-traversal.js';
 import { normalizeType, RESOURCE_TYPE_ORDER, toLabelPlural } from '../resources/resource-registry.js';
 import { parsePackageYml } from '../../utils/package-yml.js';
+import { getLocalPackageYmlPath } from '../../utils/paths.js';
 import { readWorkspaceIndex } from '../../utils/workspace-index-yml.js';
 import { formatScopeTag } from '../../utils/formatters.js';
 import { logger } from '../../utils/logger.js';
@@ -125,6 +126,24 @@ export async function buildGroupedUninstallOptions(
     const key = `${pkg.packageName}::${pkg.scope}`;
     if (!resourcesByPackageAndScope.has(key)) {
       resourcesByPackageAndScope.set(key, []);
+    }
+  }
+
+  // Exclude workspace root packages (structural metadata, not installed deps)
+  const workspaceRootNames = new Set<string>();
+  for (const targetDir of scopeToTargetDir.values()) {
+    try {
+      const manifest = await parsePackageYml(getLocalPackageYmlPath(targetDir));
+      if (manifest.name) workspaceRootNames.add(manifest.name);
+    } catch {
+      // Skip scopes where manifest can't be read
+    }
+  }
+
+  for (const key of resourcesByPackageAndScope.keys()) {
+    const pkgName = key.split('::')[0];
+    if (workspaceRootNames.has(pkgName)) {
+      resourcesByPackageAndScope.delete(key);
     }
   }
 
