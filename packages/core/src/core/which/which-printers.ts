@@ -49,7 +49,8 @@ function printSingleResult(
   out: OutputPort
 ): void {
   const untrackedTag = result.kind === 'untracked' ? ' [untracked]' : '';
-  out.info(`${result.resourceName} ${dim(`(${result.resourceType})`)}${untrackedTag}`);
+  const globalTag = result.scope === 'global' ? ` ${dim('[global]')}` : '';
+  out.info(`${result.resourceName} ${dim(`(${result.resourceType})`)}${untrackedTag}${globalTag}`);
 
   if (result.kind === 'untracked') {
     out.info(`  ${dim('Not installed from any package')}`);
@@ -64,9 +65,6 @@ function printSingleResult(
   if (result.packageSourcePath) {
     out.info(`  ${dim('Source:')}   ${formatPathForDisplay(result.packageSourcePath)}`);
   }
-
-  const scopeLabel = result.scope === 'global' ? 'global' : 'project';
-  out.info(`  ${dim('Scope:')}    ${scopeLabel}`);
 
   if (options.files && result.targetFiles.length > 0) {
     out.info(`  ${dim('Files:')}`);
