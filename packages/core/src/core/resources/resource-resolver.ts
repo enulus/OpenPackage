@@ -6,7 +6,7 @@
  * and which commands for direct name resolution.
  */
 
-import { buildWorkspaceResources, type ResolvedResource, type ResolvedPackage } from './resource-builder.js';
+import { buildWorkspaceResources, buildSourceResources, type ResolvedResource, type ResolvedPackage, type WorkspaceResources } from './resource-builder.js';
 import type { ResourceScope } from './scope-traversal.js';
 import { formatScopeTag } from '../../utils/formatters.js';
 import { logger } from '../../utils/logger.js';
@@ -61,12 +61,47 @@ export function formatCandidateDescription(candidate: ResolutionCandidate): stri
   return desc;
 }
 
+// ---------------------------------------------------------------------------
+// Shared matching logic
+// ---------------------------------------------------------------------------
+
 /**
- * Resolve a name to matching resources and packages within a single scope.
- * 
+ * Match a name against resources and packages in a WorkspaceResources structure.
+ *
  * Resources are matched case-insensitively by `resourceName`.
  * Packages are matched exactly (case-sensitive) by `packageName`.
- * 
+ *
+ * Pure function — no I/O.
+ */
+export function matchCandidates(workspace: WorkspaceResources, name: string): ResolutionCandidate[] {
+  const candidates: ResolutionCandidate[] = [];
+  const nameLower = name.toLowerCase();
+
+  for (const resource of workspace.resources) {
+    if (resource.resourceName.toLowerCase() === nameLower) {
+      candidates.push({ kind: 'resource', resource });
+    }
+  }
+
+  for (const pkg of workspace.packages) {
+    if (pkg.packageName === name) {
+      candidates.push({ kind: 'package', package: pkg });
+    }
+  }
+
+  return candidates;
+}
+
+// ---------------------------------------------------------------------------
+// Workspace-side resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a name to matching resources and packages within a single scope.
+ *
+ * Resources are matched case-insensitively by `resourceName`.
+ * Packages are matched exactly (case-sensitive) by `packageName`.
+ *
  * @param name - User-provided name to resolve
  * @param targetDir - Workspace directory to search
  * @param scope - Resource scope ('project' or 'global')
@@ -78,24 +113,31 @@ export async function resolveByName(
   scope: ResourceScope
 ): Promise<ResolutionResult> {
   const workspace = await buildWorkspaceResources(targetDir, scope);
-  const candidates: ResolutionCandidate[] = [];
-  const nameLower = name.toLowerCase();
+  return { candidates: matchCandidates(workspace, name) };
+}
 
-  // Match resources by name (case-insensitive)
-  for (const resource of workspace.resources) {
-    if (resource.resourceName.toLowerCase() === nameLower) {
-      candidates.push({ kind: 'resource', resource });
-    }
-  }
+// ---------------------------------------------------------------------------
+// Source-side resolution
+// ---------------------------------------------------------------------------
 
-  // Match packages by name (exact, case-sensitive)
-  for (const pkg of workspace.packages) {
-    if (pkg.packageName === name) {
-      candidates.push({ kind: 'package', package: pkg });
-    }
-  }
-
-  return { candidates };
+/**
+ * Resolve a name to matching resources in a package source directory.
+ *
+ * Source-side counterpart to `resolveByName` — scans the package source
+ * (e.g., `~/.openpackage/packages/foo/`) instead of the deployed workspace.
+ *
+ * @param name - User-provided resource name to resolve
+ * @param sourceDir - Absolute path to the package source directory
+ * @param scope - Resource scope
+ * @returns Resolution result with matching candidates
+ */
+export async function resolveFromSource(
+  name: string,
+  sourceDir: string,
+  scope: ResourceScope
+): Promise<ResolutionResult> {
+  const workspace = await buildSourceResources(sourceDir, scope);
+  return { candidates: matchCandidates(workspace, name) };
 }
 
 /**

@@ -1,4 +1,4 @@
-import { resolve as resolvePath, join } from 'path';
+import { join } from 'path';
 
 import type { CommandResult } from '../../types/index.js';
 import type { ExecutionContext } from '../../types/execution-context.js';
@@ -9,7 +9,9 @@ import { collectRemovalEntries, type RemovalEntry } from './removal-collector.js
 import { classifyRemoveInput } from './remove-input-classifier.js';
 import { runRemoveDependencyFlow } from './remove-dependency-flow.js';
 import { confirmRemoval } from './removal-confirmation.js';
-import { classifyResourceSpec, resolveResourceSpec } from '../resources/resource-spec.js';
+import { classifyResourceSpec } from '../resources/resource-spec.js';
+import { resolveFromSource, formatCandidateTitle, formatCandidateDescription, type ResolutionCandidate } from '../resources/resource-resolver.js';
+import { disambiguate } from '../resources/disambiguation-prompt.js';
 import { exists, remove } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
 import { UserCancellationError } from '../../utils/errors.js';
@@ -115,43 +117,72 @@ export async function runRemoveFromSourcePipeline(
   // Check if input is a resource reference (e.g., `agents/ui-designer`)
   const spec = classifyResourceSpec(resolvedPath);
   if (spec.kind === 'resource-ref') {
-    const traverseOpts = { programOpts: { cwd }, projectOnly: sourceType === 'workspace' };
-    const resolved = await resolveResourceSpec(resolvedPath, traverseOpts, {
-      notFoundMessage: `"${resolvedPath}" not found as a resource.\nRun \`opkg ls\` to see installed resources.`,
-      promptMessage: 'Select which resource to remove:',
-      multi: false,
-    }, options.execContext);
+    const { name, typeFilter } = spec.query;
 
-    if (resolved.length === 0) {
+    // Resolve against the package source directory (not the deployed workspace)
+    const scope = sourceType === 'workspace' ? 'project' : 'global';
+    const result = await resolveFromSource(name, packageRootDir, scope);
+
+    // Filter by type if the input was type-qualified (e.g., "skills/foo")
+    let candidates = result.candidates;
+    if (typeFilter) {
+      candidates = candidates.filter(
+        c => c.kind === 'resource' && c.resource?.resourceType === typeFilter,
+      );
+    }
+
+    // Disambiguate (0/1/N)
+    let selected: ResolutionCandidate[];
+    try {
+      selected = await disambiguate(
+        resolvedPath,
+        candidates,
+        (c) => ({
+          title: formatCandidateTitle(c),
+          description: formatCandidateDescription(c),
+          value: c,
+        }),
+        {
+          notFoundMessage: `"${resolvedPath}" not found as a resource in package "${resolvedName}".\nRun \`opkg view ${resolvedName}\` to see package contents.`,
+          promptMessage: 'Select which resource to remove:',
+          multi: false,
+        },
+      );
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+
+    if (selected.length === 0) {
       return { success: false, error: `No resource found for "${resolvedPath}".` };
     }
 
-    const resource = resolved[0].candidate.resource!;
-
-    if (resource.kind === 'untracked' || !resource.packageName) {
-      return {
-        success: false,
-        error: `Resource "${resolvedPath}" is not tracked by any package and cannot be removed from a package source.\nUse a file path instead, e.g.: opkg remove ./path/to/file --from ${resolvedName}`,
-      };
+    const candidate = selected[0];
+    if (candidate.kind !== 'resource' || !candidate.resource) {
+      return { success: false, error: `Expected a resource candidate for "${resolvedPath}" but got "${candidate.kind}".` };
     }
+    const resource = candidate.resource;
 
-    // Collect removal entries from resource's sourceKeys
-    const entries: RemovalEntry[] = [];
+    // Collect removal entries by expanding each sourceKey via collectRemovalEntries
+    const allEntries: RemovalEntry[] = [];
+    const seenRegistryPaths = new Set<string>();
     for (const sourceKey of resource.sourceKeys) {
-      const absPath = join(packageRootDir, sourceKey);
-      if (await exists(absPath)) {
-        entries.push({ packagePath: absPath, registryPath: sourceKey });
+      const entries = await collectRemovalEntries(packageRootDir, sourceKey);
+      for (const entry of entries) {
+        if (!seenRegistryPaths.has(entry.registryPath)) {
+          seenRegistryPaths.add(entry.registryPath);
+          allEntries.push(entry);
+        }
       }
     }
 
-    if (entries.length === 0) {
+    if (allEntries.length === 0) {
       return { success: false, error: `No source files found for resource "${resolvedPath}" in package "${resolvedName}".` };
     }
 
     options.beforeConfirm?.({ packageName: resolvedName, sourcePath: packageRootDir });
 
     try {
-      await confirmRemoval(resolvedName, entries, options);
+      await confirmRemoval(resolvedName, allEntries, options);
     } catch (error) {
       if (error instanceof UserCancellationError) throw error;
       return { success: false, error: error instanceof Error ? error.message : 'Removal cancelled by user.' };
@@ -162,10 +193,10 @@ export async function runRemoveFromSourcePipeline(
         success: true,
         data: {
           packageName: resolvedName,
-          filesRemoved: entries.length,
+          filesRemoved: allEntries.length,
           sourcePath: packageRootDir,
           sourceType,
-          removedPaths: entries.map(e => e.registryPath),
+          removedPaths: allEntries.map(e => e.registryPath),
           removalType: 'files',
         },
       };
@@ -173,7 +204,7 @@ export async function runRemoveFromSourcePipeline(
 
     const removedPaths: string[] = [];
     const removedAbsolutePaths: string[] = [];
-    for (const entry of entries) {
+    for (const entry of allEntries) {
       if (await exists(entry.packagePath)) {
         await remove(entry.packagePath);
         removedPaths.push(entry.registryPath);

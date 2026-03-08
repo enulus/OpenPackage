@@ -81,6 +81,7 @@ const testFiles: string[] = [
   // Core - Resources
   'tests/core/resources/resource-namespace.test.ts',
   'tests/core/resources/resource-classifier.test.ts',
+  'tests/core/resources/resource-resolver.test.ts',
   'tests/core/resources/resource-spec.test.ts',
 
   // Core - Source Resolution
