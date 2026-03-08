@@ -16,6 +16,8 @@ import { runAddToSourcePipeline, runAddToSourcePipelineBatch, addSourceEntriesTo
 import { classifyResourceSpec, resolveResourceSpec } from '../resources/resource-spec.js';
 import { mapWorkspaceFileToUniversal } from '../platform/platform-mapper.js';
 import { exists } from '../../utils/fs.js';
+import { validateAsName, renameEntries } from './entry-renamer.js';
+import { performMoveCleanup, type MoveCleanupResult } from './move-cleanup.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -24,7 +26,7 @@ import { exists } from '../../utils/fs.js';
 export type AddResourceResult =
   | { kind: 'dependency'; result: AddDependencyResult; classification: AddInputClassification }
   | { kind: 'copy'; result: CommandResult<AddToSourceResult> }
-  | { kind: 'workspace-resource'; result: CommandResult<AddToSourceResult> };
+  | { kind: 'workspace-resource'; result: CommandResult<AddToSourceResult>; moveCleanup?: MoveCleanupResult };
 
 export interface ProcessAddResourceOptions {
   copy?: boolean;
@@ -32,6 +34,8 @@ export interface ProcessAddResourceOptions {
   to?: string;
   platformSpecific?: boolean;
   force?: boolean;
+  move?: boolean;
+  as?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -63,8 +67,22 @@ export async function processAddResource(
   cwd: string,
   execContext: ExecutionContext
 ): Promise<AddResourceResult> {
+  // Validate --move and --as options upfront
+  if (options.move && !options.to) {
+    throw new Error('--move requires --to <package-name> to specify the destination package.');
+  }
+  if (options.as) {
+    validateAsName(options.as);
+  }
+
   // Check if input is a resource reference (e.g., `agents/ui-designer`)
   const spec = classifyResourceSpec(resourceSpec);
+
+  // --move and --as only apply to resource-ref inputs
+  if (spec.kind !== 'resource-ref' && (options.move || options.as)) {
+    throw new Error('--move and --as can only be used with a resource reference (e.g., agents/foo).');
+  }
+
   if (spec.kind === 'resource-ref') {
     if (options.dev) {
       throw new Error('--dev can only be used when adding a dependency, not when copying files');
@@ -84,10 +102,18 @@ export async function processAddResource(
     const { candidate, packageSourcePath, targetDir } = resolved[0];
     const resource = candidate.resource!;
 
+    // Guard: --move to same package without --as is a no-op
+    if (options.move && resource.packageName === options.to && !options.as) {
+      throw new Error(
+        `Resource "${resourceSpec}" is already in package "${options.to}". ` +
+        `Use --as <new-name> to rename it, or specify a different --to package.`
+      );
+    }
+
     // Build source entries directly from the resource's sourceKeys.
     // We read from the installed package source directory (not the workspace
     // deployment path) to preserve the correct package-relative registryPaths.
-    const entries: Array<{ sourcePath: string; registryPath: string }> = [];
+    let entries: Array<{ sourcePath: string; registryPath: string; content?: string }> = [];
 
     if (packageSourcePath && resource.sourceKeys.size > 0) {
       // Tracked resource with a package source — read from source directory
@@ -120,11 +146,23 @@ export async function processAddResource(
       throw new Error(`No source files found for resource "${resourceSpec}" from ${nameContext}.`);
     }
 
+    // Apply --as rename
+    if (options.as) {
+      entries = await renameEntries(entries, resource.resourceName, options.as);
+    }
+
     const result = await addSourceEntriesToPackage(options.to, entries, { ...options, execContext });
     if (!result.success) {
       throw new Error(result.error || 'Add operation failed');
     }
-    return { kind: 'workspace-resource', result };
+
+    // Apply --move cleanup (remove from origin)
+    let moveCleanup: MoveCleanupResult | undefined;
+    if (options.move) {
+      moveCleanup = await performMoveCleanup({ resource, packageSourcePath, execContext });
+    }
+
+    return { kind: 'workspace-resource', result, moveCleanup };
   }
 
   const classification = await classifyAddInput(resourceSpec, cwd, {

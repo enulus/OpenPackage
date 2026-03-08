@@ -144,6 +144,8 @@ program
   .option('--copy', 'force copy mode (copy files instead of recording dependency)')
   .option('--platform-specific', 'save platform-specific variants for platform subdir inputs')
   .option('--force', 'overwrite existing files without prompting')
+  .option('--move', 'move resource: add to destination and remove from origin')
+  .option('--as <name>', 'rename the resource at the destination')
   .action(withErrorHandling(async (...args: any[]) => {
     const { setupAddCommand } = await import('./commands/add.js');
     await setupAddCommand(args);

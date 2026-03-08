@@ -12,6 +12,8 @@ export interface SourceEntry {
   sourcePath: string;
   registryPath: string;
   flow?: Flow;
+  /** If set, use this instead of reading from sourcePath (e.g. after in-memory frontmatter rename). */
+  content?: string;
 }
 
 /**

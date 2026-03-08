@@ -16,7 +16,7 @@ import { traverseScopesFlat, type TraverseScopesOptions } from './scope-traversa
 import { disambiguate, type DisambiguationOptions } from './disambiguation-prompt.js';
 import { resolveOutput, resolvePrompt } from '../ports/resolve.js';
 import { readWorkspaceIndex } from '../../utils/workspace-index-yml.js';
-import { expandTildePath } from '../../utils/path-resolution.js';
+import { resolveDeclaredPath } from '../../utils/path-resolution.js';
 
 // ---------------------------------------------------------------------------
 // Classification
@@ -119,7 +119,7 @@ export async function resolveResourceSpec(
           if (pkgName) {
             const pkgEntry = index.packages[pkgName];
             if (pkgEntry?.path) {
-              packageSourcePath = expandTildePath(pkgEntry.path);
+              packageSourcePath = resolveDeclaredPath(pkgEntry.path, context.targetDir).absolute;
             }
           }
           paired.push({ candidate: c, targetDir: context.targetDir, packageSourcePath });

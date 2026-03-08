@@ -87,7 +87,7 @@ export async function copyFilesWithConflictResolution(
     // Resolve target path based on registry path format
     const destination = resolveTargetPath(packageContext, entry.registryPath);
 
-    const sourceContent = await readTextFile(entry.sourcePath);
+    const sourceContent = entry.content ?? await readTextFile(entry.sourcePath);
     const transformed = transformMarkdownWithFlowMap(sourceContent, entry, process.cwd());
     const contentToWrite = transformed.output;
     const destExists = await exists(destination);
