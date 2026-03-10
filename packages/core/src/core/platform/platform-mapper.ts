@@ -335,7 +335,7 @@ export function mapWorkspaceFileToUniversal(
         if (!toPattern) continue;
 
         const toParts = toPattern.split('/');
-        const subdir = toParts[0];
+        const subdir = toParts.length > 1 ? toParts[0] : '';
 
         // Extract the relative path by mapping from fromPattern to toPattern
         const relPath = mapPathUsingFlowPattern(candidatePath, matchedFromPattern, toPattern);
@@ -470,27 +470,15 @@ function mapPathUsingFlowPattern(
     return targetRelPath;
   }
   
-  // No globs - exact mapping
-  // Extract just the filename and map it
-  const fileName = basename(sourcePath);
+  // No globs - exact mapping: use the target filename directly
   const toFileName = basename(toPattern);
-  
-  // Check if extensions differ
-  const sourceExt = extname(fileName);
-  const targetExt = extname(toFileName);
-  
-  let mappedFileName = fileName;
-  if (sourceExt !== targetExt && targetExt) {
-    mappedFileName = basename(fileName, sourceExt) + targetExt;
-  }
-  
-  // Get directory from toPattern
+
+  // Get directory from toPattern (skip first part which is the subdir)
   const toDir = dirname(toPattern);
   const toDirParts = toDir.split('/').filter(p => p && p !== '.');
-  // First part is the subdir, rest is directory structure
   const relDir = toDirParts.slice(1).join('/');
-  
-  return relDir ? `${relDir}/${mappedFileName}` : mappedFileName;
+
+  return relDir ? `${relDir}/${toFileName}` : toFileName;
 }
 
 /**

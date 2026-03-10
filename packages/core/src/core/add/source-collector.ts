@@ -6,6 +6,7 @@ import { isDirectory, isFile, walkFiles } from '../../utils/fs.js';
 import { normalizePathForProcessing } from '../../utils/path-normalization.js';
 import { mapWorkspaceFileToUniversal } from '../platform/platform-mapper.js';
 import { isPlatformRootFile } from '../platform/platform-utils.js';
+import { detectAllPlatforms } from '../platforms.js';
 import type { Flow } from '../../types/flows.js';
 
 export interface SourceEntry {
@@ -17,8 +18,24 @@ export interface SourceEntry {
 }
 
 /**
+ * Detect whether a directory is a platform-specific project
+ * by checking platforms.jsonc detection markers against the directory.
+ * Returns the directory path if a platform is found, or null otherwise.
+ */
+async function detectInputDirectoryPlatform(dirPath: string): Promise<string | null> {
+  const results = await detectAllPlatforms(dirPath);
+  const detected = results.some(r => r.detected);
+  return detected ? dirPath : null;
+}
+
+/**
  * Collect source entries from a workspace path for adding to a package source.
  * Uses IMPORT flows (workspace → package direction) to map files correctly.
+ *
+ * When the input is a directory with a detected platform (e.g., a Claude plugin
+ * with .claude-plugin/plugin.json), the directory itself is used as the
+ * effective workspace root for flow matching. This aligns with how the install
+ * pipeline detects source platforms before applying import flows.
  *
  * @param resolvedPath - Absolute path to the file or directory to collect
  * @param cwd - Workspace root directory
@@ -29,8 +46,16 @@ export async function collectSourceEntries(resolvedPath: string, cwd: string, in
   const effectiveInputRoot = inputRoot ?? (await isDirectory(resolvedPath) ? resolvedPath : undefined);
 
   if (await isDirectory(resolvedPath)) {
+    // When the input directory is a platform-specific project, use it as the
+    // effective workspace root so import flow patterns match correctly.
+    // e.g., for a Claude plugin at ./skills-dev, files like agents/reviewer.md
+    // will match claude-plugin import flow "agents/**/*.md" instead of
+    // falling to root/skills-dev/agents/reviewer.md.
+    const detectedRoot = await detectInputDirectoryPlatform(resolvedPath);
+    const effectiveCwd = detectedRoot ?? cwd;
+
     for await (const filePath of walkFiles(resolvedPath)) {
-      const entry = deriveSourceEntry(filePath, cwd, effectiveInputRoot);
+      const entry = deriveSourceEntry(filePath, effectiveCwd, effectiveInputRoot);
       if (!entry) {
         throw new Error(`Unsupported file inside directory: ${relative(cwd, filePath)}`);
       }
