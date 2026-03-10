@@ -1,21 +1,21 @@
 /**
- * CLI handler for the `opkg mv` command.
+ * CLI handler for the `opkg move` command.
  *
  * Supports both interactive (no args) and non-interactive modes.
  */
 
 import type { Command } from 'commander';
-import { runMvPipeline, type MvOptions } from '@opkg/core/core/mv/mv-pipeline.js';
+import { runMovePipeline, type MoveOptions } from '@opkg/core/core/move/move-pipeline.js';
 import { createCliExecutionContext } from '../cli/context.js';
 import { createInteractionPolicy, PromptTier } from '@opkg/core/core/interaction-policy.js';
 import { resolveOutput, resolvePrompt } from '@opkg/core/core/ports/resolve.js';
 import { formatPathForDisplay } from '@opkg/core/utils/formatters.js';
 
-export async function setupMvCommand(args: any[]): Promise<void> {
+export async function setupMoveCommand(args: any[]): Promise<void> {
   const [resource, newName, options, command] = args as [
     string | undefined,
     string | undefined,
-    MvOptions & { from?: string },
+    MoveOptions & { from?: string },
     Command,
   ];
   const programOpts = command.parent?.opts() || {};
@@ -43,12 +43,12 @@ export async function setupMvCommand(args: any[]): Promise<void> {
     if (!policy.canPrompt(PromptTier.OptionalMenu)) {
       throw new Error(
         '<resource> argument is required in non-interactive mode.\n' +
-        'Usage: opkg mv <resource> <new-name> [options]\n\n' +
+        'Usage: opkg move <resource> <new-name> [options]\n\n' +
         'Examples:\n' +
-        '  opkg mv agents/my-agent new-agent        # rename agent\n' +
-        '  opkg mv skills/foo --to other-pkg         # relocate skill\n' +
-        '  opkg mv agents/foo bar --to other-pkg     # rename + relocate\n' +
-        '  opkg mv                                   # interactive mode (TTY only)'
+        '  opkg move agents/my-agent new-agent        # rename agent\n' +
+        '  opkg move skills/foo --to other-pkg         # relocate skill\n' +
+        '  opkg move agents/foo bar --to other-pkg     # rename + relocate\n' +
+        '  opkg move                                   # interactive mode (TTY only)'
       );
     }
 
@@ -80,7 +80,7 @@ export async function setupMvCommand(args: any[]): Promise<void> {
       ? toAnswer.trim()
       : undefined;
 
-    const result = await runMvPipeline(
+    const result = await runMovePipeline(
       resourceAnswer.trim(),
       effectiveNewName,
       { ...options, to: effectiveTo },
@@ -98,7 +98,7 @@ export async function setupMvCommand(args: any[]): Promise<void> {
   }
 
   // Non-interactive mode
-  const result = await runMvPipeline(resource, newName, options, execContext);
+  const result = await runMovePipeline(resource, newName, options, execContext);
 
   if (!result.success) {
     throw new Error(result.error || 'Move operation failed.');
@@ -114,8 +114,8 @@ export async function setupMvCommand(args: any[]): Promise<void> {
 }
 
 function formatOutput(
-  data: NonNullable<Awaited<ReturnType<typeof runMvPipeline>>['data']>,
-  options: MvOptions,
+  data: NonNullable<Awaited<ReturnType<typeof runMovePipeline>>['data']>,
+  options: MoveOptions,
   cwd: string,
   out: ReturnType<typeof resolveOutput>,
 ): void {

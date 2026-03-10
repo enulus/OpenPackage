@@ -91,7 +91,7 @@ program
       // All commands section - ultra compact
       output += 'All commands:\n\n';
       output += '    install, uninstall, list,\n';
-      output += '    new, add, remove, mv, sync, set,\n';
+      output += '    new, add, remove, move, sync, set,\n';
       output += '    publish, unpublish, search, view,\n';
       output += '    login, logout, config\n\n';
       
@@ -164,7 +164,8 @@ program
   }));
 
 program
-  .command('mv')
+  .command('move')
+  .alias('mv')
   .argument('[resource]', 'resource to rename/move (e.g., skills/foo)')
   .argument('[new-name]', 'new name for the resource')
   .description('Rename or relocate a resource')
@@ -174,8 +175,8 @@ program
   .option('--dry-run', 'preview changes')
   .option('--json', 'structured output')
   .action(withErrorHandling(async (...args: any[]) => {
-    const { setupMvCommand } = await import('./commands/mv.js');
-    await setupMvCommand(args);
+    const { setupMoveCommand } = await import('./commands/move.js');
+    await setupMoveCommand(args);
   }));
 
 program

@@ -1,5 +1,5 @@
 /**
- * Mv Index Updater
+ * Move Index Updater
  *
  * Updates the workspace index (openpackage.index.yml) after rename or relocate operations.
  */

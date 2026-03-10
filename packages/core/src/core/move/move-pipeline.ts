@@ -1,7 +1,7 @@
 /**
- * Mv Pipeline
+ * Move Pipeline
  *
- * Core orchestrator for the `opkg mv` command. Supports three scenarios:
+ * Core orchestrator for the `opkg move` command. Supports three scenarios:
  * - Rename-only: in-place rename within the same package
  * - Relocate-only: move resource from one package to another
  * - Rename + Relocate: rename and move in one step
@@ -18,9 +18,9 @@ import { performMoveCleanup } from '../add/move-cleanup.js';
 import { renameEntries } from '../add/entry-renamer.js';
 import { readTextFile } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
-import { validateMvArgs, validateNotNoop } from './mv-validator.js';
-import { executeInPlaceRename } from './mv-rename-executor.js';
-import { updateIndexForRename } from './mv-index-updater.js';
+import { validateMoveArgs, validateNotNoop } from './move-validator.js';
+import { executeInPlaceRename } from './move-rename-executor.js';
+import { updateIndexForRename } from './move-index-updater.js';
 import { runSyncPipeline } from '../sync/sync-pipeline.js';
 import type { SourceEntry } from '../add/source-collector.js';
 
@@ -28,7 +28,7 @@ import type { SourceEntry } from '../add/source-collector.js';
 // Types
 // ---------------------------------------------------------------------------
 
-export interface MvOptions {
+export interface MoveOptions {
   to?: string;
   from?: string;
   force?: boolean;
@@ -36,7 +36,7 @@ export interface MvOptions {
   json?: boolean;
 }
 
-export interface MvResult {
+export interface MoveResult {
   action: 'rename' | 'relocate' | 'rename-relocate';
   sourcePath: string;
   sourcePackage: string;
@@ -52,17 +52,17 @@ export interface MvResult {
 // Pipeline
 // ---------------------------------------------------------------------------
 
-export async function runMvPipeline(
+export async function runMovePipeline(
   resourceInput: string,
   newName: string | undefined,
-  options: MvOptions,
+  options: MoveOptions,
   execContext: ExecutionContext,
-): Promise<CommandResult<MvResult>> {
+): Promise<CommandResult<MoveResult>> {
   const cwd = execContext.targetDir;
 
   // 1. Validate arguments
   try {
-    validateMvArgs(newName, options.to);
+    validateMoveArgs(newName, options.to);
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
@@ -111,7 +111,7 @@ export async function runMvPipeline(
   if (candidate.kind !== 'resource' || !candidate.resource) {
     return {
       success: false,
-      error: `"${resourceInput}" resolved to a package, not a resource. Use \`opkg mv\` with a resource reference.`,
+      error: `"${resourceInput}" resolved to a package, not a resource. Use \`opkg move\` with a resource reference.`,
     };
   }
 
@@ -155,7 +155,7 @@ export async function runMvPipeline(
   // 4. Determine scenario
   const isRename = !!newName && newName !== resourceName;
   const isRelocate = !!options.to && options.to !== sourcePackage;
-  const action: MvResult['action'] = isRename && isRelocate
+  const action: MoveResult['action'] = isRename && isRelocate
     ? 'rename-relocate'
     : isRename
       ? 'rename'
@@ -211,7 +211,7 @@ async function executeRename(
   sourcePackage: string,
   cwd: string,
   execContext: ExecutionContext,
-): Promise<CommandResult<MvResult>> {
+): Promise<CommandResult<MoveResult>> {
   const renameResult = await executeInPlaceRename(
     packageSourcePath, sourceKeys, resourceName, newName,
   );
@@ -247,10 +247,10 @@ async function executeRelocate(
   resourceName: string,
   newName: string | undefined,
   isRename: boolean,
-  action: MvResult['action'],
-  options: MvOptions,
+  action: MoveResult['action'],
+  options: MoveOptions,
   execContext: ExecutionContext,
-): Promise<CommandResult<MvResult>> {
+): Promise<CommandResult<MoveResult>> {
   let entries = await buildEntriesFromSourceKeys(packageSourcePath, resource.sourceKeys);
 
   if (isRename && newName) {

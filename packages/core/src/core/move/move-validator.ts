@@ -1,7 +1,7 @@
 /**
- * Mv Validator
+ * Move Validator
  *
- * Validation logic for the mv command arguments.
+ * Validation logic for the move command arguments.
  */
 
 import { validateAsName } from '../add/entry-renamer.js';
@@ -9,14 +9,14 @@ import { validateAsName } from '../add/entry-renamer.js';
 /**
  * Validate that at least one of newName or --to is provided.
  */
-export function validateMvArgs(newName: string | undefined, to: string | undefined): void {
+export function validateMoveArgs(newName: string | undefined, to: string | undefined): void {
   if (!newName && !to) {
     throw new Error(
       'At least one of <new-name> or --to <package> is required.\n' +
       'Usage:\n' +
-      '  opkg mv <resource> <new-name>           # rename in place\n' +
-      '  opkg mv <resource> --to <package>        # relocate to another package\n' +
-      '  opkg mv <resource> <new-name> --to <pkg> # rename and relocate'
+      '  opkg move <resource> <new-name>           # rename in place\n' +
+      '  opkg move <resource> --to <package>        # relocate to another package\n' +
+      '  opkg move <resource> <new-name> --to <pkg> # rename and relocate'
     );
   }
 
@@ -26,7 +26,7 @@ export function validateMvArgs(newName: string | undefined, to: string | undefin
 }
 
 /**
- * Validate that the mv operation is not a no-op (same name + same package).
+ * Validate that the move operation is not a no-op (same name + same package).
  */
 export function validateNotNoop(
   resourceName: string,

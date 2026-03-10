@@ -1,5 +1,5 @@
 /**
- * Mv Rename Executor
+ * Move Rename Executor
  *
  * In-place rename of a resource within a package source directory.
  * Handles both directory-based resources (skills) and file-based resources
