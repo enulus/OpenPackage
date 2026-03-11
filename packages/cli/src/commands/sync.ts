@@ -128,10 +128,16 @@ function printSyncAllResults(
   for (const pkg of allResult.json.packages) {
     if (pkg.status === 'synced' && pkg.result) {
       const actionFiles = pkg.result.files.filter(f => f.action === 'pushed' || f.action === 'pulled');
-      out.success(`${prefix}Synced ${pkg.packageName} (${actionFiles.length} files)`);
-      for (let i = 0; i < actionFiles.length; i++) {
-        const f = actionFiles[i];
-        const connector = getTreeConnector(i === actionFiles.length - 1);
+      const seen = new Set<string>();
+      const uniqueFiles = actionFiles.filter(f => {
+        if (seen.has(f.sourceKey)) return false;
+        seen.add(f.sourceKey);
+        return true;
+      });
+      out.success(`${prefix}Synced ${pkg.packageName} (${uniqueFiles.length} files)`);
+      for (let i = 0; i < uniqueFiles.length; i++) {
+        const f = uniqueFiles[i];
+        const connector = getTreeConnector(i === uniqueFiles.length - 1);
         const label = f.operation ? `(${f.operation})` : '';
         const direction = f.action === 'pushed' ? '\u2191' : '\u2193';
         out.info(`  ${connector}${f.sourceKey} ${direction} ${label}`.trimEnd());

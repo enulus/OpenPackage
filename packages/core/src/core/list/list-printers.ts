@@ -14,10 +14,22 @@ export function printMetadataSection(metadata: ViewMetadataEntry[], output?: Out
   const out = output ?? resolveOutput();
   out.info(sectionHeader('Metadata', metadata.length));
   metadata.forEach((entry) => {
-    const valueStr = Array.isArray(entry.value)
-      ? entry.value.join(', ')
-      : String(entry.value);
-    out.info(`${dim(entry.key + ':')} ${valueStr}`);
+    if (typeof entry.value === 'object' && !Array.isArray(entry.value)) {
+      const fields = Object.entries(entry.value).filter(([, v]) => v !== undefined && v !== null && v !== '');
+      if (fields.length === 1) {
+        out.info(`${dim(entry.key + ':')} ${String(fields[0][1])}`);
+      } else {
+        out.info(`${dim(entry.key + ':')}`);
+        for (const [k, v] of fields) {
+          out.info(`  ${dim(k + ':')} ${String(v)}`);
+        }
+      }
+    } else {
+      const valueStr = Array.isArray(entry.value)
+        ? entry.value.join(', ')
+        : String(entry.value);
+      out.info(`${dim(entry.key + ':')} ${valueStr}`);
+    }
   });
 }
 

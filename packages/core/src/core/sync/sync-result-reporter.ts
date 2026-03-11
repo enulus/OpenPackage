@@ -70,8 +70,18 @@ export function formatSyncMessage(result: SyncPackageResult, dryRun?: boolean): 
   return lines.join('\n');
 }
 
+function dedupBySourceKey(files: SyncFileResult[]): SyncFileResult[] {
+  const seen = new Set<string>();
+  return files.filter(f => {
+    if (seen.has(f.sourceKey)) return false;
+    seen.add(f.sourceKey);
+    return true;
+  });
+}
+
 function appendFileTree(lines: string[], files: SyncFileResult[]): void {
-  const sorted = [...files].sort((a, b) => a.sourceKey.localeCompare(b.sourceKey));
+  const deduped = dedupBySourceKey(files);
+  const sorted = [...deduped].sort((a, b) => a.sourceKey.localeCompare(b.sourceKey));
   for (let i = 0; i < sorted.length; i++) {
     const connector = getTreeConnector(i === sorted.length - 1);
     const label = sorted[i].operation ? `(${sorted[i].operation})` : '';
@@ -149,10 +159,10 @@ export function aggregateSyncFileResults(
 ): SyncPackageResult {
   return {
     packageName,
-    pushed: files.filter(f => f.action === 'pushed').length,
-    pulled: files.filter(f => f.action === 'pulled').length,
-    removed: files.filter(f => f.action === 'removed').length,
-    skipped: files.filter(f => f.action === 'skipped').length,
+    pushed: dedupBySourceKey(files.filter(f => f.action === 'pushed')).length,
+    pulled: dedupBySourceKey(files.filter(f => f.action === 'pulled')).length,
+    removed: dedupBySourceKey(files.filter(f => f.action === 'removed')).length,
+    skipped: dedupBySourceKey(files.filter(f => f.action === 'skipped')).length,
     errors: files.filter(f => f.action === 'error').length,
     files,
   };

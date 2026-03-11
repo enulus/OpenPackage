@@ -7,7 +7,7 @@ import type { PackageYml, PackageRepository } from '../../types/index.js';
 
 export interface ViewMetadataEntry {
   key: string;
-  value: string | boolean | string[];
+  value: string | boolean | string[] | Record<string, unknown>;
 }
 
 /** Extract recognized manifest metadata for display (excludes dependencies) */
@@ -15,7 +15,7 @@ export function extractMetadataFromManifest(manifest: Partial<PackageYml>): View
   const entries: ViewMetadataEntry[] = [];
   const push = (key: string, value: unknown) => {
     if (value !== undefined && value !== null && value !== '') {
-      entries.push({ key, value: value as string | boolean | string[] });
+      entries.push({ key, value: value as ViewMetadataEntry['value'] });
     }
   };
   push('name', manifest.name);
