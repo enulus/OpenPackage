@@ -4,6 +4,7 @@ import type { CommandResult, UninstallOptions, ExecutionContext } from '../../ty
 import { ValidationError } from '../../utils/errors.js';
 import { getLocalOpenPackageDir, getLocalPackageYmlPath } from '../../utils/paths.js';
 import { readWorkspaceIndex, writeWorkspaceIndex } from '../../utils/workspace-index-yml.js';
+import { healAndPersistIndex } from '../../utils/workspace-index-healer.js';
 import { removeWorkspaceIndexEntry, removeWorkspaceIndexFileKeys } from '../../utils/workspace-index-ownership.js';
 import { processRootFileRemovals } from '../platform/root-file-uninstaller.js';
 import { exists, remove, walkFiles } from '../../utils/fs.js';
@@ -119,6 +120,10 @@ export async function runUninstallPipeline(
 
   // Look up package with multi-strategy matching (exact, case-insensitive, normalized, resource name)
   const { index, path: indexPath } = await readWorkspaceIndex(targetDir);
+
+  // Self-heal stale index entries before uninstall
+  await healAndPersistIndex(targetDir, index, indexPath);
+
   const match = findPackageInIndex(packageName, index.packages || {});
 
   if (!match) {

@@ -138,7 +138,7 @@ export async function resolveProvenance(
           if (options?.status && Object.keys(filteredFiles).length > 0) {
             const sourceRoot = resolveDeclaredPath(pkgEntry.path, targetDir).absolute;
             if (await exists(sourceRoot)) {
-              const statusMap = await checkContentStatus(targetDir, sourceRoot, filteredFiles);
+              const { statusMap } = await checkContentStatus(targetDir, sourceRoot, filteredFiles);
               for (const file of enhancedFiles) {
                 // Find matching status via "sourceKey::targetPath" composite key
                 const compositeKey = `${file.source}::${file.target}`;

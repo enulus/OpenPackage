@@ -16,10 +16,11 @@ import type {
   SyncAllResult,
   SyncAllJsonOutput,
 } from './sync-types.js';
-import { readWorkspaceIndex } from '../../utils/workspace-index-yml.js';
+import { readWorkspaceIndex, getWorkspaceIndexPath } from '../../utils/workspace-index-yml.js';
+import { healAndPersistIndex } from '../../utils/workspace-index-healer.js';
 import { resolvePackageSource } from '../source-resolution/resolve-package-source.js';
 import { assertMutableSourceOrThrow } from '../source-mutability.js';
-import { checkContentStatus } from '../list/content-status-checker.js';
+import { checkContentStatus, applyPendingHashUpdates } from '../list/content-status-checker.js';
 import { classifyFileActions } from './sync-status-classifier.js';
 import { executePushActions } from './sync-push-executor.js';
 import { executePullActions } from './sync-pull-executor.js';
@@ -75,6 +76,12 @@ export async function runSyncPipeline(
     return aggregateSyncFileResults(packageName, []);
   }
 
+  // Self-heal stale index entries (files deleted from disk)
+  const healResult = await healAndPersistIndex(cwd, index, getWorkspaceIndexPath(cwd), packageName);
+  if (healResult.healed && (!pkgIndex.files || Object.keys(pkgIndex.files).length === 0)) {
+    return aggregateSyncFileResults(packageName, []);
+  }
+
   // Resolve source
   const source = await resolvePackageSource(cwd, packageName);
 
@@ -104,7 +111,14 @@ export async function runSyncPipeline(
   }
 
   // Status scan
-  const statusMap = await checkContentStatus(cwd, packageRoot, filesMapping);
+  const { statusMap, pendingHashUpdates } = await checkContentStatus(cwd, packageRoot, filesMapping);
+  if (pendingHashUpdates.size > 0) {
+    try {
+      await applyPendingHashUpdates(cwd, packageName, pendingHashUpdates);
+    } catch (error) {
+      logger.warn(`Failed to apply hash pivot recovery: ${error}`);
+    }
+  }
 
   // Classify into actions
   let actions = classifyFileActions(statusMap, options.direction, options.conflicts);

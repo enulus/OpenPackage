@@ -171,6 +171,6 @@ async function updatePullHashesFromPipeline(
       logger.debug(`Updated workspace index hashes (pull) for ${packageName}`);
     }
   } catch (error) {
-    logger.debug(`Failed to update pull hashes: ${error}`);
+    logger.warn(`Failed to update pull hashes: ${error}`);
   }
 }

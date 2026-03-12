@@ -3,7 +3,8 @@ import path from 'path';
 import type { CommandResult, ExecutionContext } from '../../types/index.js';
 import { ValidationError } from '../../utils/errors.js';
 import { getLocalOpenPackageDir, getLocalPackageYmlPath } from '../../utils/paths.js';
-import { readWorkspaceIndex } from '../../utils/workspace-index-yml.js';
+import { readWorkspaceIndex, getWorkspaceIndexPath } from '../../utils/workspace-index-yml.js';
+import { healAndPersistIndex } from '../../utils/workspace-index-healer.js';
 import { resolveDeclaredPath } from '../../utils/path-resolution.js';
 import { exists } from '../../utils/fs.js';
 import type { WorkspaceIndexPackage } from '../../types/workspace-index.js';
@@ -11,7 +12,7 @@ import { logger } from '../../utils/logger.js';
 import { getTargetPath, findPackageInIndex } from '../../utils/workspace-index-helpers.js';
 import { parsePackageYml } from '../../utils/package-yml.js';
 import { scanUntrackedFiles, type UntrackedScanResult } from './untracked-files-scanner.js';
-import { checkContentStatus } from './content-status-checker.js';
+import { checkContentStatus, applyPendingHashUpdates } from './content-status-checker.js';
 import { isRegistryPath } from '../source-mutability.js';
 import { isPlatformId, getAllPlatforms, getPlatformDefinition } from '../platforms.js';
 import { normalizePlatforms } from '../platform/platform-mapper.js';
@@ -412,7 +413,7 @@ async function checkPackageStatus(
   if (statusEnabled && sourceExists) {
     isRegistryPackageFlag = isRegistryPath(sourceRoot);
     try {
-      const statusMap = await checkContentStatus(targetDir, sourceRoot, filesMapping);
+      const { statusMap, pendingHashUpdates } = await checkContentStatus(targetDir, sourceRoot, filesMapping);
       let modified = 0;
       let outdated = 0;
       let diverged = 0;
@@ -432,6 +433,15 @@ async function checkPackageStatus(
       outdatedCount = outdated;
       divergedCount = diverged;
       sourceDeletedCount = sourceDeleted;
+
+      // Apply hash pivot recovery (best-effort side effect during list)
+      if (pendingHashUpdates.size > 0) {
+        try {
+          await applyPendingHashUpdates(targetDir, pkgName, pendingHashUpdates);
+        } catch (error) {
+          logger.warn(`Failed to apply hash pivot recovery for ${pkgName}: ${error}`);
+        }
+      }
     } catch (error) {
       logger.debug(`Content status check failed for ${pkgName}: ${error}`);
     }
@@ -574,6 +584,12 @@ export async function runListPipeline(
   }
 
   const { index } = await readWorkspaceIndex(targetDir);
+
+  // Self-heal stale index entries when status checking is enabled
+  if (status) {
+    await healAndPersistIndex(targetDir, index, getWorkspaceIndexPath(targetDir));
+  }
+
   const packages = index.packages || {};
   const reports: ListPackageReport[] = [];
   const reportMap = new Map<string, ListPackageReport>();

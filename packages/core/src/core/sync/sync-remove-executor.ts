@@ -109,7 +109,7 @@ export async function executeRemoveActions(
       await writeWorkspaceIndex(record);
       logger.debug(`Removed ${removedSourceKeys.size} source key(s) from workspace index for ${packageName}`);
     } catch (error) {
-      logger.debug(`Failed to update workspace index after removal: ${error}`);
+      logger.warn(`Failed to update workspace index after removal: ${error}`);
     }
 
     if (allDeletedPaths.length > 0) {
@@ -117,7 +117,7 @@ export async function executeRemoveActions(
         const preserved = buildPreservedDirectoriesSet(cwd);
         await cleanupEmptyParents(cwd, allDeletedPaths, preserved);
       } catch (error) {
-        logger.debug(`Failed to clean up empty parents: ${error}`);
+        logger.warn(`Failed to clean up empty parents: ${error}`);
       }
     }
   }

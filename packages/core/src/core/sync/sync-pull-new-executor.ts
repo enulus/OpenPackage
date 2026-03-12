@@ -142,6 +142,6 @@ async function updateIndexWithNewFiles(
       logger.debug(`Added ${addedCount} new file(s) to workspace index for ${packageName}`);
     }
   } catch (error) {
-    logger.debug(`Failed to update workspace index with new files: ${error}`);
+    logger.warn(`Failed to update workspace index with new files: ${error}`);
   }
 }
