@@ -34,7 +34,7 @@ export async function executePullActions(
 
   const sourceKeyFilter = new Set(pullActions.map(a => a.sourceKey));
 
-  const init = await initPullPipelineContext(packageRoot, packageName, cwd);
+  const init = await initPullPipelineContext(packageRoot, packageName, cwd, options.platforms);
   if (init.platforms.length === 0) {
     logger.debug('No platforms detected in workspace, nothing to pull');
     return pullActions.map(a => ({

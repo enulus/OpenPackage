@@ -41,7 +41,9 @@ import { discoverResources } from '../resource-discoverer.js';
 import { promptResourceSelection } from '../resource-selection-menu.js';
 import { buildResourceInstallContexts } from '../unified/context-builders.js';
 import { logger } from '../../../utils/logger.js';
+import { readWorkspaceIndex } from '../../../utils/workspace-index-yml.js';
 import { getInstalledPackageVersion } from '../../openpackage.js';
+import type { Platform } from '../../platforms.js';
 import type { ResourceInstallationSpec } from '../convenience-matchers.js';
 import type { SelectedResource, ResourceDiscoveryResult, DiscoveredResource, ResourceType } from '../resource-types.js';
 
@@ -196,6 +198,9 @@ export class InstallOrchestrator {
           // Platform resolution may prompt if no platforms are auto-detected.
           context.platforms = await resolvePlatforms(context.targetDir, options.platforms, { interactive: policy.canPrompt(PromptTier.Required), output: resolveOutput(execContext), prompt: resolvePrompt(execContext) });
         }
+
+        // Check for orphaned platform files
+        await warnOrphanedPlatforms(context.targetDir, context.source.packageName, context.platforms, out);
 
         // When _skipDependencyInstall is set, we are being called from the wave
         // resolver loop. Just run the pipeline for this single package -- do not
@@ -687,6 +692,7 @@ export class InstallOrchestrator {
       if (context.platforms.length === 0) {
         context.platforms = await resolvePlatforms(context.targetDir, options.platforms, { interactive: policy.canPrompt(PromptTier.Required), output: resolveOutput(execContext), prompt: resolvePrompt(execContext) });
       }
+      await warnOrphanedPlatforms(context.targetDir, context.source.packageName, context.platforms, resolveOutput(execContext));
       return runUnifiedInstallPipeline(context);
     }
     
@@ -725,9 +731,10 @@ export class InstallOrchestrator {
     if (context.platforms.length === 0) {
       context.platforms = await resolvePlatforms(context.targetDir, options.platforms, { interactive: policy.canPrompt(PromptTier.Required), output: resolveOutput(execContext), prompt: resolvePrompt(execContext) });
     }
+    await warnOrphanedPlatforms(context.targetDir, context.source.packageName, context.platforms, resolveOutput(execContext));
     return runUnifiedInstallPipeline(context);
   }
-  
+
   /**
    * Handle interactive resource selection (--interactive option).
    * Discovers all resources, prompts for selection, and installs selected items.
@@ -929,6 +936,33 @@ export class InstallOrchestrator {
       ...result,
       error: result.success ? undefined : `${failedCount} resource${failedCount === 1 ? '' : 's'} failed to install`
     };
+  }
+}
+
+/**
+ * Warn if a package was previously installed to platforms that are no longer targeted.
+ */
+async function warnOrphanedPlatforms(
+  targetDir: string,
+  packageName: string,
+  currentPlatforms: Platform[],
+  out: OutputPort
+): Promise<void> {
+  try {
+    const wsRecord = await readWorkspaceIndex(targetDir);
+    const existingEntry = wsRecord.index.packages?.[packageName];
+    if (existingEntry?.platforms?.length) {
+      const orphaned = existingEntry.platforms.filter(p => !currentPlatforms.includes(p as Platform));
+      if (orphaned.length > 0) {
+        out.warn(
+          `${packageName} was previously installed to [${orphaned.join(', ')}] ` +
+          `which are no longer targeted. Those files remain on disk. ` +
+          `Run \`opkg uninstall ${packageName}\` then reinstall to clean up.`
+        );
+      }
+    }
+  } catch {
+    // Index not readable — skip orphan check
   }
 }
 

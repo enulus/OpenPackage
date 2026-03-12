@@ -238,7 +238,7 @@ export function serializePackageYml(config: PackageYml): string {
   }
 
   // Convert arrays from block style to flow style
-  const flowStyleArrays = ['keywords'];
+  const flowStyleArrays = ['keywords', 'platforms'];
 
   for (const arrayField of flowStyleArrays) {
     const arrayValue = config[arrayField as keyof PackageYml];
@@ -287,7 +287,12 @@ export async function writePackageYml(packageYmlPath: string, config: PackageYml
     migratedConfig['dev-dependencies'] = migratedConfig['dev-packages'];
   }
   delete migratedConfig['dev-packages'];
-  
+
+  // Strip empty platforms (removal sentinel from --no-platforms)
+  if (Array.isArray(migratedConfig.platforms) && migratedConfig.platforms.length === 0) {
+    delete migratedConfig.platforms;
+  }
+
   // Clean up legacy fields from all dependencies
   const cleanLegacyFields = (deps: PackageDependency[] | undefined) => {
     if (!deps) return;

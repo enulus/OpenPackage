@@ -17,7 +17,8 @@ export interface SetCommandOptions {
   license?: string;
   homepage?: string;
   private?: boolean;
-  
+  platforms?: string[] | false;  // string[] from --platforms, false from --no-platforms
+
   // Behavior flags
   force?: boolean;  // Skip confirmation prompts
   nonInteractive?: boolean;  // Error if no flags provided instead of prompting
@@ -35,6 +36,7 @@ export interface PackageManifestUpdates {
   license?: string;
   homepage?: string;
   private?: boolean;
+  platforms?: string[];  // empty array = removal sentinel
 }
 
 /**

@@ -73,6 +73,14 @@ function sanitizeWorkspaceIndexPackage(entry: any): WorkspaceIndexPackage | null
     }
   }
 
+  const rawPlatforms = (entry as { platforms?: unknown }).platforms;
+  if (Array.isArray(rawPlatforms)) {
+    const platforms = rawPlatforms.filter((p): p is string => typeof p === 'string' && p.trim().length > 0);
+    if (platforms.length > 0) {
+      pkg.platforms = sortAndDedupeStrings(platforms);
+    }
+  }
+
   const rawFiles = (entry as { files?: unknown }).files;
   if (rawFiles && typeof rawFiles === 'object') {
     const files: Record<string, (string | WorkspaceIndexFileMapping)[]> = {};
@@ -321,6 +329,9 @@ export async function writeWorkspaceIndex(record: WorkspaceIndexRecord): Promise
     }
     if (pkg.dependencies && pkg.dependencies.length > 0) {
       sortedPkg.dependencies = sortAndDedupeStrings(pkg.dependencies);
+    }
+    if (pkg.platforms && pkg.platforms.length > 0) {
+      sortedPkg.platforms = sortAndDedupeStrings(pkg.platforms);
     }
     if (pkg.marketplace) {
       sortedPkg.marketplace = pkg.marketplace;

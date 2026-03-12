@@ -218,6 +218,8 @@ program
   .option('--license <license>', 'update license (e.g., MIT, Apache-2.0)')
   .option('--homepage <url>', 'update homepage URL')
   .option('--private <bool>', 'mark package as private')
+  .option('--platforms <platforms...>', 'target platforms (e.g., cursor claude)')
+  .option('--no-platforms', 'clear platform constraints (revert to auto-detect)')
   .option('--force', 'skip confirmation prompts')
   .option('--non-interactive', 'require at least one field flag (no prompts)')
   .action(withErrorHandling(async (...args: any[]) => {

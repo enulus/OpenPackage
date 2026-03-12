@@ -10,7 +10,7 @@
 import type { PackageConversionContext } from '../../types/conversion-context.js';
 import type { Platform } from '../platforms.js';
 import { readWorkspaceIndex } from '../../utils/workspace-index-yml.js';
-import { getDetectedPlatforms } from '../platforms.js';
+import { resolvePlatforms } from '../install/platform-resolution.js';
 import { detectFormatWithContextFromDirectory } from '../install/helpers/format-detection.js';
 import {
   processFlowsForPackage,
@@ -34,9 +34,10 @@ export async function initPullPipelineContext(
   packageRoot: string,
   packageName: string,
   cwd: string,
+  specifiedPlatforms?: string[],
 ): Promise<PullPipelineInit> {
   const [platforms, { context: conversionContext }, packageVersion] = await Promise.all([
-    getDetectedPlatforms(cwd),
+    resolvePlatforms(cwd, specifiedPlatforms),
     detectFormatWithContextFromDirectory(packageRoot),
     readPackageVersion(cwd, packageName),
   ]);

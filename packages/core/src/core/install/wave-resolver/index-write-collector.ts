@@ -34,6 +34,7 @@ export interface PackageEntryUpdate {
   files: Record<string, (string | WorkspaceIndexFileMapping)[]>;
   dependencies?: string[];
   marketplace?: { url: string; commitSha: string; pluginName: string };
+  platforms?: string[];
 }
 
 /**
@@ -189,6 +190,7 @@ function applyMutation(
         entry.dependencies = mutation.dependencies;
       }
       if (mutation.marketplace) entry.marketplace = mutation.marketplace;
+      if (mutation.platforms && mutation.platforms.length > 0) entry.platforms = mutation.platforms;
       index.packages[mutation.packageName] = entry;
       break;
     }
