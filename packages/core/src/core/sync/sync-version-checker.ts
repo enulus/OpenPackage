@@ -244,6 +244,6 @@ export async function updateIndexVersion(
     await writeWorkspaceIndex(record);
     logger.debug(`Updated workspace index version for ${packageName} to ${newVersion}`);
   } catch (error) {
-    logger.debug(`Failed to update index version: ${error}`);
+    logger.warn(`Failed to update index version: ${error}`);
   }
 }

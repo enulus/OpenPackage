@@ -16,11 +16,17 @@ import path from 'path';
 import { calculateFileHash } from '../../utils/hash-utils.js';
 import { readTextFile, exists } from '../../utils/fs.js';
 import { getTargetPath, isComplexMapping, isMergedMapping } from '../../utils/workspace-index-helpers.js';
+import { readWorkspaceIndex, writeWorkspaceIndex } from '../../utils/workspace-index-yml.js';
 import { extractContentByKeys } from '../save/save-merge-extractor.js';
 import type { WorkspaceIndexFileMapping } from '../../types/workspace-index.js';
 import { logger } from '../../utils/logger.js';
 
 export type ContentStatus = 'modified' | 'clean' | 'outdated' | 'diverged' | 'merged' | 'source-deleted';
+
+export interface ContentStatusResult {
+  statusMap: Map<string, ContentStatus>;
+  pendingHashUpdates: Map<string, { hash?: string; sourceHash?: string }>;
+}
 
 /**
  * Check content status for all tracked files in a package.
@@ -28,14 +34,15 @@ export type ContentStatus = 'modified' | 'clean' | 'outdated' | 'diverged' | 'me
  * @param targetDir - Workspace root directory
  * @param packageSourceRoot - Absolute path to package source directory
  * @param filesMapping - Workspace index file mappings for this package
- * @returns Map keyed by "sourceKey::targetPath" → ContentStatus
+ * @returns ContentStatusResult with status map and any pending hash updates
  */
 export async function checkContentStatus(
   targetDir: string,
   packageSourceRoot: string,
   filesMapping: Record<string, (string | WorkspaceIndexFileMapping)[]>
-): Promise<Map<string, ContentStatus>> {
+): Promise<ContentStatusResult> {
   const results = new Map<string, ContentStatus>();
+  const pendingHashUpdates = new Map<string, { hash?: string; sourceHash?: string }>();
 
   for (const [sourceKey, targets] of Object.entries(filesMapping)) {
     if (!Array.isArray(targets) || targets.length === 0) continue;
@@ -65,14 +72,35 @@ export async function checkContentStatus(
         if (installHash) {
           const status = await checkThreeWayStatus(absTarget, absSource, installHash, installSourceHash);
           results.set(key, status);
+
+          // Back-fill missing sourceHash for pre-migration data
+          if (!installSourceHash && (await exists(absSource))) {
+            try {
+              const sourceContent = await readTextFile(absSource);
+              pendingHashUpdates.set(key, { sourceHash: await calculateFileHash(sourceContent) });
+            } catch { /* best-effort */ }
+          }
         } else {
+          // No install-time hash — compute current state as baseline (hash pivot recovery)
           results.set(key, 'clean');
+          try {
+            const workspaceContent = await readTextFile(absTarget);
+            const computedHash = await calculateFileHash(workspaceContent);
+            const pivot: { hash?: string; sourceHash?: string } = { hash: computedHash };
+            if (await exists(absSource)) {
+              const sourceContent = await readTextFile(absSource);
+              pivot.sourceHash = await calculateFileHash(sourceContent);
+            }
+            pendingHashUpdates.set(key, pivot);
+          } catch {
+            // Best-effort — if we can't compute, skip
+          }
         }
       }
     }
   }
 
-  return results;
+  return { statusMap: results, pendingHashUpdates };
 }
 
 /**
@@ -151,5 +179,61 @@ async function checkMergedFileStatus(
   } catch (error) {
     logger.debug(`Merged content check failed for ${absWorkspacePath}: ${error}`);
     return 'merged';
+  }
+}
+
+/**
+ * Apply pending hash updates to the workspace index.
+ *
+ * Reads the index, finds matching mappings by sourceKey::targetPath key,
+ * and upgrades them from string → object form if needed, then sets hash/sourceHash.
+ * Writes atomically via writeWorkspaceIndex.
+ */
+export async function applyPendingHashUpdates(
+  targetDir: string,
+  packageName: string,
+  pendingUpdates: Map<string, { hash?: string; sourceHash?: string }>,
+): Promise<void> {
+  if (pendingUpdates.size === 0) return;
+
+  const record = await readWorkspaceIndex(targetDir);
+  const pkg = record.index.packages?.[packageName];
+  if (!pkg?.files) return;
+
+  let updated = false;
+
+  for (const [compositeKey, update] of pendingUpdates) {
+    const separatorIdx = compositeKey.indexOf('::');
+    if (separatorIdx === -1) continue;
+
+    const sourceKey = compositeKey.slice(0, separatorIdx);
+    const targetPath = compositeKey.slice(separatorIdx + 2);
+
+    const targets = pkg.files[sourceKey];
+    if (!Array.isArray(targets)) continue;
+
+    for (let i = 0; i < targets.length; i++) {
+      const mapping = targets[i];
+      const mappingTarget = getTargetPath(mapping);
+      if (mappingTarget !== targetPath) continue;
+
+      if (isComplexMapping(mapping)) {
+        if (update.hash) mapping.hash = update.hash;
+        if (update.sourceHash) mapping.sourceHash = update.sourceHash;
+      } else {
+        // Upgrade string → object form
+        const upgraded: WorkspaceIndexFileMapping = { target: mapping as string };
+        if (update.hash) upgraded.hash = update.hash;
+        if (update.sourceHash) upgraded.sourceHash = update.sourceHash;
+        targets[i] = upgraded;
+      }
+      updated = true;
+      break;
+    }
+  }
+
+  if (updated) {
+    await writeWorkspaceIndex(record);
+    logger.debug(`Applied ${pendingUpdates.size} hash pivot update(s) for ${packageName}`);
   }
 }

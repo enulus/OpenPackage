@@ -55,7 +55,7 @@ export async function discoverSyncablePackages(
 
     // Content status check
     try {
-      const statusMap = await checkContentStatus(
+      const { statusMap } = await checkContentStatus(
         targetDir,
         source.absolutePath,
         pkgEntry.files,

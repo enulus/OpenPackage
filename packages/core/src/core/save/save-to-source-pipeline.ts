@@ -77,7 +77,7 @@ export async function executeSavePipeline(
   let activeFilesMapping = filesMapping;
 
   try {
-    const statusMap = await checkContentStatus(cwd, packageRoot, filesMapping);
+    const { statusMap } = await checkContentStatus(cwd, packageRoot, filesMapping);
     statusSummary.statusMap = statusMap;
 
     const filteredMapping: Record<string, (string | WorkspaceIndexFileMapping)[]> = {};
@@ -371,7 +371,7 @@ async function updateWorkspaceHashes(
           }
           updated = true;
         } catch (error) {
-          logger.debug(`Failed to update hash for ${absTarget}: ${error}`);
+          logger.warn(`Failed to update hash for ${absTarget}: ${error}`);
         }
       }
     }
@@ -381,6 +381,6 @@ async function updateWorkspaceHashes(
       logger.debug(`Updated workspace index hashes for ${packageName}`);
     }
   } catch (error) {
-    logger.debug(`Failed to update workspace hashes: ${error}`);
+    logger.warn(`Failed to update workspace hashes: ${error}`);
   }
 }

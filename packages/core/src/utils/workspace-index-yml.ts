@@ -1,8 +1,10 @@
+import { promises as fs } from 'fs';
 import { dirname, join } from 'path';
 import * as yaml from 'js-yaml';
 import { FILE_PATTERNS } from '../constants/index.js';
 import { getLocalOpenPackageDir } from './paths.js';
-import { exists, ensureDir, readTextFile, writeTextFile } from './fs.js';
+import { exists, ensureDir, readTextFile } from './fs.js';
+import { FileSystemError } from './errors.js';
 import { normalizePathForProcessing } from './path-normalization.js';
 import { logger } from './logger.js';
 import { WorkspaceIndex, WorkspaceIndexPackage } from '../types/workspace-index.js';
@@ -339,5 +341,12 @@ export async function writeWorkspaceIndex(record: WorkspaceIndexRecord): Promise
   );
 
   const serialized = `${HEADER_COMMENT}\n\n${body}`;
-  await writeTextFile(indexPath, serialized);
+  const tempPath = `${indexPath}.tmp`;
+  try {
+    await fs.writeFile(tempPath, serialized, 'utf8');
+    await fs.rename(tempPath, indexPath);
+  } catch (error) {
+    try { await fs.unlink(tempPath); } catch { /* ignore cleanup error */ }
+    throw new FileSystemError(`Failed to write workspace index: ${indexPath}`, { path: indexPath, error });
+  }
 }
