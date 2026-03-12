@@ -35,6 +35,7 @@ export function normalizeSyncOptions(raw: {
   platforms?: string[];
   prefer?: string;
   global?: boolean;
+  versionOverride?: string;
 }): SyncOptions {
   // Determine direction
   let direction: SyncDirection;
@@ -67,5 +68,7 @@ export function normalizeSyncOptions(raw: {
     conflicts,
     platforms: raw.platforms,
     prefer: raw.prefer,
+    versionOverride: raw.versionOverride,
+    force: raw.force ?? false,
   };
 }

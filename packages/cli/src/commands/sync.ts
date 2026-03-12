@@ -9,6 +9,7 @@
 import type { Command } from 'commander';
 
 import { normalizeSyncOptions } from '@opkg/core/core/sync/sync-options-normalizer.js';
+import { parseNameWithVersionOverride } from '@opkg/core/utils/name-version-parser.js';
 import { runDirectSyncFlow } from '@opkg/core/core/sync/sync-direct-flow.js';
 import { runSyncAllPipeline } from '@opkg/core/core/sync/sync-pipeline.js';
 import { formatSyncMessage, formatSyncAllSummary } from '@opkg/core/core/sync/sync-result-reporter.js';
@@ -35,8 +36,17 @@ export async function setupSyncCommand(args: any[]): Promise<void> {
   const [nameArg, options, command] = args as [string | undefined, SyncCommandOptions, Command];
   const programOpts = command.parent?.opts() || {};
 
-  // Normalize options at CLI boundary
-  const normalized = normalizeSyncOptions(options);
+  // Parse @<range> override before normalization (single pass)
+  let effectiveNameArg = nameArg;
+  let versionOverride: string | undefined;
+  if (nameArg) {
+    const parsed = parseNameWithVersionOverride(nameArg);
+    effectiveNameArg = parsed.name;
+    versionOverride = parsed.versionOverride;
+  }
+
+  // Normalize options at CLI boundary (single pass)
+  const normalized = normalizeSyncOptions({ ...options, versionOverride });
 
   // ── Sync-all path (no argument) ────────────────────────────────────
   if (!nameArg) {
@@ -78,7 +88,7 @@ export async function setupSyncCommand(args: any[]): Promise<void> {
     outputMode: 'plain',
   });
 
-  const result = await runDirectSyncFlow(nameArg, normalized, traverseOpts, ctx);
+  const result = await runDirectSyncFlow(effectiveNameArg, normalized, traverseOpts, ctx);
 
   // JSON output path
   if (options.json) {

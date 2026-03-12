@@ -27,9 +27,19 @@ import { executeRemoveActions } from './sync-remove-executor.js';
 import { executePullNewActions } from './sync-pull-new-executor.js';
 import { detectNewSourceFiles } from './sync-source-scanner.js';
 import { resolveConflictsInteractively } from './sync-conflict-resolver.js';
+import {
+  readSourcePackageVersion,
+  readManifestRangeForDependency,
+  checkVersionConstraint,
+  resolveVersionMismatch,
+  updateManifestRange,
+  updateIndexVersion,
+} from './sync-version-checker.js';
+import type { VersionUpdateInfo } from './sync-version-checker.js';
 import { discoverSyncablePackages } from './sync-discovery.js';
 import { aggregateSyncFileResults, buildSyncAllResult, formatSyncMessage } from './sync-result-reporter.js';
 import { resolveOutput, resolvePrompt } from '../ports/resolve.js';
+import { isUnversionedVersion } from '../package-versioning.js';
 import { logger } from '../../utils/logger.js';
 
 // ---------------------------------------------------------------------------
@@ -78,6 +88,20 @@ export async function runSyncPipeline(
 
   const packageRoot = source.absolutePath;
   const filesMapping = pkgIndex.files;
+
+  // Version constraint check (pull and bidirectional only)
+  let versionUpdateInfo: VersionUpdateInfo | undefined;
+  if (options.direction !== 'push') {
+    const outcome = await checkAndResolveVersion(
+      packageName, cwd, packageRoot, options, ctx,
+    );
+    if (outcome === 'skip') {
+      return aggregateSyncFileResults(packageName, []);
+    }
+    if (outcome !== 'none') {
+      versionUpdateInfo = outcome;
+    }
+  }
 
   // Status scan
   const statusMap = await checkContentStatus(cwd, packageRoot, filesMapping);
@@ -175,7 +199,71 @@ export async function runSyncPipeline(
     }
   }
 
-  return aggregateSyncFileResults(packageName, allResults);
+  const result = aggregateSyncFileResults(packageName, allResults);
+
+  // Attach version update info
+  if (versionUpdateInfo) {
+    result.versionUpdate = versionUpdateInfo;
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Version constraint check helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Check version constraints and resolve mismatches.
+ * Returns version update info, 'skip', or 'none'.
+ */
+async function checkAndResolveVersion(
+  packageName: string,
+  cwd: string,
+  packageRoot: string,
+  options: SyncOptions,
+  ctx?: ExecutionContext,
+): Promise<VersionUpdateInfo | 'skip' | 'none'> {
+  // Read source version and manifest range in parallel
+  const [sourceVersion, manifestRange] = await Promise.all([
+    readSourcePackageVersion(packageRoot),
+    readManifestRangeForDependency(cwd, packageName),
+  ]);
+
+  // No source version or unversioned → unconstrained
+  if (!sourceVersion || isUnversionedVersion(sourceVersion)) {
+    return 'none';
+  }
+
+  const check = checkVersionConstraint(sourceVersion, manifestRange);
+
+  if (check.status === 'unconstrained' || check.status === 'satisfied') {
+    if (!options.dryRun) {
+      await updateIndexVersion(cwd, packageName, sourceVersion);
+    }
+    return { newVersion: sourceVersion };
+  }
+
+  // Mismatch → resolve via shared cascade
+  const prompt = resolvePrompt(ctx);
+  const resolution = await resolveVersionMismatch(
+    packageName, check, options, prompt, 'sync',
+  );
+
+  if (resolution.action === 'skip') {
+    return 'skip';
+  }
+
+  if (!options.dryRun) {
+    await updateManifestRange(cwd, packageName, sourceVersion, resolution.newRange);
+    await updateIndexVersion(cwd, packageName, sourceVersion);
+  }
+
+  return {
+    newVersion: sourceVersion,
+    oldRange: manifestRange,
+    newRange: resolution.newRange,
+  };
 }
 
 // ---------------------------------------------------------------------------

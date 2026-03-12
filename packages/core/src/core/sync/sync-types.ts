@@ -17,6 +17,10 @@ export interface SyncOptions {
   platforms?: string[];
   /** Push-specific: prefer specified platform version for save conflicts */
   prefer?: string;
+  /** Version range override from @<range> notation */
+  versionOverride?: string;
+  /** Preserve original --force flag (separate from conflicts strategy) */
+  force?: boolean;
 }
 
 export type SyncFileAction =
@@ -34,6 +38,12 @@ export interface SyncPackageResult {
   skipped: number;
   errors: number;
   files: SyncFileResult[];
+  versionUpdate?: {
+    oldVersion?: string;
+    newVersion: string;
+    oldRange?: string;
+    newRange?: string;
+  };
 }
 
 export interface SyncFileResult {

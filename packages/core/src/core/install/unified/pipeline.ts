@@ -11,8 +11,14 @@ import { shouldUpdateManifest } from './context-helpers.js';
 import { logger } from '../../../utils/logger.js';
 import { createWorkspacePackageYml } from '../../package-management.js';
 import { cleanupTempDirectory } from '../strategies/helpers/temp-directory.js';
-import { resolveOutput } from '../../ports/resolve.js';
+import { resolveOutput, resolvePrompt } from '../../ports/resolve.js';
 import { checkSubsumption, resolveSubsumption } from '../orchestrator/subsumption-resolver.js';
+import {
+  readManifestRangeForDependency,
+  checkVersionConstraint,
+  resolveVersionMismatch,
+  updateManifestRange,
+} from '../../sync/sync-version-checker.js';
 
 function assertPipelineContextComplete(ctx: InstallationContext): void {
   if (!ctx.source.type) {
@@ -122,6 +128,15 @@ export async function runUnifiedInstallPipeline(
       return createAlreadyCoveredResult(ctx);
     }
 
+    // Phase 1.7: Version constraint validation (mutable sources only).
+    // Stop spinner before potential interactive prompt, restart after.
+    if (ctx.source.type === 'path' || ctx.source.type === 'workspace') {
+      spinner1.stop();
+      await versionValidationPhase(ctx);
+      spinner1 = out.spinner();
+      spinner1.start(`Preparing ${ctx.source.packageName}`);
+    }
+
     // Phase 2: Convert package format if needed.
     // After load phase, ctx.source.packageName is guaranteed set by assertPipelineContextComplete.
     spinner1.message(`Preparing ${ctx.source.packageName}`);
@@ -223,4 +238,33 @@ function createAlreadyCoveredResult(ctx: InstallationContext): CommandResult {
       reason: 'Already installed via broader package'
     }
   };
+}
+
+/**
+ * Version validation phase for mutable sources.
+ *
+ * Checks if the source version satisfies the consumer's manifest range.
+ * Uses the shared resolveVersionMismatch cascade (force/interactive/error).
+ */
+async function versionValidationPhase(ctx: InstallationContext): Promise<void> {
+  const sourceVersion = ctx.source.version;
+  if (!sourceVersion) return;
+
+  const manifestRange = await readManifestRangeForDependency(
+    ctx.targetDir, ctx.source.packageName,
+  );
+  const check = checkVersionConstraint(sourceVersion, manifestRange);
+
+  if (check.status !== 'mismatch') return;
+
+  const prompt = resolvePrompt(ctx.execution);
+  const resolution = await resolveVersionMismatch(
+    ctx.source.packageName, check, { force: ctx.options?.force }, prompt, 'install',
+  );
+
+  if (resolution.action === 'skip') {
+    throw new Error(`Installation cancelled: version mismatch for ${ctx.source.packageName}`);
+  }
+
+  await updateManifestRange(ctx.targetDir, ctx.source.packageName, sourceVersion, resolution.newRange);
 }

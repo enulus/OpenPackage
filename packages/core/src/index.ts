@@ -102,6 +102,7 @@ export { runSetPipeline } from './core/set/set-pipeline.js';
 
 export { runSyncPipeline, runSyncAllPipeline } from './core/sync/sync-pipeline.js';
 export { normalizeSyncOptions } from './core/sync/sync-options-normalizer.js';
+export { parseNameWithVersionOverride } from './utils/name-version-parser.js';
 export type {
   SyncOptions,
   SyncDirection,

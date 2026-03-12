@@ -83,6 +83,11 @@ const testFiles: string[] = [
   'tests/core/resources/resource-resolver.test.ts',
   'tests/core/resources/resource-spec.test.ts',
 
+  // Core - Sync
+  'tests/core/sync/name-version-parser.test.ts',
+  'tests/core/sync/sync-version-checker.test.ts',
+  'tests/core/sync/sync-version-resolver.test.ts',
+
   // Core - Source Resolution
   'tests/core/source-resolution/source-mutability.test.ts',
   'tests/core/source-resolution/source-resolution.test.ts',

@@ -67,6 +67,18 @@ export function formatSyncMessage(result: SyncPackageResult, dryRun?: boolean): 
     }
   }
 
+  // Version updates
+  if (result.versionUpdate) {
+    const vu = result.versionUpdate;
+    if (vu.oldRange && vu.newRange && vu.oldRange !== vu.newRange) {
+      lines.push(`  Updated manifest: ${vu.oldRange} → ${vu.newRange}`);
+    }
+    if (vu.newVersion) {
+      const oldLabel = vu.oldVersion ?? '(stale)';
+      lines.push(`  Updated index version: ${oldLabel} → ${vu.newVersion}`);
+    }
+  }
+
   return lines.join('\n');
 }
 
