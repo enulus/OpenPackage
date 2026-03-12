@@ -17,12 +17,18 @@ import type { ExecutionContext } from '../../types/execution-context.js';
 import type { ResolvedResource } from '../resources/resource-builder.js';
 import { classifyResourceSpec, resolveResourceSpec, type ResolvedTarget } from '../resources/resource-spec.js';
 import { parseResourceQuery } from '../resources/resource-query.js';
+import { resolveFromSource, formatCandidateTitle, formatCandidateDescription } from '../resources/resource-resolver.js';
+import { disambiguate } from '../resources/disambiguation-prompt.js';
+import { resolveMutableSource } from '../source-resolution/resolve-mutable-source.js';
+import { isProjectScopedPath } from '../scope-resolution.js';
 import { addSourceEntriesToPackage } from '../add/add-to-source-pipeline.js';
 import { performMoveCleanup } from '../add/move-cleanup.js';
 import { renameEntries } from '../add/entry-renamer.js';
 import { readTextFile } from '../../utils/fs.js';
+import { resolveOutput, resolvePrompt } from '../ports/resolve.js';
 import { validateMoveArgs, validateNotNoop } from './move-validator.js';
 import { executeInPlaceRename } from './move-rename-executor.js';
+import { disambiguatePlatform, groupFilesByPlatform } from '../platform/platform-disambiguation.js';
 import type { SourceEntry } from '../add/source-collector.js';
 
 // ---------------------------------------------------------------------------
@@ -32,6 +38,7 @@ import type { SourceEntry } from '../add/source-collector.js';
 export interface MoveOptions {
   to?: string;
   from?: string;
+  platform?: string;
   force?: boolean;
   dryRun?: boolean;
   json?: boolean;
@@ -68,7 +75,12 @@ export async function runMovePipeline(
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 
-  // 2. Classify and resolve the resource spec
+  // 2. Validate flag combinations
+  if (options.platform && options.from) {
+    return { success: false, error: '--platform cannot be used with --from.' };
+  }
+
+  // 3. Classify and resolve the resource spec
   const classification = classifyResourceSpec(resourceInput);
 
   if (classification.kind !== 'resource-ref') {
@@ -80,23 +92,37 @@ export async function runMovePipeline(
     };
   }
 
-  const traverseOpts = { programOpts: { cwd: execContext.sourceCwd } };
-
   let resolved: ResolvedTarget[];
-  try {
-    resolved = await resolveResourceSpec(
-      resourceInput,
-      traverseOpts,
-      {
-        scopePreference: 'project',
-        notFoundMessage:
-          `Resource "${resourceInput}" not found.\n` +
-          'Run `opkg ls` to see installed resources.',
-      },
-      execContext,
+
+  if (options.from) {
+    // --from specified: resolve directly from the package source
+    resolved = await resolveFromPackageSource(
+      resourceInput, options.from, execContext,
     );
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) };
+    if (resolved.length === 0) {
+      return {
+        success: false,
+        error: `Resource "${resourceInput}" not found in package "${options.from}".`,
+      };
+    }
+  } else {
+    // No --from: resolve via workspace index
+    const traverseOpts = { programOpts: { cwd: execContext.sourceCwd } };
+    try {
+      resolved = await resolveResourceSpec(
+        resourceInput,
+        traverseOpts,
+        {
+          scopePreference: 'project',
+          notFoundMessage:
+            `Resource "${resourceInput}" not found.\n` +
+            'Run `opkg ls` to see installed resources.',
+        },
+        execContext,
+      );
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
   }
 
   if (resolved.length === 0) {
@@ -133,6 +159,31 @@ export async function runMovePipeline(
       };
     }
 
+    // Platform disambiguation: filter targetFiles to a single platform when multi-platform
+    let effectiveTargetFiles = resource.targetFiles;
+    const platformGroups = groupFilesByPlatform(resource.targetFiles, cwd);
+    const platformKeys = [...platformGroups.keys()].filter((k): k is string => k !== null);
+
+    if (platformKeys.length > 1) {
+      try {
+        const selectedPlatform = await disambiguatePlatform({
+          targetDir: cwd,
+          resourceLabel: resourceInput,
+          specifiedPlatform: options.platform,
+          execContext,
+        });
+        const platformFiles = platformGroups.get(selectedPlatform) ?? [];
+        const universalFiles = platformGroups.get(null) ?? [];
+        effectiveTargetFiles = [...platformFiles, ...universalFiles];
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+
+    const effectiveResource = effectiveTargetFiles === resource.targetFiles
+      ? resource
+      : { ...resource, targetFiles: effectiveTargetFiles };
+
     const isRename = !!newName && newName !== resourceName;
 
     if (options.dryRun) {
@@ -144,7 +195,7 @@ export async function runMovePipeline(
           resourceName,
           newName: isRename ? newName : undefined,
           destPackage: options.to,
-          movedFiles: resource.targetFiles.length,
+          movedFiles: effectiveResource.targetFiles.length,
           dryRun: true,
         },
       };
@@ -152,7 +203,7 @@ export async function runMovePipeline(
 
     try {
       return await executeAdopt(
-        resource, resourceName, newName, typeDir, options, execContext,
+        effectiveResource, resourceName, newName, typeDir, options, execContext,
       );
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
@@ -383,6 +434,71 @@ async function buildEntriesFromTargetFiles(
   }
 
   return [...seen.values()];
+}
+
+/**
+ * Resolve a resource directly from a package source directory.
+ * Used when --from is specified to go directly to the named package source
+ * (e.g., the package exists but isn't installed in any workspace).
+ */
+async function resolveFromPackageSource(
+  resourceInput: string,
+  packageName: string,
+  execContext: ExecutionContext,
+): Promise<ResolvedTarget[]> {
+  const query = parseResourceQuery(resourceInput);
+
+  let sourceInfo: { absolutePath: string };
+  try {
+    sourceInfo = await resolveMutableSource({
+      cwd: execContext.sourceCwd,
+      packageName,
+    });
+  } catch {
+    return [];
+  }
+
+  const scope = isProjectScopedPath(sourceInfo.absolutePath, execContext.sourceCwd)
+    ? 'project' : 'global';
+
+  const result = await resolveFromSource(query.name, sourceInfo.absolutePath, scope);
+  const typeFilter = query.typeFilter;
+
+  let candidates = result.candidates;
+  if (typeFilter) {
+    candidates = candidates.filter(
+      c => c.kind === 'resource' && c.resource?.resourceType === typeFilter,
+    );
+  }
+
+  // Disambiguate (0/1/N) so multi-match prompts rather than silently picking [0]
+  const out = resolveOutput(execContext);
+  const prm = resolvePrompt(execContext);
+
+  const selected = await disambiguate(
+    resourceInput,
+    candidates,
+    (c) => ({
+      title: formatCandidateTitle(c),
+      description: formatCandidateDescription(c),
+      value: c,
+    }),
+    {
+      notFoundMessage: `Resource "${resourceInput}" not found in package "${packageName}".`,
+      promptMessage: 'Select which resource to move:',
+      multi: false,
+    },
+    out,
+    prm,
+  );
+
+  return selected.map(c => ({
+    candidate: c.kind === 'resource' && c.resource
+      ? { ...c, resource: { ...c.resource, packageName } }
+      : c,
+    targetDir: execContext.targetDir,
+    packageSourcePath: sourceInfo.absolutePath,
+  }));
 }
 
 /**

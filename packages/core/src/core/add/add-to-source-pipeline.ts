@@ -5,6 +5,7 @@ import type { ExecutionContext } from '../../types/execution-context.js';
 import { FILE_PATTERNS } from '../../constants/index.js';
 import { resolveMutableSource } from '../source-resolution/resolve-mutable-source.js';
 import { assertMutableSourceOrThrow } from '../source-mutability.js';
+import { isProjectScopedPath } from '../scope-resolution.js';
 import { collectSourceEntries, type SourceEntry } from './source-collector.js';
 import { copyFilesWithConflictResolution } from './add-conflict-handler.js';
 import type { PackageContext } from '../package-context.js';
@@ -83,7 +84,7 @@ export async function runAddToSourcePipeline(
     assertMutableSourceOrThrow(source.absolutePath, { packageName: source.packageName, command: 'add' });
 
     packageContext = await buildPackageContextFromSource(source);
-    sourceType = source.absolutePath.includes(`${cwd}/.openpackage/packages/`) 
+    sourceType = isProjectScopedPath(source.absolutePath, cwd) 
       ? 'workspace' as const
       : 'global' as const;
     
@@ -148,7 +149,7 @@ export async function runAddToSourcePipelineBatch(
       source = await resolveMutableSource({ cwd, packageName });
       assertMutableSourceOrThrow(source.absolutePath, { packageName: source.packageName, command: 'add' });
       packageContext = await buildPackageContextFromSource(source);
-      sourceType = source.absolutePath.includes(`${cwd}/.openpackage/packages/`) ? 'workspace' : 'global';
+      sourceType = isProjectScopedPath(source.absolutePath, cwd) ? 'workspace' : 'global';
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
@@ -228,7 +229,7 @@ export async function addSourceEntriesToPackage(
     }
     assertMutableSourceOrThrow(source.absolutePath, { packageName: source.packageName, command: 'add' });
     packageContext = await buildPackageContextFromSource(source);
-    sourceType = source.absolutePath.includes(`${cwd}/.openpackage/packages/`)
+    sourceType = isProjectScopedPath(source.absolutePath, cwd)
       ? 'workspace' as const
       : 'global' as const;
   }

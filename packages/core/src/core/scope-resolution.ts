@@ -3,6 +3,16 @@ import { getOpenPackageDirectories } from './directory.js';
 import { DIR_PATTERNS, OPENPACKAGE_DIRS } from '../constants/index.js';
 import { normalizePackageName, SCOPED_PACKAGE_REGEX } from '../utils/package-name.js';
 
+const PROJECT_PACKAGES_SEGMENT = `${DIR_PATTERNS.OPENPACKAGE}/${OPENPACKAGE_DIRS.PACKAGES}/`;
+
+/**
+ * Determine whether a resolved package path is project-scoped (workspace-local)
+ * vs global-scoped based on whether it lives under `<cwd>/.openpackage/packages/`.
+ */
+export function isProjectScopedPath(absolutePath: string, cwd: string): boolean {
+  return absolutePath.includes(`${cwd}/${PROJECT_PACKAGES_SEGMENT}`);
+}
+
 /**
  * Package scope types
  * - root: Current directory (cwd) as a package

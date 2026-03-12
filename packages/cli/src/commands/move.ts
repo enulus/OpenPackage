@@ -15,7 +15,7 @@ export async function setupMoveCommand(args: any[]): Promise<void> {
   const [resource, newName, options, command] = args as [
     string | undefined,
     string | undefined,
-    MoveOptions & { from?: string },
+    MoveOptions,
     Command,
   ];
   const programOpts = command.parent?.opts() || {};

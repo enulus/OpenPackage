@@ -6,7 +6,7 @@
  * and returns typed results. No terminal-UI dependencies.
  */
 
-import { basename, join, resolve } from 'path';
+import { basename, join, relative, resolve } from 'path';
 
 import fg from 'fast-glob';
 import { isJunk } from 'junk';
@@ -19,6 +19,7 @@ import { runAddDependencyFlow, type AddDependencyResult, type AddDependencyOptio
 import { runAddToSourcePipeline, runAddToSourcePipelineBatch, addSourceEntriesToPackage, type AddToSourceResult, type AddToSourceOptions } from './add-to-source-pipeline.js';
 import { classifyResourceSpec, resolveResourceSpec } from '../resources/resource-spec.js';
 import { mapWorkspaceFileToUniversal } from '../platform/platform-mapper.js';
+import { disambiguatePlatform, groupFilesByPlatform } from '../platform/platform-disambiguation.js';
 import { getResourceTypeDef } from '../resources/resource-registry.js';
 import { getDetectedPlatforms, getPlatformDefinition, deriveRootDirFromFlows } from '../platforms.js';
 import { exists } from '../../utils/fs.js';
@@ -36,6 +37,7 @@ export interface ProcessAddResourceOptions {
   copy?: boolean;
   dev?: boolean;
   to?: string;
+  platform?: string;
   platformSpecific?: boolean;
   force?: boolean;
 }
@@ -159,6 +161,30 @@ export async function processAddResource(
       }
     }
 
+    // Platform disambiguation: filter discovered files to a single platform when multi-platform
+    const relativeDiscovered = discoveredFiles.map(abs => ({
+      abs,
+      rel: relative(targetDir, abs),
+    }));
+    const platformGroups = groupFilesByPlatform(relativeDiscovered.map(f => f.rel), targetDir);
+    const platformKeys = [...platformGroups.keys()].filter((k): k is string => k !== null);
+
+    if (platformKeys.length > 1) {
+      const selectedPlatform = await disambiguatePlatform({
+        targetDir,
+        resourceLabel: resourceSpec,
+        specifiedPlatform: options.platform,
+        execContext,
+      });
+      const allowedRels = new Set([
+        ...(platformGroups.get(selectedPlatform) ?? []),
+        ...(platformGroups.get(null) ?? []),
+      ]);
+      discoveredFiles = relativeDiscovered
+        .filter(f => allowedRels.has(f.rel))
+        .map(f => f.abs);
+    }
+
     const entries: Array<{ sourcePath: string; registryPath: string; content?: string }> = [];
     const seenRegistryPaths = new Set<string>();
 
@@ -187,6 +213,11 @@ export async function processAddResource(
     }
 
     return { kind: 'workspace-resource', result };
+  }
+
+  // --platform only valid with resource references
+  if (options.platform) {
+    throw new Error('--platform can only be used with resource references (e.g., skills/foo), not file paths.');
   }
 
   const classification = await classifyAddInput(resourceSpec, cwd, {

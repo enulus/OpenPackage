@@ -5,6 +5,7 @@ import type { ExecutionContext } from '../../types/execution-context.js';
 import { FILE_PATTERNS } from '../../constants/index.js';
 import { resolveMutableSource } from '../source-resolution/resolve-mutable-source.js';
 import { assertMutableSourceOrThrow } from '../source-mutability.js';
+import { isProjectScopedPath } from '../scope-resolution.js';
 import { collectRemovalEntries, type RemovalEntry } from './removal-collector.js';
 import { classifyRemoveInput } from './remove-input-classifier.js';
 import { runRemoveDependencyFlow } from './remove-dependency-flow.js';
@@ -102,7 +103,7 @@ export async function runRemoveFromSourcePipeline(
 
     packageRootDir = source.absolutePath;
     resolvedName = source.packageName;
-    sourceType = source.absolutePath.includes(`${cwd}/.openpackage/packages/`) 
+    sourceType = isProjectScopedPath(source.absolutePath, cwd)
       ? 'workspace' as const
       : 'global' as const;
     
@@ -363,7 +364,7 @@ export async function runRemoveFromSourcePipelineBatch(
   options: RemoveFromSourceOptions = {}
 ): Promise<CommandResult<RemoveFromSourceResult>> {
   const sourceType: 'workspace' | 'global' =
-    packageRootDir.includes(`${process.cwd()}/.openpackage/packages/`) ? 'workspace' : 'global';
+    isProjectScopedPath(packageRootDir, process.cwd()) ? 'workspace' : 'global';
 
   const allEntries: RemovalEntry[] = [];
   const seenRegistryPaths = new Set<string>();

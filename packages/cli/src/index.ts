@@ -143,6 +143,7 @@ program
   .option('--to <package-name>', 'target package (for dependency: which manifest; for copy: which package source)')
   .option('--dev', 'add to dev-dependencies instead of dependencies')
   .option('--copy', 'force copy mode (copy files instead of recording dependency)')
+  .option('--platform <platform>', 'platform for workspace resource disambiguation')
   .option('--platform-specific', 'save platform-specific variants for platform subdir inputs')
   .option('--force', 'overwrite existing files without prompting')
   .action(withErrorHandling(async (...args: any[]) => {
@@ -171,6 +172,7 @@ program
   .description('Rename or relocate a resource')
   .option('--to <package>', 'destination package')
   .option('--from <package>', 'source package (for disambiguation)')
+  .option('--platform <platform>', 'platform for workspace resource disambiguation')
   .option('--force', 'overwrite if target exists')
   .option('--dry-run', 'preview changes')
   .option('--json', 'structured output')
