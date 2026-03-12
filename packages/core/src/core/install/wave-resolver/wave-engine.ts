@@ -248,6 +248,13 @@ export async function resolveWave(options: WaveResolverOptions): Promise<WaveRes
 
       if (error || !result) continue;
 
+      if (item.sourceType === 'path' && !result.contentRoot && !result.metadata) {
+        const declaredPath = item.decl.path ?? item.displayName;
+        warnings.push(`Dependency '${item.displayName}' path not found: ${declaredPath} — skipping`);
+        logger.warn(`Skipping missing path dependency '${item.displayName}': ${declaredPath}`);
+        continue;
+      }
+
       // Create WaveNode
       const node: WaveNode = {
         id: item.id,

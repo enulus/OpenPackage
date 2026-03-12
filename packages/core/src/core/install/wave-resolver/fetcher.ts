@@ -18,6 +18,7 @@ import { ensureContentRoot } from './content-root-cache.js';
 import { normalizeGitUrl } from '../../../utils/git-url-parser.js';
 import { resolveDeclaredPath } from '../../../utils/path-resolution.js';
 import { readManifestAtPath, extractDependencies } from './manifest-reader.js';
+import { exists } from '../../../utils/fs.js';
 import { logger } from '../../../utils/logger.js';
 
 /**
@@ -250,6 +251,15 @@ export class PathFetcher implements PackageFetcher {
     const { id, displayName, sourceType } = computeWaveId(declaration, declaredInDir);
     const source = resolveSourceFromDeclaration(declaration, declaredInDir);
     const contentRoot = source.absolutePath ?? source.contentRoot;
+
+    if (contentRoot && !(await exists(contentRoot))) {
+      return {
+        id, displayName, name: declaration.name,
+        version: undefined, contentRoot: undefined,
+        sourceType, source, metadata: undefined,
+        childDependencies: [],
+      };
+    }
 
     let childDeps: DependencyDeclaration[] = [];
     let metadata: PackageYml | undefined;

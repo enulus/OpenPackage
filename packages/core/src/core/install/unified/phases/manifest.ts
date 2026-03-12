@@ -40,7 +40,7 @@ export async function updateManifestPhase(ctx: InstallationContext): Promise<voi
   }
 }
 
-function buildManifestFields(ctx: InstallationContext, mainPackage: any) {
+export function buildManifestFields(ctx: InstallationContext, mainPackage: any) {
   const fields: any = {
     range: undefined,
     force: true,
@@ -61,7 +61,16 @@ function buildManifestFields(ctx: InstallationContext, mainPackage: any) {
     fields.gitPath = ctx.source.resourcePath ?? ctx.source.gitSourceOverride.gitPath;
     return fields;
   }
-  
+
+  // Mutable source override: workspace/global packages write path: instead of version:
+  if (ctx.source.mutableSourceOverride) {
+    fields.path = formatPathForYaml(
+      ctx.source.mutableSourceOverride.packageRootDir,
+      ctx.targetDir
+    );
+    return fields;
+  }
+
   // Phase 4: Record base field if user-selected or non-default
   // This ensures reproducible installs when ambiguity was resolved
   if (ctx.baseRelative && ctx.baseSource === 'user-selection') {
