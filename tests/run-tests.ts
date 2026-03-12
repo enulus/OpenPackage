@@ -70,6 +70,7 @@ const testFiles: string[] = [
   // Core - List
   'tests/core/list/untracked-files.test.ts',
   'tests/core/list/group-files-into-resources.test.ts',
+  'tests/core/list/print-deps-view.test.ts',
 
   // Core - View
   'tests/core/view/view-single-resource.test.ts',
