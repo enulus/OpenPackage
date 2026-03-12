@@ -394,7 +394,8 @@ export async function installPackageByIndexWithFlows(
       fileMapping,
       marketplaceMetadata,
       resourceVersion,
-      indexWriteCollector
+      indexWriteCollector,
+      platforms
     );
   }
 
@@ -431,7 +432,8 @@ async function updateWorkspaceIndexForFlows(
     pluginName: string;
   },
   resourceVersion?: string,
-  indexWriteCollector?: IndexWriteCollector
+  indexWriteCollector?: IndexWriteCollector,
+  platforms?: Platform[]
 ): Promise<void> {
   const effectiveVersion = resourceVersion ?? version;
 
@@ -443,6 +445,7 @@ async function updateWorkspaceIndexForFlows(
       version: effectiveVersion,
       files: fileMapping,
       marketplace: marketplaceMetadata,
+      platforms,
     });
     return;
   }
@@ -474,6 +477,11 @@ async function updateWorkspaceIndexForFlows(
       files: sortMapping(files)
     };
     
+    // Add platforms if present
+    if (platforms && platforms.length > 0) {
+      packageEntry.platforms = platforms;
+    }
+
     // Add marketplace metadata if present
     if (marketplaceMetadata) {
       packageEntry.marketplace = marketplaceMetadata;

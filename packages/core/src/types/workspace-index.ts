@@ -56,6 +56,8 @@ export interface WorkspaceIndexPackage {
    * Each entry can be a simple string (for non-merged files) or an object with key tracking (for merged files).
    */
   files: Record<string, (string | WorkspaceIndexFileMapping)[]>;
+  /** Platforms this package was installed to */
+  platforms?: string[];
   /**
    * Marketplace source metadata for plugins defined in marketplace.json
    * When present, indicates this plugin came from a marketplace and may need

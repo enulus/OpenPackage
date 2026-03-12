@@ -156,6 +156,7 @@ export interface PackageYml {
   version?: string;
   private?: boolean;
   partial?: boolean;
+  platforms?: string[];
 
   description?: string;
   keywords?: string[];

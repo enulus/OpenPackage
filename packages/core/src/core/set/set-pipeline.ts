@@ -14,6 +14,7 @@ import { exists } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
 import { normalizePackageName, validatePackageName } from '../../utils/package-name.js';
 import { ValidationError, UserCancellationError } from '../../utils/errors.js';
+import { resolvePlatformName } from '../platforms.js';
 import { resolveMutableSource } from '../source-resolution/resolve-mutable-source.js';
 import type { PromptPort } from '../ports/prompt.js';
 import { resolvePrompt } from '../ports/resolve.js';
@@ -81,6 +82,25 @@ async function resolvePackageForSet(
 }
 
 /**
+ * Validate and resolve platform names. Returns deduplicated canonical names.
+ */
+function validateAndResolvePlatforms(inputs: string[]): string[] {
+  const seen = new Set<string>();
+  const resolved: string[] = [];
+  for (const input of inputs) {
+    const platform = resolvePlatformName(input);
+    if (!platform) {
+      throw new ValidationError(`Unknown platform: "${input}"`);
+    }
+    if (!seen.has(platform)) {
+      seen.add(platform);
+      resolved.push(platform);
+    }
+  }
+  return resolved;
+}
+
+/**
  * Validate field values before applying
  */
 function validateUpdates(updates: PackageManifestUpdates): void {
@@ -99,6 +119,11 @@ function validateUpdates(updates: PackageManifestUpdates): void {
     }
   }
   
+  // Validate platforms
+  if (updates.platforms && updates.platforms.length > 0) {
+    validateAndResolvePlatforms(updates.platforms);
+  }
+
   // Validate homepage URL format (basic check)
   if (updates.homepage !== undefined && updates.homepage.trim().length > 0) {
     try {
@@ -153,7 +178,15 @@ function extractUpdatesFromOptions(options: SetCommandOptions): PackageManifestU
   if (options.private !== undefined) {
     updates.private = options.private;
   }
-  
+
+  if (options.platforms !== undefined) {
+    if (options.platforms === false) {
+      updates.platforms = [];  // removal sentinel
+    } else {
+      updates.platforms = validateAndResolvePlatforms(options.platforms);
+    }
+  }
+
   return updates;
 }
 
@@ -221,7 +254,11 @@ async function promptPackageUpdates(
   });
   
   const isPrivate = await prm.confirm('Private package?', currentConfig.private || false);
-  
+
+  const platformsInput = await prm.text('Platforms (space-separated, e.g., cursor claude):', {
+    initial: currentConfig.platforms ? currentConfig.platforms.join(' ') : ''
+  });
+
   // Build updates object only for changed fields
   const updates: PackageManifestUpdates = {};
   
@@ -263,7 +300,19 @@ async function promptPackageUpdates(
   if (isPrivate !== (currentConfig.private || false)) {
     updates.private = isPrivate;
   }
-  
+
+  // Parse and compare platforms
+  const newPlatformTokens = platformsInput
+    ? platformsInput.trim().split(/\s+/).filter((p: string) => p.length > 0)
+    : [];
+  const resolvedNewPlatforms = newPlatformTokens.length > 0
+    ? validateAndResolvePlatforms(newPlatformTokens)
+    : [];
+  const currentPlatforms = currentConfig.platforms || [];
+  if (JSON.stringify([...resolvedNewPlatforms].sort()) !== JSON.stringify([...currentPlatforms].sort())) {
+    updates.platforms = resolvedNewPlatforms;
+  }
+
   return updates;
 }
 
@@ -299,10 +348,11 @@ function applyUpdates(
   currentConfig: PackageYml,
   updates: PackageManifestUpdates
 ): PackageYml {
-  return {
-    ...currentConfig,
-    ...updates
-  };
+  const result = { ...currentConfig, ...updates };
+  if (updates.platforms !== undefined && updates.platforms.length === 0) {
+    delete result.platforms;
+  }
+  return result;
 }
 
 /**
@@ -319,14 +369,15 @@ export async function runSetPipeline(
   try {
     // Step 1: Validate inputs
     const hasFieldFlags = Boolean(
-      options.ver || 
-      options.name || 
+      options.ver ||
+      options.name ||
       options.description !== undefined ||
-      options.keywords !== undefined || 
-      options.author !== undefined || 
-      options.license !== undefined || 
-      options.homepage !== undefined || 
-      options.private !== undefined
+      options.keywords !== undefined ||
+      options.author !== undefined ||
+      options.license !== undefined ||
+      options.homepage !== undefined ||
+      options.private !== undefined ||
+      options.platforms !== undefined
     );
     
     const isInteractive = !options.nonInteractive && !hasFieldFlags;
@@ -334,7 +385,7 @@ export async function runSetPipeline(
     if (options.nonInteractive && !hasFieldFlags) {
       throw new ValidationError(
         'Non-interactive mode requires at least one field flag.\n' +
-        'Available flags: --ver, --name, --description, --keywords, --author, --license, --homepage, --private\n' +
+        'Available flags: --ver, --name, --description, --keywords, --author, --license, --homepage, --private, --platforms\n' +
         'Example: opkg set my-package --ver 1.0.0 --non-interactive'
       );
     }

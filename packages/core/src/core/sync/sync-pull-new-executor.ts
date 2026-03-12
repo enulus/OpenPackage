@@ -28,7 +28,7 @@ export async function executePullNewActions(
 
   const sourceKeyFilter = new Set(newFiles.map(f => f.registryPath));
 
-  const init = await initPullPipelineContext(packageRoot, packageName, cwd);
+  const init = await initPullPipelineContext(packageRoot, packageName, cwd, options.platforms);
   if (init.platforms.length === 0) {
     return newFiles.flatMap(entry =>
       entry.targetPaths.map(tp => ({
