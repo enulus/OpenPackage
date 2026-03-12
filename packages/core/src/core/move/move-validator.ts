@@ -31,9 +31,12 @@ export function validateMoveArgs(newName: string | undefined, to: string | undef
 export function validateNotNoop(
   resourceName: string,
   newName: string | undefined,
-  sourcePackage: string,
+  sourcePackage: string | undefined,
   to: string | undefined,
 ): void {
+  // Untracked resources with --to are never a noop (they're being adopted)
+  if (!sourcePackage) return;
+
   const effectiveName = newName ?? resourceName;
   const effectivePackage = to ?? sourcePackage;
 

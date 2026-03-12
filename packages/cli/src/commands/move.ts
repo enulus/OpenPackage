@@ -134,7 +134,7 @@ function formatOutput(
 
     case 'relocate':
       out.success(
-        `${dryPrefix}Moved ${data.resourceName} from ${data.sourcePackage} to ${data.destPackage}`
+        `${dryPrefix}Moved ${data.resourceName}${data.sourcePackage ? ` from ${data.sourcePackage}` : ''} to ${data.destPackage}`
       );
       if (data.movedFiles) {
         out.message(`  ${data.movedFiles} file${data.movedFiles !== 1 ? 's' : ''} moved`);
@@ -150,6 +150,15 @@ function formatOutput(
       }
       if (data.movedFiles) {
         out.message(`  ${data.movedFiles} file${data.movedFiles !== 1 ? 's' : ''} moved`);
+      }
+      break;
+
+    case 'adopt':
+      out.success(
+        `${dryPrefix}Adopted ${data.resourceName} into ${data.destPackage}`
+      );
+      if (data.movedFiles) {
+        out.message(`  ${data.movedFiles} file${data.movedFiles !== 1 ? 's' : ''} added`);
       }
       break;
   }

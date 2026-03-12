@@ -1,10 +1,13 @@
 /**
  * Move Pipeline
  *
- * Core orchestrator for the `opkg move` command. Supports three scenarios:
- * - Rename-only: in-place rename within the same package
- * - Relocate-only: move resource from one package to another
- * - Rename + Relocate: rename and move in one step
+ * Core orchestrator for the `opkg move` command. Supports four scenarios:
+ * - Rename-only: in-place rename within the same package (source-only)
+ * - Relocate-only: move resource from one package to another (source-only)
+ * - Rename + Relocate: rename and move in one step (source-only)
+ * - Adopt: bring untracked workspace resources into a package via --to
+ *
+ * All workspace reconciliation is deferred to `sync --pull`.
  */
 
 import { join } from 'path';
@@ -18,11 +21,8 @@ import { addSourceEntriesToPackage } from '../add/add-to-source-pipeline.js';
 import { performMoveCleanup } from '../add/move-cleanup.js';
 import { renameEntries } from '../add/entry-renamer.js';
 import { readTextFile } from '../../utils/fs.js';
-import { logger } from '../../utils/logger.js';
 import { validateMoveArgs, validateNotNoop } from './move-validator.js';
 import { executeInPlaceRename } from './move-rename-executor.js';
-import { updateIndexForRename } from './move-index-updater.js';
-import { runSyncPipeline } from '../sync/sync-pipeline.js';
 import type { SourceEntry } from '../add/source-collector.js';
 
 // ---------------------------------------------------------------------------
@@ -38,9 +38,9 @@ export interface MoveOptions {
 }
 
 export interface MoveResult {
-  action: 'rename' | 'relocate' | 'rename-relocate';
+  action: 'rename' | 'relocate' | 'rename-relocate' | 'adopt';
   sourcePath: string;
-  sourcePackage: string;
+  sourcePackage?: string;
   resourceName: string;
   newName?: string;
   destPackage?: string;
@@ -124,11 +124,39 @@ export async function runMovePipeline(
     ? resourceInput.split('/')[0]
     : undefined;
 
+  // Route untracked resources to adopt flow
   if (!sourcePackage) {
-    return {
-      success: false,
-      error: `Resource "${resourceInput}" is untracked (not owned by any package). Cannot move untracked resources.`,
-    };
+    if (!options.to) {
+      return {
+        success: false,
+        error: `Resource "${resourceInput}" is untracked (not owned by any package).\nUse --to <package> to adopt it into a package.`,
+      };
+    }
+
+    const isRename = !!newName && newName !== resourceName;
+
+    if (options.dryRun) {
+      return {
+        success: true,
+        data: {
+          action: 'adopt',
+          sourcePath: cwd,
+          resourceName,
+          newName: isRename ? newName : undefined,
+          destPackage: options.to,
+          movedFiles: resource.targetFiles.length,
+          dryRun: true,
+        },
+      };
+    }
+
+    try {
+      return await executeAdopt(
+        resource, resourceName, newName, typeDir, options, execContext,
+      );
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
   }
 
   if (!packageSourcePath) {
@@ -185,7 +213,7 @@ export async function runMovePipeline(
     if (action === 'rename') {
       return await executeRename(
         packageSourcePath, resource.sourceKeys, resourceName, newName!,
-        typeDir, sourcePackage, cwd, execContext,
+        sourcePackage,
       );
     }
 
@@ -208,25 +236,11 @@ async function executeRename(
   sourceKeys: Set<string>,
   resourceName: string,
   newName: string,
-  typeDir: string | undefined,
   sourcePackage: string,
-  cwd: string,
-  execContext: ExecutionContext,
 ): Promise<CommandResult<MoveResult>> {
   const renameResult = await executeInPlaceRename(
     packageSourcePath, sourceKeys, resourceName, newName,
   );
-
-  const effectiveTypeDir = typeDir ?? [...sourceKeys][0]?.split('/')[0] ?? '';
-
-  await updateIndexForRename(cwd, sourcePackage, resourceName, newName, effectiveTypeDir);
-
-  // Re-deploy via sync pull
-  try {
-    await runSyncPipeline(sourcePackage, cwd, { direction: 'pull', dryRun: false }, execContext);
-  } catch (syncErr) {
-    logger.debug('Post-rename sync failed (non-fatal)', { error: syncErr });
-  }
 
   return {
     success: true,
@@ -284,9 +298,92 @@ async function executeRelocate(
   };
 }
 
+async function executeAdopt(
+  resource: ResolvedResource,
+  resourceName: string,
+  newName: string | undefined,
+  typeDir: string | undefined,
+  options: MoveOptions,
+  execContext: ExecutionContext,
+): Promise<CommandResult<MoveResult>> {
+  const effectiveTypeDir = typeDir ?? resource.resourceType + 's';
+
+  let entries = await buildEntriesFromTargetFiles(
+    resource.targetFiles, execContext.targetDir, effectiveTypeDir,
+  );
+
+  const isRename = !!newName && newName !== resourceName;
+  if (isRename && newName) {
+    entries = await renameEntries(entries, resourceName, newName);
+  }
+
+  const addResult = await addSourceEntriesToPackage(
+    options.to, entries, { force: options.force, execContext },
+  );
+
+  if (!addResult.success) {
+    return { success: false, error: addResult.error ?? 'Failed to add resource to destination package.' };
+  }
+
+  await performMoveCleanup({ resource, packageSourcePath: undefined, execContext });
+
+  return {
+    success: true,
+    data: {
+      action: 'adopt',
+      sourcePath: execContext.targetDir,
+      resourceName,
+      newName: isRename ? newName : undefined,
+      destPackage: options.to,
+      movedFiles: addResult.data?.filesAdded,
+      dryRun: false,
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Build SourceEntry[] from workspace target files for untracked resources.
+ *
+ * Derives registry paths by extracting from the typeDir segment onward,
+ * deduplicates by registry path (multiple platforms may produce the same one),
+ * and reads content from the first workspace file per registry path.
+ */
+async function buildEntriesFromTargetFiles(
+  targetFiles: string[],
+  targetDir: string,
+  typeDir: string,
+): Promise<SourceEntry[]> {
+  const seen = new Map<string, SourceEntry>();
+  const typeDirPrefix = typeDir + '/';
+
+  for (const targetFile of targetFiles) {
+    const idx = targetFile.indexOf(typeDirPrefix);
+    if (idx < 0) continue;
+
+    const registryPath = targetFile.slice(idx);
+    if (seen.has(registryPath)) continue;
+
+    const absPath = join(targetDir, targetFile);
+    let content: string | undefined;
+    try {
+      content = await readTextFile(absPath);
+    } catch {
+      // skip unreadable
+    }
+
+    seen.set(registryPath, {
+      sourcePath: absPath,
+      registryPath,
+      ...(content !== undefined ? { content } : {}),
+    });
+  }
+
+  return [...seen.values()];
+}
 
 /**
  * Build SourceEntry[] from a set of source keys in a package.

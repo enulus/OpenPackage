@@ -2,7 +2,7 @@
  * Move Cleanup
  *
  * Post-add cleanup logic for `--move`. Removes the resource from its origin
- * package source and uninstalls it from the workspace.
+ * package source. Workspace cleanup is deferred to `sync --pull`.
  */
 
 import { join } from 'path';
@@ -10,7 +10,6 @@ import { join } from 'path';
 import type { ExecutionContext } from '../../types/index.js';
 import type { ResolvedResource } from '../resources/resource-builder.js';
 import { collectRemovalEntries } from '../remove/removal-collector.js';
-import { runSelectiveUninstallPipeline } from '../uninstall/uninstall-pipeline.js';
 import { remove, exists } from '../../utils/fs.js';
 import { cleanupEmptyParents } from '../../utils/cleanup-empty-parents.js';
 import { buildPreservedDirectoriesSet } from '../platform/directory-preservation.js';
@@ -30,7 +29,7 @@ export interface MoveCleanupResult {
 /**
  * Remove the resource from its origin after it has been added to the destination.
  *
- * - Tracked resources: remove from origin package source + selective uninstall from workspace
+ * - Tracked resources: remove from origin package source (workspace cleanup deferred to sync)
  * - Untracked resources: direct file deletion from workspace
  */
 export async function performMoveCleanup(ctx: MoveCleanupContext): Promise<MoveCleanupResult> {
@@ -39,7 +38,7 @@ export async function performMoveCleanup(ctx: MoveCleanupContext): Promise<MoveC
   const workspaceFilesRemoved: string[] = [];
 
   if (resource.kind === 'tracked' && packageSourcePath && resource.packageName) {
-    // 1. Remove from origin package source
+    // Remove from origin package source
     for (const sourceKey of resource.sourceKeys) {
       try {
         const removalEntries = await collectRemovalEntries(packageSourcePath, sourceKey);
@@ -59,17 +58,6 @@ export async function performMoveCleanup(ctx: MoveCleanupContext): Promise<MoveC
     if (sourceFilesRemoved.length > 0) {
       const deletedAbsPaths = sourceFilesRemoved.map(rp => join(packageSourcePath, rp));
       await cleanupEmptyParents(packageSourcePath, deletedAbsPaths);
-    }
-
-    // 2. Uninstall from workspace
-    const uninstallResult = await runSelectiveUninstallPipeline(
-      resource.packageName,
-      resource.sourceKeys,
-      {},
-      execContext
-    );
-    if (uninstallResult.success && uninstallResult.data) {
-      workspaceFilesRemoved.push(...uninstallResult.data.removedFiles);
     }
   } else {
     // Untracked resource — direct file deletion from workspace

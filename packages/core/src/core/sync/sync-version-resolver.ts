@@ -51,7 +51,7 @@ export async function resolveVersionMismatchInteractively(
   if (choice === 'custom') {
     const customRange = await prompt.text('Enter version range:', {
       placeholder: suggested,
-      defaultValue: suggested,
+      initial: suggested,
     });
     return { action: 'update', newRange: customRange };
   }

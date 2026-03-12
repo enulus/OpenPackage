@@ -92,6 +92,11 @@ const testFiles: string[] = [
   'tests/core/source-resolution/source-mutability.test.ts',
   'tests/core/source-resolution/source-resolution.test.ts',
 
+  // Core - Move
+  'tests/core/move/move-validator.test.ts',
+  'tests/core/move/move-rename-executor.test.ts',
+  'tests/core/move/move-pipeline.test.ts',
+
   // Core - Add
   'tests/core/add/add-dependency-flow.test.ts',
   'tests/core/add/add-flow-based-mapping.test.ts',
