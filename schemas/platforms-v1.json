@@ -195,6 +195,11 @@
         "description": {
           "type": "string",
           "description": "Flow description for documentation/debugging"
+        },
+        "fallback": {
+          "type": "boolean",
+          "description": "Whether this flow is a catch-all fallback, excluded from file scanning/discovery",
+          "default": false
         }
       }
     },

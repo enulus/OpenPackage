@@ -369,8 +369,8 @@ function extractPlatformSuffix(absolutePath: string): string | null {
     const def = getPlatformDefinition(platform);
     if (!def.import) continue;
     for (const flow of def.import) {
+      if (flow.fallback) continue;
       for (const p of extractFromPatternsFromFlow(flow)) {
-        if (p.startsWith('**')) continue; // Skip catch-all patterns
         allFromPatterns.push(p);
       }
     }

@@ -67,10 +67,9 @@ async function createCursorPlatform(dir: string): Promise<void> {
     
     const result = await scanUntrackedFiles(testDir);
     
-    // Catch-all **/* pattern may pick up .gitkeep; focus on platform-specific files
-    assert.ok(result.totalFiles >= 2, 'Should detect at least 2 untracked files');
+    assert.equal(result.totalFiles, 2, 'Should detect 2 untracked files');
     assert.ok(result.platformGroups.has('claude'), 'Should detect Claude platform');
-    assert.ok((result.platformGroups.get('claude')?.length ?? 0) >= 2);
+    assert.equal(result.platformGroups.get('claude')?.length, 2);
     
     const claudeFiles = result.platformGroups.get('claude')!;
     const hasTypescript = claudeFiles.some(f => f.workspacePath.includes('typescript.md'));
@@ -109,8 +108,8 @@ async function createCursorPlatform(dir: string): Promise<void> {
     
     const result = await scanUntrackedFiles(testDir);
 
-    assert.ok(result.totalFiles >= 1, 'Should show at least 1 untracked file');
-    assert.ok(result.files.some(f => f.workspacePath.includes('untracked.md')), 'Should include untracked.md');
+    assert.equal(result.totalFiles, 1, 'Should only show untracked file');
+    assert.ok(result.files[0].workspacePath.includes('untracked.md'));
 
     // Check that tracked.md is not in the list (but untracked.md contains 'tracked' substring, so be specific)
     const hasExactTrackedFile = result.files.some(f => f.workspacePath === '.claude/rules/tracked.md');
@@ -141,11 +140,11 @@ async function createCursorPlatform(dir: string): Promise<void> {
     
     const result = await scanUntrackedFiles(testDir);
     
-    assert.ok(result.totalFiles >= 2, 'Should detect files from both platforms');
+    assert.equal(result.totalFiles, 2, 'Should detect files from both platforms');
     assert.ok(result.platformGroups.has('claude'), 'Should have Claude');
     assert.ok(result.platformGroups.has('cursor'), 'Should have Cursor');
-    assert.ok((result.platformGroups.get('claude')?.length ?? 0) >= 1);
-    assert.ok((result.platformGroups.get('cursor')?.length ?? 0) >= 1);
+    assert.equal(result.platformGroups.get('claude')?.length, 1);
+    assert.equal(result.platformGroups.get('cursor')?.length, 1);
     
     console.log('✓ Detect files across multiple platforms');
   } finally {
@@ -171,11 +170,11 @@ async function createCursorPlatform(dir: string): Promise<void> {
     
     const result = await scanUntrackedFiles(testDir);
     
-    assert.ok(result.totalFiles >= 2);
+    assert.equal(result.totalFiles, 2);
     assert.ok(result.categoryGroups.has('rules'), 'Should have rules category');
     assert.ok(result.categoryGroups.has('commands'), 'Should have commands category');
-    assert.ok((result.categoryGroups.get('rules')?.length ?? 0) >= 1);
-    assert.ok((result.categoryGroups.get('commands')?.length ?? 0) >= 1);
+    assert.equal(result.categoryGroups.get('rules')?.length, 1);
+    assert.equal(result.categoryGroups.get('commands')?.length, 1);
     
     console.log('✓ Group files by category');
   } finally {
@@ -201,8 +200,8 @@ async function createCursorPlatform(dir: string): Promise<void> {
     
     const result = await scanUntrackedFiles(testDir);
     
-    assert.ok(result.totalFiles >= 1);
-    assert.ok(result.files.some(f => f.workspacePath.includes('typescript/best-practices.md')));
+    assert.equal(result.totalFiles, 1);
+    assert.ok(result.files[0].workspacePath.includes('typescript/best-practices.md'));
     
     console.log('✓ Handle nested directory structures');
   } finally {
@@ -240,8 +239,8 @@ async function createCursorPlatform(dir: string): Promise<void> {
     
     const result = await scanUntrackedFiles(testDir);
     
-    assert.ok(result.totalFiles >= 1, 'Should show at least file2');
-    assert.ok(result.files.some(f => f.workspacePath.includes('file2.md')));
+    assert.equal(result.totalFiles, 1, 'Should only show file2');
+    assert.ok(result.files[0].workspacePath.includes('file2.md'));
     
     console.log('✓ Handle workspace index with complex file mappings');
   } finally {
@@ -273,10 +272,7 @@ async function createCursorPlatform(dir: string): Promise<void> {
     
     const result = await scanUntrackedFiles(testDir);
     
-    // Should recognize as tracked despite path format differences.
-    // Catch-all patterns may pick up .gitkeep; just verify the tracked file is excluded.
-    const hasTrackedFile = result.files.some(f => f.workspacePath.includes('test.md'));
-    assert.ok(!hasTrackedFile, 'Should recognize tracked file and exclude it');
+    assert.equal(result.totalFiles, 0, 'Should recognize tracked file');
     
     console.log('✓ Normalize paths correctly for comparison');
   } finally {
@@ -340,8 +336,8 @@ async function createCursorPlatform(dir: string): Promise<void> {
     const result = await scanUntrackedFiles(testDir);
     const elapsed = Date.now() - start;
 
-    assert.ok(result.totalFiles >= 1, 'Should find at least the platform file');
-    assert.ok(result.files.some(f => f.workspacePath.includes('real.md')));
+    assert.equal(result.totalFiles, 1, 'Should only find platform files');
+    assert.ok(result.files[0].workspacePath.includes('real.md'));
     assert.ok(elapsed < 5000, `Scan should complete quickly (took ${elapsed}ms)`);
 
     console.log('✓ Scanner does not walk unrelated directories');

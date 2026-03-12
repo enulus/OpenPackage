@@ -57,6 +57,9 @@ export interface Flow {
 
   /** Description for documentation/debugging */
   description?: string;
+
+  /** Whether this flow is a catch-all fallback (excluded from discovery/scanning) */
+  fallback?: boolean;
 }
 
 /**

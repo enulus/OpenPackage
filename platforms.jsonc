@@ -36,7 +36,7 @@
         "to": ".adal/settings.json",
         "merge": "deep"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -47,7 +47,7 @@
         "from": ".adal/settings.json",
         "to": "mcp.jsonc"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -84,7 +84,7 @@
         ],
         "merge": "deep"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -113,7 +113,7 @@
           }
         ]
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -133,7 +133,7 @@
         "from": "skills/**/*",
         "to": ".agent/skills/**/*"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -148,7 +148,7 @@
         "from": ".agent/skills/**/*",
         "to": "skills/**/*"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -168,7 +168,7 @@
         "from": "skills/**/*",
         "to": ".augment/skills/**/*"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -183,7 +183,7 @@
         "from": ".augment/skills/**/*",
         "to": "skills/**/*"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -228,6 +228,7 @@
       {
         "from": "**/*",
         "to": "**/*",
+        "fallback": true,
         "comment": "Pass through any remaining files as-is"
       }
     ],
@@ -318,6 +319,7 @@
       {
         "from": "**/*",
         "to": "**/*",
+        "fallback": true,
         "comment": "Pass through any remaining files as-is"
       }
     ]
@@ -480,7 +482,7 @@
         },
         "merge": "deep"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -577,7 +579,7 @@
           "$eq": ["$$targetRoot", "~/"]
         }
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -594,7 +596,7 @@
         "to": "cline_mcp_settings.json",
         "merge": "deep"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -605,7 +607,7 @@
         "from": "cline_mcp_settings.json",
         "to": "mcp.jsonc"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -623,7 +625,7 @@
         "to": ".codebuddy/rules/**/*.mdc",
         "comment": "CodeBuddy uses .mdc extension for rules"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     // MCP: Settings UI-based, file path unclear - needs verification before adding
     "import": [
@@ -635,7 +637,7 @@
         "from": ".codebuddy/rules/**/*.mdc",
         "to": "rules/**/*.md"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -720,7 +722,7 @@
         ],
         "merge": "deep"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -783,7 +785,7 @@
           { "$rename": { "mcp_servers": "mcpServers" } }
         ]
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -805,7 +807,7 @@
         "from": "agents/**/*.md",
         "to": ".commandcode/agents/**/*.md"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -820,7 +822,7 @@
         "from": ".commandcode/agents/**/*.md",
         "to": "agents/**/*.md"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -842,7 +844,7 @@
         "to": ".continue/prompts/**/*.md",
         "comment": "Continue uses 'prompts' terminology"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -857,7 +859,7 @@
         "from": ".continue/prompts/**/*.md",
         "to": "commands/**/*.md"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -882,7 +884,7 @@
         ],
         "merge": "deep"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -899,7 +901,7 @@
           }
         ]
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -928,7 +930,7 @@
         "to": ".cursor/mcp.json",
         "merge": "deep"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -951,7 +953,7 @@
         "from": [".cursor/mcp.json", ".cursor/mcp.jsonc"],
         "to": "mcp.jsonc"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -976,7 +978,7 @@
         "to": ".factory/settings/mcp.json",
         "merge": "deep"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -995,7 +997,7 @@
         "from": [".factory/settings/mcp.json", ".factory/settings/mcp.jsonc"],
         "to": "mcp.jsonc"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1015,7 +1017,7 @@
         "to": ".github/agents/**/*.md",
         "comment": "Custom agents with YAML frontmatter"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     // MCP: Stored in repository settings UI, no file-based export
     "import": [
@@ -1027,7 +1029,7 @@
         "from": ".github/agents/**/*.md",
         "to": "agents/**/*.md"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1067,7 +1069,7 @@
         ],
         "merge": "deep"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -1101,7 +1103,7 @@
           }
         ]
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1134,7 +1136,7 @@
         "to": ".iflow/settings.json",
         "merge": "deep"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -1158,7 +1160,7 @@
         "from": ".iflow/settings.json",
         "to": "mcp.jsonc"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1170,14 +1172,14 @@
         "from": "skills/**/*",
         "to": ".junie/skills/**/*"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
         "from": ".junie/skills/**/*",
         "to": "skills/**/*"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1203,7 +1205,7 @@
         "to": ".kilocode/mcp.json",
         "merge": "deep"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -1222,7 +1224,7 @@
         "from": [".kilocode/mcp.json", ".kilocode/mcp.jsonc"],
         "to": "mcp.jsonc"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1242,7 +1244,7 @@
         "comment": "Kimi only supports global MCP config",
         "merge": "deep"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -1253,7 +1255,7 @@
         "from": ".kimi/mcp.json",
         "to": "mcp.jsonc"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1276,7 +1278,7 @@
         "to": ".kiro/settings/mcp.json",
         "merge": "deep"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -1291,7 +1293,7 @@
         "from": [".kiro/settings/mcp.json", ".kiro/settings/mcp.jsonc"],
         "to": "mcp.jsonc"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1303,14 +1305,14 @@
         "from": "skills/**/*",
         "to": ".kode/skills/**/*"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
         "from": ".kode/skills/**/*",
         "to": "skills/**/*"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1322,14 +1324,14 @@
         "from": "skills/**/*",
         "to": ".mcpjam/skills/**/*"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
         "from": ".mcpjam/skills/**/*",
         "to": "skills/**/*"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1342,14 +1344,14 @@
         "from": "skills/**/*",
         "to": ".vibe/skills/**/*"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
         "from": ".vibe/skills/**/*",
         "to": "skills/**/*"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1361,14 +1363,14 @@
         "from": "skills/**/*",
         "to": ".mux/skills/**/*"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
         "from": ".mux/skills/**/*",
         "to": "skills/**/*"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1385,7 +1387,7 @@
         "to": ".neovate/mcp.json",
         "merge": "deep"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -1396,7 +1398,7 @@
         "from": ".neovate/mcp.json",
         "to": "mcp.jsonc"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1483,7 +1485,7 @@
         ],
         "merge": "deep"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -1554,7 +1556,7 @@
           { "$rename": { "mcp": "mcpServers" } }
         ]
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1566,14 +1568,14 @@
         "from": "skills/**/*",
         "to": "skills/**/*"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
         "from": "skills/**/*",
         "to": "skills/**/*"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1594,7 +1596,7 @@
         "comment": "OpenHands only supports user-level MCP config",
         "merge": "deep"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -1608,7 +1610,7 @@
           "$eq": ["$$targetRoot", "~/"]
         }
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1626,7 +1628,7 @@
         "from": "skills/**/*",
         "to": ".pi/agent/skills/**/*"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -1637,7 +1639,7 @@
         "from": ".pi/agent/skills/**/*",
         "to": "skills/**/*"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1649,14 +1651,14 @@
         "from": "skills/**/*",
         "to": ".pochi/skills/**/*"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
         "from": ".pochi/skills/**/*",
         "to": "skills/**/*"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1681,7 +1683,7 @@
         "to": ".qoder/agents/**/*.md",
         "comment": "Qoder calls them SubAgents with required frontmatter: name, description, tools"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     // MCP: UI-managed only (Settings > MCP), no file-based project configuration
     "import": [
@@ -1701,7 +1703,7 @@
         "from": ".qoder/agents/**/*.md",
         "to": "agents/**/*.md"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1728,7 +1730,7 @@
         "to": ".qwen/settings.json",
         "merge": "deep"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -1748,7 +1750,7 @@
         "from": [".qwen/settings.json", ".qwen/settings.jsonc"],
         "to": "mcp.jsonc"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1769,7 +1771,7 @@
         "to": ".roo/mcp.json",
         "merge": "deep"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -1784,7 +1786,7 @@
         "from": [".roo/mcp.json", ".roo/mcp.jsonc"],
         "to": "mcp.jsonc"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1803,7 +1805,7 @@
         "comment": "Replit uses replit.md for agent guidance",
         "merge": "composite"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     // MCP: User account level only, no project-level config
     "import": [
@@ -1816,7 +1818,7 @@
         "to": "AGENTS.md",
         "merge": "composite"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1832,7 +1834,7 @@
         "from": "rules/**/*.md",
         "to": ".trae/rules/**/*.md"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     // MCP: Officially supported but configuration path unclear (likely UI-based)
     // Agents: Custom agent feature promoted but configuration method unclear
@@ -1845,7 +1847,7 @@
         "from": ".trae/rules/**/*.md",
         "to": "rules/**/*.md"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1862,7 +1864,7 @@
         "from": "rules/**/*.md",
         "to": ".trae-cn/rules/**/*.md"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     // MCP: Officially supported but configuration path unclear (likely UI-based)
     // Agents: Custom agent feature promoted but configuration method unclear
@@ -1875,7 +1877,7 @@
         "from": ".trae-cn/rules/**/*.md",
         "to": "rules/**/*.md"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1888,7 +1890,7 @@
         "to": "WARP.md",
         "merge": "composite"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -1896,7 +1898,7 @@
         "to": "AGENTS.md",
         "merge": "composite"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1912,7 +1914,7 @@
         "from": "skills/**/*",
         "to": ".windsurf/skills/**/*"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
@@ -1923,7 +1925,7 @@
         "from": ".windsurf/skills/**/*",
         "to": "skills/**/*"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   },
 
@@ -1935,14 +1937,14 @@
         "from": "skills/**/*",
         "to": ".zencoder/skills/**/*"
       },
-      { "from": "root/**/*", "to": "**/*", "comment": "Catch-all: install root-stored files to workspace root" }
+      { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
       {
         "from": ".zencoder/skills/**/*",
         "to": "skills/**/*"
       },
-      { "from": "**/*", "to": "root/**/*", "comment": "Catch-all: store unmatched workspace files under root/" }
+      { "from": "**/*", "to": "root/**/*", "fallback": true, "comment": "Catch-all: store unmatched workspace files under root/" }
     ]
   }
 }

@@ -128,6 +128,7 @@ function extractPatternsFromPlatforms(
     
     // Process export flows (these define workspace file locations)
     for (const flow of definition.export) {
+      if (flow.fallback) continue;  // Catch-all flows don't define discoverable locations
       const patternStrings = extractToPatterns(flow, workspaceRoot);
       
       for (const pattern of patternStrings) {
@@ -359,29 +360,20 @@ export function extractStaticWalkRoot(pattern: string): { root: string | null; r
 const IGNORED_DIRS = ['**/.openpackage/**', '**/node_modules/**', '**/.git/**'];
 
 /**
- * Check if workspaceRoot is a "dangerous" unbounded directory (home or filesystem root)
- */
-function isDangerousRoot(workspaceRoot: string): boolean {
-  const normalized = workspaceRoot.replace(/\/+$/, '');
-  return normalized === homedir() || normalized === '/' || normalized === '';
-}
-
-/**
  * Discover files matching all patterns using fast-glob with static-prefix scoping.
- * 
+ *
  * Strategy:
  * 1. Extract static walk roots from each pattern to avoid unbounded traversal
  * 2. Group patterns by walk root for efficient single-pass scanning
  * 3. Use fast-glob scoped to each walk root
  * 4. For root-only patterns (e.g. "AGENTS.md"), scan only immediate children
- * 5. Skip unsafe patterns (no static prefix) when workspaceRoot is ~ or /
+ * 5. Always skip unbounded patterns (no static prefix) — fallback flows are filtered earlier
  */
 async function discoverFilesFromPatterns(
   patterns: PatternInfo[],
   workspaceRoot: string
 ): Promise<Map<string, UntrackedFile>> {
   const filesMap = new Map<string, UntrackedFile>();
-  const dangerous = isDangerousRoot(workspaceRoot);
 
   const rootOnlyPatterns: PatternInfo[] = [];
   const unsafePatterns: PatternInfo[] = [];
@@ -403,14 +395,10 @@ async function discoverFilesFromPatterns(
   }
 
   if (unsafePatterns.length > 0) {
-    if (dangerous) {
-      logger.debug(
-        `Skipping ${unsafePatterns.length} unsafe patterns for dangerous root ${workspaceRoot}: ` +
-        unsafePatterns.map(p => p.pattern).join(', ')
-      );
-    } else {
-      rootedGroups.set('', unsafePatterns);
-    }
+    logger.debug(
+      `Skipping ${unsafePatterns.length} unbounded patterns (no static walk root): ` +
+      unsafePatterns.map(p => p.pattern).join(', ')
+    );
   }
 
   if (rootOnlyPatterns.length > 0) {
