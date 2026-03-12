@@ -19,7 +19,7 @@ export function displayConfigChanges(changes: ConfigChange[], output?: OutputPor
     return;
   }
 
-  out.info('\n📝 Changes to apply:');
+  out.success('Changes to apply:');
   
   for (const change of changes) {
     const oldDisplay = formatValue(change.oldValue);
