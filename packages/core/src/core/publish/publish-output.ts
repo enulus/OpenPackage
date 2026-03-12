@@ -67,20 +67,20 @@ export function displayPublishSuccess(
   
   // Package details
   if (description) {
-    out.success(`Description: ${description}`);
+    out.info(`  Description: ${description}`);
   }
-  
+
   // Source information
   const displaySource = formatPathForDisplay(sourcePath, cwd);
-  out.success(`Source: ${displaySource}`);
-  
+  out.info(`  Source: ${displaySource}`);
+
   // Destination information
   const displayDestination = formatPathForDisplay(destinationPath, cwd);
   const destinationType = isCustomOutput ? 'Custom output' : 'Registry';
-  out.success(`${destinationType}: ${displayDestination}`);
-  
+  out.info(`  ${destinationType}: ${displayDestination}`);
+
   // File count
-  out.success(`Files: ${fileCount}`);
+  out.info(`  Files: ${fileCount}`);
 }
 
 /**

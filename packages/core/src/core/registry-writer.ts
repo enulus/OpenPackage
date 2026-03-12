@@ -84,11 +84,9 @@ export async function writePackageToRegistry(
       try {
         // Interactive mode - prompt user with inline overwrite confirmation
         const displayPath = formatPathForDisplay(destination, process.cwd());
-        out.info('');
         out.warn(`Package '${packageName}@${version}' already exists in registry`);
-        out.info(`   Location: ${displayPath}`);
-        out.info(`   Existing files: ${existingFileCount}`);
-        out.info('');
+        out.info(`  Location: ${displayPath}`);
+        out.info(`  Existing files: ${existingFileCount}`);
         
         shouldOverwrite = await prm.confirm(
           `Overwrite '${packageName}@${version}'? This action cannot be undone.`,

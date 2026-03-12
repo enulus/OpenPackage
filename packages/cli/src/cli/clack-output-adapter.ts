@@ -124,7 +124,7 @@ export function createPlainOutput(): OutputPort {
     },
 
     warn(message: string): void {
-      console.log(`⚠️  ${message}`);
+      console.log(`▲ ${message}`);
     },
 
     note(content: string, title?: string): void {
