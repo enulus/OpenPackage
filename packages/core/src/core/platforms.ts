@@ -526,8 +526,11 @@ export function getPlatformsState(targetDir?: string | null): PlatformsState {
   // Collect all universal patterns from platform export flows
   for (const def of Object.values(defs)) {
     allPlatforms.push(def.id)
-    if (def.rootDir) {
-      dirLookup[def.rootDir] = def.id
+    // Populate dirLookup from explicit rootDir or flow-derived root dir
+    // so getPlatformDirLookup works even when rootDir is not set in config.
+    const rootDir = def.rootDir || deriveRootDirFromFlows(def);
+    if (rootDir) {
+      dirLookup[rootDir] = def.id
     }
     for (const alias of def.aliases ?? []) {
       aliasLookup[alias.toLowerCase()] = def.id

@@ -5,12 +5,14 @@ import {
   getPlatformDefinition,
   getDetectedPlatforms,
   getAllPlatforms,
+  getPlatformDirLookup,
   getPlatformDirectoryPathsForPlatform
 } from '../platforms.js';
 import type { Flow } from '../../types/flows.js';
 import { logger } from '../../utils/logger.js';
 import { type UniversalSubdir } from '../../constants/index.js';
 import { normalizePathForProcessing, findSubpathIndex } from '../../utils/path-normalization.js';
+import { extractFirstComponent } from '../universal-patterns.js';
 
 /**
  * Extract pattern string from a flow pattern value
@@ -300,8 +302,16 @@ export function mapWorkspaceFileToUniversal(
 
   if (!candidatePath) return null;
 
-  // Check each platform using import flows (workspace → package)
-  for (const platform of getAllPlatforms({ includeDisabled: true }, cwd)) {
+  // Scope to owning platform to prevent cross-platform catch-all interference.
+  // For root-level files (no platform prefix), fall back to checking all platforms.
+  const dirLookup = getPlatformDirLookup(cwd);
+  const owningPlatform = dirLookup[extractFirstComponent(candidatePath) ?? ''];
+
+  const platformsToCheck = owningPlatform
+    ? [owningPlatform]
+    : getAllPlatforms({ includeDisabled: true }, cwd);
+
+  for (const platform of platformsToCheck) {
     const definition = getPlatformDefinition(platform, cwd);
 
     if (definition.import && definition.import.length > 0) {
