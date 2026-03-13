@@ -124,10 +124,22 @@ export interface RegistryClassification extends BaseClassification {
 }
 
 /**
+ * Embedded package source (parent/child qualified name).
+ */
+export interface EmbeddedClassification extends BaseClassification {
+  type: 'embedded';
+  qualifiedName: string;
+  parentName: string;
+  embeddedName: string;
+  version?: string;
+}
+
+/**
  * Unified input classification result.
  */
 export type InputClassification =
   | BulkClassification
   | GitClassification
   | PathClassification
-  | RegistryClassification;
+  | RegistryClassification
+  | EmbeddedClassification;

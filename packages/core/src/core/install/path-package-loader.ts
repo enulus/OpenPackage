@@ -8,6 +8,7 @@ import { isJunk } from 'junk';
 import { logger } from '../../utils/logger.js';
 import { ValidationError } from '../../utils/errors.js';
 import { FILE_PATTERNS, PACKAGE_PATHS, CLAUDE_PLUGIN_PATHS } from '../../constants/index.js';
+import { PACKAGE_BOUNDARY_DIRS } from '../../constants/workspace.js';
 import { detectPluginType, detectPluginWithMarketplace, hasPluginContent } from './plugin-detector.js';
 import { transformPluginToPackage } from './plugin-transformer.js';
 import type { MarketplacePluginEntry } from './marketplace-handler.js';
@@ -153,7 +154,7 @@ export async function loadPackageFromDirectory(
   const files: PackageFile[] = [];
   
   try {
-    for await (const fullPath of walkFiles(dirPath)) {
+    for await (const fullPath of walkFiles(dirPath, [], { excludeDirs: PACKAGE_BOUNDARY_DIRS })) {
       const relativePath = relative(dirPath, fullPath);
       
       // Filter out junk files

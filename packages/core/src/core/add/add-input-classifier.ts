@@ -204,5 +204,12 @@ function enrichWithAddMode(
         version: base.version,
         resourcePath: base.registryPath
       };
+
+    case 'embedded':
+      return {
+        mode: 'dependency',
+        packageName: base.qualifiedName,
+        version: base.version,
+      };
   }
 }

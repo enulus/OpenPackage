@@ -12,6 +12,7 @@ import { exists } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
 import type { Package, PackageYml } from '../../types/index.js';
 import { handlePublishError, PublishError } from './publish-errors.js';
+import { validateDependencyContainment, formatContainmentViolations } from '../../utils/validation/dependency-containment.js';
 import { logPublishSummary, printPublishSuccess } from './publish-output.js';
 import { preparePackageForUpload, createPublishTarball, uploadPackage } from './publish-upload.js';
 import type { PublishOptions, PublishResult } from './publish-types.js';
@@ -204,6 +205,15 @@ async function runRemotePublishPipeline(
   try {
     // Resolve source package (supports CWD, package names, and directory paths)
     const source = await resolveSource(cwd, packageInput, output);
+
+    // Validate dependency containment (path deps must resolve within package root)
+    const containment = validateDependencyContainment(source.manifest, source.packageRoot);
+    if (!containment.valid) {
+      throw new PublishError(
+        formatContainmentViolations(containment.violations),
+        'CONTAINMENT_VIOLATION'
+      );
+    }
 
     if (!source.name) {
       throw new PublishError(

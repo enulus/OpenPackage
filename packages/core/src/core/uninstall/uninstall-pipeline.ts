@@ -15,6 +15,7 @@ import { getAllPlatforms } from '../platforms.js';
 import { logger } from '../../utils/logger.js';
 import { removeFileMapping } from './flow-aware-uninstaller.js';
 import { getTargetPath, findPackageInIndex } from '../../utils/workspace-index-helpers.js';
+import { getEmbeddedChildren } from '../../utils/qualified-name.js';
 import { buildPreservedDirectoriesSet } from '../platform/directory-preservation.js';
 import { cleanupEmptyParents } from '../../utils/cleanup-empty-parents.js';
 import type { WorkspaceIndexFileMapping } from '../../types/workspace-index.js';
@@ -132,6 +133,41 @@ export async function runUninstallPipeline(
 
   const resolvedName = match.key;
   const pkgEntry = match.entry;
+
+  // Check for embedded children
+  const childKeys = getEmbeddedChildren(index.packages || {}, resolvedName);
+
+  if (childKeys.length > 0 && !options.recursive) {
+    // Warn about orphaned children
+    const childList = childKeys.map(k => `  - ${k}`).join('\n');
+    logger.warn(
+      `Package '${resolvedName}' has ${childKeys.length} embedded package(s):\n${childList}\n` +
+      `Use --recursive to uninstall them together.`
+    );
+  }
+
+  if (options.recursive && childKeys.length > 0) {
+    const rootNames = getPlatformRootFileNames(getAllPlatforms(undefined, targetDir), targetDir);
+    // Uninstall children first (reverse order for clean dependency removal)
+    for (const childKey of childKeys.reverse()) {
+      const childMatch = findPackageInIndex(childKey, index.packages || {});
+      if (!childMatch) continue;
+
+      const { removed: childDeleted } = await processFileMappings(
+        childMatch.entry.files || {},
+        targetDir,
+        childMatch.key,
+        rootNames,
+        { dryRun: false }
+      );
+
+      await processRootFileRemovals(targetDir, [childMatch.key]);
+      removeWorkspaceIndexEntry(index, childMatch.key);
+      await removePackageFromOpenpackageYml(targetDir, childMatch.key);
+
+      logger.info(`Uninstalled embedded package ${childMatch.key}: removed ${childDeleted.length} files`);
+    }
+  }
 
   const rootNames = getPlatformRootFileNames(getAllPlatforms(undefined, targetDir), targetDir);
 

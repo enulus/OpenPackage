@@ -5,6 +5,7 @@
 import type { WorkspaceIndexFileMapping, WorkspaceIndexPackage } from '../types/workspace-index.js';
 import { arePackageNamesEquivalent, normalizePackageNameForLookup } from './package-name.js';
 import { classifyResourceSpec } from '../core/resources/resource-spec.js';
+import { isQualifiedName } from './qualified-name.js';
 
 /**
  * Extract target path from a mapping (handles both string and object forms)
@@ -72,6 +73,22 @@ export function findPackageInIndex(
     if (arePackageNamesEquivalent(key, input)) {
       return { key, entry: packages[key] };
     }
+  }
+
+  // 2.5. Unambiguous child lookup: if input is NOT qualified, check for any qualified key
+  // ending with /<input> — return if exactly one match (unambiguous).
+  if (!isQualifiedName(input)) {
+    const suffix = '/' + input.toLowerCase();
+    const qualifiedMatches: { key: string; entry: WorkspaceIndexPackage }[] = [];
+    for (const [key, entry] of Object.entries(packages)) {
+      if (isQualifiedName(key) && key.toLowerCase().endsWith(suffix)) {
+        qualifiedMatches.push({ key, entry });
+      }
+    }
+    if (qualifiedMatches.length === 1) {
+      return qualifiedMatches[0];
+    }
+    // If multiple matches, fall through (ambiguous — user must qualify)
   }
 
   // 3. Old→new format normalization

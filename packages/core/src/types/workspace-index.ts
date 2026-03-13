@@ -73,6 +73,10 @@ export interface WorkspaceIndexPackage {
     /** Plugin name within the marketplace (before scoping) */
     pluginName: string;
   };
+  /** Source type classification (project, global, registry, git) */
+  sourceType?: 'project' | 'global' | 'registry' | 'git';
+  /** Back-pointer to parent package name (for embedded packages) */
+  parent?: string;
 }
 
 export interface WorkspaceIndex {

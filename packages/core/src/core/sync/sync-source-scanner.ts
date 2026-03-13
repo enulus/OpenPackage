@@ -9,6 +9,7 @@
 import path from 'path';
 
 import { walkFiles } from '../../utils/fs.js';
+import { PACKAGE_BOUNDARY_DIRS } from '../../constants/workspace.js';
 import {
   isAllowedRegistryPath,
   isSkippableRegistryPath,
@@ -42,7 +43,7 @@ export async function detectNewSourceFiles(
 ): Promise<NewSourceFileEntry[]> {
   const newFiles: NewSourceFileEntry[] = [];
 
-  for await (const absFilePath of walkFiles(packageRoot)) {
+  for await (const absFilePath of walkFiles(packageRoot, [], { excludeDirs: PACKAGE_BOUNDARY_DIRS })) {
     const registryPath = path.relative(packageRoot, absFilePath).replace(/\\/g, '/');
 
     // Skip files that are already tracked

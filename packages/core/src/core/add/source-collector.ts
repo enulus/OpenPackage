@@ -2,6 +2,7 @@ import { relative, basename, dirname } from 'path';
 import { realpathSync } from 'fs';
 
 import { isDirectory, isFile, walkFiles } from '../../utils/fs.js';
+import { PACKAGE_BOUNDARY_DIRS } from '../../constants/workspace.js';
 import { normalizePathForProcessing } from '../../utils/path-normalization.js';
 import { mapWorkspaceFileToUniversal } from '../platform/platform-mapper.js';
 import { isPlatformRootFile } from '../platform/platform-utils.js';
@@ -53,7 +54,7 @@ export async function collectSourceEntries(resolvedPath: string, cwd: string, in
     const detectedRoot = await detectInputDirectoryPlatform(resolvedPath);
     const effectiveCwd = detectedRoot ?? cwd;
 
-    for await (const filePath of walkFiles(resolvedPath)) {
+    for await (const filePath of walkFiles(resolvedPath, [], { excludeDirs: PACKAGE_BOUNDARY_DIRS })) {
       const entry = deriveSourceEntry(filePath, effectiveCwd, effectiveInputRoot);
       if (!entry) {
         throw new Error(`Unsupported file inside directory: ${relative(cwd, filePath)}`);

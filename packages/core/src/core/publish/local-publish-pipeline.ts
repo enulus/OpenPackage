@@ -8,6 +8,7 @@ import { exists } from '../../utils/fs.js';
 import { resolvePackageByName } from '../package-name-resolution.js';
 import { classifyPackageInput } from '../install/package-input.js';
 import { ValidationError } from '../../utils/errors.js';
+import { validateDependencyContainment, formatContainmentViolations } from '../../utils/validation/dependency-containment.js';
 import { formatPathForDisplay } from '../../utils/formatters.js';
 import { formatVersionLabel } from '../package-versioning.js';
 import { createPublishResultInfo, displayPublishSuccess } from './publish-output.js';
@@ -151,7 +152,16 @@ export async function runLocalPublishPipeline(
   try {
     // Resolve package source (CWD, path, or package name)
     const source = await resolveSource(cwd, packageInput, output);
-    
+
+    // Validate dependency containment (path deps must resolve within package root)
+    const containment = validateDependencyContainment(source.manifest, source.packageRoot);
+    if (!containment.valid) {
+      return {
+        success: false,
+        error: formatContainmentViolations(containment.violations)
+      };
+    }
+
     const packageName = source.name;
     const version = source.version;
     

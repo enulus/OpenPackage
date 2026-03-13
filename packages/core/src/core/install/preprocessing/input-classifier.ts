@@ -80,6 +80,16 @@ function enrichWithInstallFeatures(
           hasResourcePath: !!base.registryPath
         }
       };
+
+    case 'embedded':
+      return {
+        type: 'embedded',
+        qualifiedName: base.qualifiedName,
+        parentName: base.parentName,
+        embeddedName: base.embeddedName,
+        version: base.version,
+        features,
+      };
   }
 }
 

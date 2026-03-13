@@ -31,6 +31,7 @@ const DEFAULT_EXCLUDE_DIRS = new Set([
   '__pycache__',
   'target',
   'vendor',
+  'packages',
 ]);
 
 /**

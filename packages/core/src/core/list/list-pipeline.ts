@@ -66,6 +66,9 @@ export interface ListPackageReport {
   divergedCount?: number;
   sourceDeletedCount?: number;
   isRegistryPackage?: boolean;
+  sourceType?: string;
+  isEmbedded?: boolean;
+  parentPackageName?: string;
 }
 
 export interface ListTreeNode {
@@ -398,7 +401,10 @@ async function checkPackageStatus(
     outdatedCount,
     divergedCount,
     sourceDeletedCount,
-    isRegistryPackage: isRegistryPackageFlag
+    isRegistryPackage: isRegistryPackageFlag,
+    sourceType: entry.sourceType,
+    isEmbedded: !!entry.parent,
+    parentPackageName: entry.parent,
   };
 }
 
@@ -441,6 +447,47 @@ function buildDependencyTree(
   return rootNames
     .map(name => buildNode(name, 0))
     .filter((node): node is ListTreeNode => node !== null);
+}
+
+/**
+ * Nest embedded packages under their parent nodes in the tree.
+ */
+function nestEmbeddedPackages(
+  tree: ListTreeNode[],
+  reportMap: Map<string, ListPackageReport>
+): ListTreeNode[] {
+  // Build parent → children map from reports
+  const parentChildMap = new Map<string, ListPackageReport[]>();
+  for (const [, report] of reportMap) {
+    if (report.parentPackageName) {
+      const children = parentChildMap.get(report.parentPackageName) ?? [];
+      children.push(report);
+      parentChildMap.set(report.parentPackageName, children);
+    }
+  }
+
+  if (parentChildMap.size === 0) return tree;
+
+  // Recursively add embedded children to tree nodes
+  function addEmbeddedChildren(nodes: ListTreeNode[]): ListTreeNode[] {
+    return nodes.map(node => {
+      const embeddedReports = parentChildMap.get(node.report.name) ?? [];
+      const embeddedNodes: ListTreeNode[] = embeddedReports.map(report => ({
+        report,
+        children: [],
+      }));
+
+      return {
+        report: node.report,
+        children: [
+          ...addEmbeddedChildren(node.children),
+          ...embeddedNodes,
+        ],
+      };
+    });
+  }
+
+  return addEmbeddedChildren(tree);
 }
 
 export async function runListPipeline(
@@ -582,7 +629,7 @@ export async function runListPipeline(
       report: targetPackage,
       children: tree
     };
-    const treeWithTarget = [targetTreeNode];
+    const treeWithTarget = nestEmbeddedPackages([targetTreeNode], reportMap);
 
     // Compute tracked/missing counts from reports
     const trackedCount = reports.reduce((sum, r) => sum + r.existingFiles, 0);
@@ -629,7 +676,8 @@ export async function runListPipeline(
   }
 
   // Build dependency tree from root packages
-  const tree = buildDependencyTree(rootPackageNames, reportMap, all);
+  let tree = buildDependencyTree(rootPackageNames, reportMap, all);
+  tree = nestEmbeddedPackages(tree, reportMap);
 
   // Compute tracked/missing counts from reports
   const trackedCount = reports.reduce((sum, r) => sum + r.existingFiles, 0);

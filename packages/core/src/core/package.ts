@@ -9,6 +9,7 @@ import {
   remove,
   ensureDir
 } from '../utils/fs.js';
+import { PACKAGE_BOUNDARY_DIRS } from '../constants/workspace.js';
 import { logger } from '../utils/logger.js';
 import {
   PackageNotFoundError,
@@ -248,7 +249,7 @@ export class PackageManager {
     try {
       // Include all file types (no filtering)
       // Get all files recursively in the package directory
-      for await (const fullPath of walkFiles(packagePath)) {
+      for await (const fullPath of walkFiles(packagePath, [], { excludeDirs: PACKAGE_BOUNDARY_DIRS })) {
         const relativePath = relative(packagePath, fullPath);
 
         // Filter out junk files
@@ -299,7 +300,7 @@ export class PackageManager {
 
   private async listPackageFilePaths(packagePath: string): Promise<string[]> {
     const paths: string[] = [];
-    for await (const fullPath of walkFiles(packagePath)) {
+    for await (const fullPath of walkFiles(packagePath, [], { excludeDirs: PACKAGE_BOUNDARY_DIRS })) {
       const relativePath = relative(packagePath, fullPath);
       if (isJunk(basename(relativePath))) {
         continue;

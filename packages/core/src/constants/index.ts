@@ -131,6 +131,18 @@ export const SOURCE_TYPES = {
 } as const;
 
 /**
+ * Granular source types persisted in the workspace index.
+ * Distinguishes between project-local, global, registry, and git sources.
+ */
+export const INDEX_SOURCE_TYPES = {
+  PROJECT: 'project',    // .openpackage/packages/ — mutable
+  GLOBAL: 'global',      // ~/.openpackage/packages/ — mutable
+  REGISTRY: 'registry',  // ~/.openpackage/registry/ — immutable
+  GIT: 'git',            // ~/.openpackage/cache/git/ — immutable
+} as const;
+export type IndexSourceType = typeof INDEX_SOURCE_TYPES[keyof typeof INDEX_SOURCE_TYPES];
+
+/**
  * Mutability constants for package sources.
  */
 export const MUTABILITY = {

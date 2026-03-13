@@ -6,6 +6,7 @@ import { detectGitSource } from '../../utils/git-url-detection.js';
 import { exists } from '../../utils/fs.js';
 import { isValidPackageDirectory } from '../package-context.js';
 import { detectPluginType } from './plugin-detector.js';
+import { isQualifiedName, parseQualifiedName } from '../../utils/qualified-name.js';
 
 /**
  * Base input classification result - represents parsed source information
@@ -15,7 +16,8 @@ export type BaseInputClassification =
   | GitInputSpec
   | RegistryInputSpec
   | LocalPathInputSpec
-  | BulkInputSpec;
+  | BulkInputSpec
+  | EmbeddedInputSpec;
 
 export interface GitInputSpec {
   type: 'git';
@@ -45,6 +47,14 @@ export interface LocalPathInputSpec {
 
 export interface BulkInputSpec {
   type: 'bulk';
+}
+
+export interface EmbeddedInputSpec {
+  type: 'embedded';
+  qualifiedName: string;
+  parentName: string;
+  embeddedName: string;
+  version?: string;
 }
 
 export interface BaseClassifierOptions {
@@ -88,6 +98,27 @@ export async function classifyInputBase(
   // No input = bulk
   if (!input) {
     return { type: 'bulk' };
+  }
+
+  // 0. Check for embedded package (parent/child) before other detection
+  {
+    // Strip @version suffix for qualified name check
+    const atIndex = input.lastIndexOf('@');
+    const nameWithoutVersion = atIndex > 0 ? input.slice(0, atIndex) : input;
+    const version = atIndex > 0 ? input.slice(atIndex + 1) : undefined;
+
+    if (isQualifiedName(nameWithoutVersion)) {
+      const parsed = parseQualifiedName(nameWithoutVersion);
+      if (parsed) {
+        return {
+          type: 'embedded',
+          qualifiedName: nameWithoutVersion,
+          parentName: parsed.parent,
+          embeddedName: parsed.child,
+          version,
+        };
+      }
+    }
   }
 
   // 1. Try git detection first (non-GitHub URLs)

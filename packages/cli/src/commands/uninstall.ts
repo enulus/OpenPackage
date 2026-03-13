@@ -27,6 +27,7 @@ interface UninstallCommandOptions extends UninstallOptions {
   global?: boolean;
   interactive?: boolean;
   json?: boolean;
+  recursive?: boolean;
 }
 
 async function uninstallCommand(

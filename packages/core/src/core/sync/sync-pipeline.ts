@@ -42,6 +42,7 @@ import { aggregateSyncFileResults, buildSyncAllResult, formatSyncMessage } from 
 import { resolveOutput, resolvePrompt } from '../ports/resolve.js';
 import { isUnversionedVersion } from '../package-versioning.js';
 import { logger } from '../../utils/logger.js';
+import { findPackageInIndex } from '../../utils/workspace-index-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Single-package sync
@@ -64,26 +65,28 @@ export async function runSyncPipeline(
 
   // Read workspace index
   const { index } = await readWorkspaceIndex(cwd);
-  const pkgIndex = index.packages?.[packageName];
-  if (!pkgIndex) {
+  const match = findPackageInIndex(packageName, index.packages ?? {});
+  if (!match) {
     throw new Error(
       `Package '${packageName}' is not installed in this workspace.\n` +
       `Run 'opkg install ${packageName}' to install it first.`
     );
   }
+  const resolvedName = match.key;
+  const pkgIndex = match.entry;
 
   if (!pkgIndex.files || Object.keys(pkgIndex.files).length === 0) {
-    return aggregateSyncFileResults(packageName, []);
+    return aggregateSyncFileResults(resolvedName, []);
   }
 
   // Self-heal stale index entries (files deleted from disk)
-  const healResult = await healAndPersistIndex(cwd, index, getWorkspaceIndexPath(cwd), packageName);
+  const healResult = await healAndPersistIndex(cwd, index, getWorkspaceIndexPath(cwd), resolvedName);
   if (healResult.healed && (!pkgIndex.files || Object.keys(pkgIndex.files).length === 0)) {
-    return aggregateSyncFileResults(packageName, []);
+    return aggregateSyncFileResults(resolvedName, []);
   }
 
   // Resolve source
-  const source = await resolvePackageSource(cwd, packageName);
+  const source = await resolvePackageSource(cwd, resolvedName);
 
   // Assert mutable for push direction
   if (options.direction !== 'pull') {
@@ -100,10 +103,10 @@ export async function runSyncPipeline(
   let versionUpdateInfo: VersionUpdateInfo | undefined;
   if (options.direction !== 'push') {
     const outcome = await checkAndResolveVersion(
-      packageName, cwd, packageRoot, options, ctx,
+      resolvedName, cwd, packageRoot, options, ctx,
     );
     if (outcome === 'skip') {
-      return aggregateSyncFileResults(packageName, []);
+      return aggregateSyncFileResults(resolvedName, []);
     }
     if (outcome !== 'none') {
       versionUpdateInfo = outcome;
@@ -114,7 +117,7 @@ export async function runSyncPipeline(
   const { statusMap, pendingHashUpdates } = await checkContentStatus(cwd, packageRoot, filesMapping);
   if (pendingHashUpdates.size > 0) {
     try {
-      await applyPendingHashUpdates(cwd, packageName, pendingHashUpdates);
+      await applyPendingHashUpdates(cwd, resolvedName, pendingHashUpdates);
     } catch (error) {
       logger.warn(`Failed to apply hash pivot recovery: ${error}`);
     }
@@ -124,7 +127,7 @@ export async function runSyncPipeline(
   let actions = classifyFileActions(statusMap, options.direction, options.conflicts);
 
   if (actions.length === 0) {
-    return aggregateSyncFileResults(packageName, []);
+    return aggregateSyncFileResults(resolvedName, []);
   }
 
   // Resolve conflicts interactively if needed
@@ -161,7 +164,7 @@ export async function runSyncPipeline(
   if (pushActions.length > 0) {
     const pushResults = await executePushActions(
       pushActions,
-      packageName,
+      resolvedName,
       packageRoot,
       cwd,
       filesMapping,
@@ -175,7 +178,7 @@ export async function runSyncPipeline(
   if (pullActions.length > 0) {
     const pullResults = await executePullActions(
       pullActions,
-      packageName,
+      resolvedName,
       packageRoot,
       cwd,
       filesMapping,
@@ -189,7 +192,7 @@ export async function runSyncPipeline(
   if (removeActions.length > 0) {
     const removeResults = await executeRemoveActions(
       removeActions,
-      packageName,
+      resolvedName,
       cwd,
       filesMapping,
       options,
@@ -204,7 +207,7 @@ export async function runSyncPipeline(
     if (newFiles.length > 0) {
       const newResults = await executePullNewActions(
         newFiles,
-        packageName,
+        resolvedName,
         packageRoot,
         cwd,
         options,
@@ -213,7 +216,7 @@ export async function runSyncPipeline(
     }
   }
 
-  const result = aggregateSyncFileResults(packageName, allResults);
+  const result = aggregateSyncFileResults(resolvedName, allResults);
 
   // Attach version update info
   if (versionUpdateInfo) {

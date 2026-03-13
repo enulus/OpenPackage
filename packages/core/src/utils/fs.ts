@@ -175,7 +175,7 @@ export async function removeEmptyDirectories(root: string): Promise<void> {
 /**
  * Recursively walk through a directory and yield all files
  */
-export async function* walkFiles(dirPath: string, includePatterns: string[] = []): AsyncGenerator<string> {
+export async function* walkFiles(dirPath: string, includePatterns: string[] = [], options?: { excludeDirs?: ReadonlySet<string> }): AsyncGenerator<string> {
   try {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
     
@@ -205,7 +205,10 @@ export async function* walkFiles(dirPath: string, includePatterns: string[] = []
           yield fullPath;
         }
       } else if (entry.isDirectory()) {
-        yield* walkFiles(fullPath, includePatterns);
+        if (options?.excludeDirs?.has(entry.name)) {
+          continue;
+        }
+        yield* walkFiles(fullPath, includePatterns, options);
       }
     }
   } catch (error) {

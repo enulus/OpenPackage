@@ -6,6 +6,7 @@ import { isJunk } from 'junk';
 import type { Package, PackageFile, PackageYml, PackageWithContext } from '../../types/index.js';
 import { detectPackageFormat } from './format-detector.js';
 import { DIR_PATTERNS } from '../../constants/index.js';
+import { PACKAGE_BOUNDARY_DIRS } from '../../constants/workspace.js';
 import { generateGitHubPackageName } from '../../utils/plugin-naming.js';
 import { createPlatformContext } from '../conversion-context/index.js';
 import { resolvePluginMetadata, type ClaudePluginManifest } from './plugin-metadata-resolver.js';
@@ -160,7 +161,7 @@ async function extractPluginFiles(pluginDir: string): Promise<PackageFile[]> {
   const files: PackageFile[] = [];
   
   try {
-    for await (const fullPath of walkFiles(pluginDir)) {
+    for await (const fullPath of walkFiles(pluginDir, [], { excludeDirs: PACKAGE_BOUNDARY_DIRS })) {
       const relativePath = relative(pluginDir, fullPath);
       
       // Skip junk files (e.g., .DS_Store, Thumbs.db)

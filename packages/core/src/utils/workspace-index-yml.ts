@@ -148,6 +148,16 @@ function sanitizeWorkspaceIndexPackage(entry: any): WorkspaceIndexPackage | null
     }
   }
 
+  const rawSourceType = (entry as { sourceType?: unknown }).sourceType;
+  if (rawSourceType === 'project' || rawSourceType === 'global' || rawSourceType === 'registry' || rawSourceType === 'git') {
+    pkg.sourceType = rawSourceType;
+  }
+
+  const rawParent = (entry as { parent?: unknown }).parent;
+  if (typeof rawParent === 'string' && rawParent.trim().length > 0) {
+    pkg.parent = rawParent.trim();
+  }
+
   return pkg;
 }
 
@@ -343,6 +353,12 @@ export async function writeWorkspaceIndex(record: WorkspaceIndexRecord): Promise
     }
     if (pkg.marketplace) {
       sortedPkg.marketplace = pkg.marketplace;
+    }
+    if (pkg.sourceType) {
+      sortedPkg.sourceType = pkg.sourceType;
+    }
+    if (pkg.parent) {
+      sortedPkg.parent = pkg.parent;
     }
     sortedPackages[pkgName] = sortedPkg;
   }

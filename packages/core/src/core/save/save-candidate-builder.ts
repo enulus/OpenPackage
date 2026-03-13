@@ -16,6 +16,7 @@
 
 import { join, relative } from 'path';
 import { exists, getStats, readTextFile, walkFiles } from '../../utils/fs.js';
+import { PACKAGE_BOUNDARY_DIRS } from '../../constants/workspace.js';
 import { calculateFileHash } from '../../utils/hash-utils.js';
 import { normalizePathForProcessing, getRelativePathFromBase } from '../../utils/path-normalization.js';
 import { inferPlatformFromWorkspaceFile } from '../platforms.js';
@@ -115,7 +116,7 @@ async function buildLocalSourceRefs(
 ): Promise<LocalSourceRef[]> {
   const refs: LocalSourceRef[] = [];
   
-  for await (const absPath of walkFiles(packageRoot)) {
+  for await (const absPath of walkFiles(packageRoot, [], { excludeDirs: PACKAGE_BOUNDARY_DIRS })) {
     const relPath = relative(packageRoot, absPath);
     const normalizedPath = normalizePathForProcessing(relPath);
     

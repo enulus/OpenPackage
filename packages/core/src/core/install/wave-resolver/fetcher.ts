@@ -20,6 +20,7 @@ import { resolveDeclaredPath } from '../../../utils/path-resolution.js';
 import { readManifestAtPath, extractDependencies } from './manifest-reader.js';
 import { exists } from '../../../utils/fs.js';
 import { logger } from '../../../utils/logger.js';
+import { isQualifiedName, parseQualifiedName } from '../../../utils/qualified-name.js';
 
 /**
  * Compute a canonical dependency ID for wave-resolver deduplication.
@@ -33,6 +34,12 @@ export function computeWaveId(
   declaredInDir: string
 ): { id: string; displayName: string; sourceType: 'registry' | 'path' | 'git' } {
   const depName = String(declaration.name ?? '').trim();
+
+  // Embedded package: qualified name without url/path
+  if (!declaration.url && !declaration.path && isQualifiedName(depName)) {
+    const id = `embedded:${depName}`;
+    return { id, displayName: depName, sourceType: 'path' };
+  }
 
   if (declaration.url) {
     const [gitUrlRaw, embeddedRef] = declaration.url.includes('#')
@@ -292,5 +299,7 @@ export class PathFetcher implements PackageFetcher {
 export function createFetcher(declaration: DependencyDeclaration): PackageFetcher {
   if (declaration.url) return new GitFetcher();
   if (declaration.path) return new PathFetcher();
+  // Qualified names use PathFetcher with embedded resolution
+  if (isQualifiedName(declaration.name)) return new PathFetcher();
   return new RegistryFetcher();
 }

@@ -40,6 +40,7 @@ import {
 import { removeStaleFiles } from './stale-file-cleanup.js';
 import { normalizePathForProcessing } from '../../utils/path-normalization.js';
 import type { IndexWriteCollector } from './wave-resolver/index-write-collector.js';
+import type { IndexSourceType } from '../../constants/index.js';
 import { createContextFromFormat } from '../conversion-context/creation.js';
 import { detectFormatWithContextFromDirectory } from './helpers/format-detection.js';
 import {
@@ -113,7 +114,8 @@ export async function installPackageByIndexWithFlows(
   forceOverwrite?: boolean,  // Phase 5: Package was confirmed for overwrite at package-level conflict phase
   prompt?: import('../ports/prompt.js').PromptPort,
   indexWriteCollector?: IndexWriteCollector,
-  sharedOwnershipContext?: import('./conflicts/file-conflict-resolver.js').OwnershipContext
+  sharedOwnershipContext?: import('./conflicts/file-conflict-resolver.js').OwnershipContext,
+  sourceType?: IndexSourceType
 ): Promise<IndexInstallResult> {
   logger.debug(`Installing ${packageName}@${version} with flows for platforms: ${platforms.join(', ')}`);
 
@@ -405,7 +407,8 @@ export async function installPackageByIndexWithFlows(
       resourceVersion,
       indexWriteCollector,
       platforms,
-      resolvedNamespaceSlug
+      resolvedNamespaceSlug,
+      sourceType
     );
   }
 
@@ -445,7 +448,8 @@ async function updateWorkspaceIndexForFlows(
   resourceVersion?: string,
   indexWriteCollector?: IndexWriteCollector,
   platforms?: Platform[],
-  namespaceSlug?: string
+  namespaceSlug?: string,
+  sourceType?: IndexSourceType
 ): Promise<void> {
   const effectiveVersion = resourceVersion ?? version;
 
@@ -459,6 +463,7 @@ async function updateWorkspaceIndexForFlows(
       marketplace: marketplaceMetadata,
       platforms,
       namespace: namespaceSlug,
+      sourceType,
     });
     return;
   }
@@ -504,7 +509,12 @@ async function updateWorkspaceIndexForFlows(
     if (marketplaceMetadata) {
       packageEntry.marketplace = marketplaceMetadata;
     }
-    
+
+    // Add source type if present
+    if (sourceType) {
+      packageEntry.sourceType = sourceType;
+    }
+
     wsRecord.index.packages[packageName] = packageEntry;
     
     await writeWorkspaceIndex(wsRecord);

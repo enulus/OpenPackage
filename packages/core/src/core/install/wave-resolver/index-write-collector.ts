@@ -18,6 +18,7 @@ import { formatPathForYaml } from '../../../utils/path-resolution.js';
 import { getTargetPath } from '../../../utils/workspace-index-helpers.js';
 import { normalizePathForProcessing } from '../../../utils/path-normalization.js';
 import { logger } from '../../../utils/logger.js';
+import type { IndexSourceType } from '../../../constants/index.js';
 
 // ============================================================================
 // Types
@@ -36,6 +37,8 @@ export interface PackageEntryUpdate {
   marketplace?: { url: string; commitSha: string; pluginName: string };
   platforms?: string[];
   namespace?: string;
+  sourceType?: IndexSourceType;
+  parent?: string;
 }
 
 /**
@@ -79,6 +82,8 @@ export interface DependencyUpdate {
   version?: string;
   contentRoot?: string;
   dependencies?: string[];
+  sourceType?: IndexSourceType;
+  parent?: string;
 }
 
 export type IndexMutation =
@@ -193,6 +198,8 @@ function applyMutation(
       if (mutation.namespace) entry.namespace = mutation.namespace;
       if (mutation.marketplace) entry.marketplace = mutation.marketplace;
       if (mutation.platforms && mutation.platforms.length > 0) entry.platforms = mutation.platforms;
+      if (mutation.sourceType) entry.sourceType = mutation.sourceType;
+      if (mutation.parent) entry.parent = mutation.parent;
       index.packages[mutation.packageName] = entry;
       break;
     }
@@ -261,6 +268,8 @@ function applyMutation(
         if (mutation.dependencies && mutation.dependencies.length > 0) {
           existing.dependencies = mutation.dependencies;
         }
+        if (mutation.sourceType) existing.sourceType = mutation.sourceType;
+        if (mutation.parent) existing.parent = mutation.parent;
       } else if (mutation.contentRoot) {
         const formattedPath = formatPathForYaml(mutation.contentRoot, targetDir);
         index.packages[mutation.packageName] = {
@@ -268,6 +277,8 @@ function applyMutation(
           version: mutation.version,
           dependencies: mutation.dependencies && mutation.dependencies.length > 0
             ? mutation.dependencies : undefined,
+          sourceType: mutation.sourceType,
+          parent: mutation.parent,
           files: {},
         };
       }

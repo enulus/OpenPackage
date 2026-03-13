@@ -1,5 +1,6 @@
 import { ValidationError } from './errors.js';
 import { PackageDependency } from '../types/index.js';
+import { isQualifiedName } from './qualified-name.js';
 
 /**
  * Regex pattern for scoped package names (@scope/name or @scope/name/subname/...)
@@ -212,6 +213,15 @@ export function parsePackageInstallSpec(
     }
     const { name, version } = parsePackageInput(packagePortion);
     return { name, version, registryPath };
+  }
+
+  // Guard: qualified names (parent/child) should not be split on '/'
+  // Strip @version suffix for the check
+  const qualifiedCheckAtIndex = raw.lastIndexOf('@');
+  const qualifiedCheckName = qualifiedCheckAtIndex > 0 ? raw.slice(0, qualifiedCheckAtIndex) : raw;
+  if (isQualifiedName(qualifiedCheckName)) {
+    // Treat as atomic name, delegate to parsePackageInput
+    return parsePackageInput(raw);
   }
 
   // Backward-compatible "package/path" parsing, with special handling for scoped

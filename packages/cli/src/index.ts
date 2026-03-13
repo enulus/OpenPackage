@@ -269,6 +269,7 @@ program
   .argument('[resource-spec]', 'name of the resource or package to uninstall')
   .option('-g, --global', 'uninstall from home directory (~/) instead of current workspace')
   .option('--dry-run', 'preview changes without applying them')
+  .option('-r, --recursive', 'also uninstall embedded child packages')
   .option('-i, --interactive', 'interactively select items to uninstall')
   .option('--json', 'output results as JSON')
   .action(withErrorHandling(async (...args: any[]) => {

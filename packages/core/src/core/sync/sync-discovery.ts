@@ -9,7 +9,6 @@
 import type { SyncDirection, SyncablePackageInfo } from './sync-types.js';
 import { readWorkspaceIndex } from '../../utils/workspace-index-yml.js';
 import { resolvePackageSource } from '../source-resolution/resolve-package-source.js';
-import { isRegistryPath } from '../source-mutability.js';
 import { checkContentStatus } from '../list/content-status-checker.js';
 import { detectAllNewWorkspaceFiles } from '../save/save-new-file-detector.js';
 import { detectNewSourceFiles } from './sync-source-scanner.js';
@@ -46,10 +45,10 @@ export async function discoverSyncablePackages(
       continue;
     }
 
-    // Skip immutable (registry) packages — they can't be pushed to,
-    // and their source is a local snapshot (pull from registry makes no sense)
-    if (isRegistryPath(source.absolutePath)) {
-      logger.debug(`Skipping ${packageName}: immutable (registry)`);
+    // Skip immutable packages — they can't be pushed to,
+    // and their source is a local snapshot (pull from registry/git makes no sense)
+    if (source.mutability === 'immutable') {
+      logger.debug(`Skipping ${packageName}: immutable (${source.sourceType})`);
       continue;
     }
 
