@@ -153,7 +153,7 @@ function printSyncAllResults(
         out.info(`  ${connector}${f.sourceKey} ${direction} ${label}`.trimEnd());
       }
     } else if (pkg.status === 'error') {
-      out.error(`\u2717 ${pkg.packageName}: ${pkg.error}`);
+      out.error(`${pkg.packageName}: ${pkg.error}`);
     } else {
       out.info(`- ${pkg.packageName}: no changes`);
     }
