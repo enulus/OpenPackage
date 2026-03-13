@@ -38,6 +38,7 @@ import type { SourceEntry } from '../add/source-collector.js';
 import { resolvePackageSource } from '../source-resolution/resolve-package-source.js';
 import { readWorkspaceIndex, writeWorkspaceIndex } from '../../utils/workspace-index-yml.js';
 import { findPackageInIndex } from '../../utils/workspace-index-helpers.js';
+import { removeWorkspaceIndexFileKeys } from '../../utils/workspace-index-ownership.js';
 import { detectNewSourceFiles } from '../sync/sync-source-scanner.js';
 import { executePullNewActions } from '../sync/sync-pull-new-executor.js';
 import { logger } from '../../utils/logger.js';
@@ -282,7 +283,7 @@ export async function runMovePipeline(
     // relocate or rename-relocate: shared flow
     return await executeRelocate(
       packageSourcePath, resource, resourceName, newName,
-      isRename, action, options, execContext,
+      isRename, action, options, execContext, target.targetDir,
     );
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };
@@ -327,6 +328,7 @@ async function executeRelocate(
   action: MoveResult['action'],
   options: MoveOptions,
   execContext: ExecutionContext,
+  resourceTargetDir: string,
 ): Promise<CommandResult<MoveResult>> {
   let entries = await buildEntriesFromPackageSource(packageSourcePath, resource);
 
@@ -342,15 +344,8 @@ async function executeRelocate(
     return { success: false, error: addResult.error ?? 'Failed to add resource to destination package.' };
   }
 
-  await performMoveCleanup({ resource, packageSourcePath, execContext });
-
-  // Sync new files from target package into workspace and update workspace index
-  await syncNewTargetFiles(options.to!, execContext.targetDir);
-
-  // Remove stale source keys from origin package's workspace index
-  if (resource.packageName) {
-    await removeSourceKeysFromIndex(resource.packageName, resource.sourceKeys, execContext.targetDir);
-  }
+  await performMoveCleanup({ resource, packageSourcePath, execContext, resourceTargetDir });
+  await postMoveSyncAndCleanup(options.to!, resource, execContext.targetDir);
 
   return {
     success: true,
@@ -397,9 +392,7 @@ async function executeAdopt(
   }
 
   await performMoveCleanup({ resource, packageSourcePath: undefined, execContext, resourceTargetDir });
-
-  // Sync new files from target package into workspace and update workspace index
-  await syncNewTargetFiles(options.to!, execContext.targetDir);
+  await postMoveSyncAndCleanup(options.to!, resource, execContext.targetDir);
 
   return {
     success: true,
@@ -468,11 +461,35 @@ async function buildEntriesFromPackageSource(
 }
 
 /**
- * After copying files to a target package, detect newly added source files
- * and install them into the workspace (updating the workspace index).
+ * Post-move reconciliation: sync new target files into the workspace, then
+ * remove stale source keys from the origin package (if any).
+ */
+async function postMoveSyncAndCleanup(
+  targetPackage: string,
+  resource: ResolvedResource,
+  cwd: string,
+): Promise<void> {
+  await syncNewTargetFiles(targetPackage, cwd);
+
+  // For tracked resources, remove the old source keys from the origin package.
+  // Re-reads the workspace index because syncNewTargetFiles writes to it.
+  if (resource.packageName) {
+    try {
+      const record = await readWorkspaceIndex(cwd);
+      removeWorkspaceIndexFileKeys(record.index, resource.packageName, resource.sourceKeys);
+      await writeWorkspaceIndex(record);
+    } catch (error) {
+      logger.warn(`Failed to clean source index for "${resource.packageName}": ${error}`);
+    }
+  }
+}
+
+/**
+ * Detect newly added source files in a target package and install them into
+ * the workspace (updating the workspace index).
  *
- * This uses the same sync infrastructure as `sync --pull` but is scoped to
- * only new files, avoiding side-effects on existing tracked files.
+ * Uses the same sync infrastructure as `sync --pull` but scoped to only new
+ * files, avoiding side-effects on existing tracked files.
  */
 async function syncNewTargetFiles(
   packageName: string,
@@ -502,37 +519,7 @@ async function syncNewTargetFiles(
       );
     }
   } catch (error) {
-    logger.debug(`Post-move sync for "${packageName}" failed: ${error}`);
-  }
-}
-
-/**
- * Remove stale source keys from a package's workspace index entry.
- * Used after relocate to clean up the origin package's tracking data.
- */
-async function removeSourceKeysFromIndex(
-  packageName: string,
-  sourceKeys: Set<string>,
-  cwd: string,
-): Promise<void> {
-  try {
-    const record = await readWorkspaceIndex(cwd);
-    const match = findPackageInIndex(packageName, record.index.packages ?? {});
-    if (!match?.entry.files) return;
-
-    let removed = 0;
-    for (const key of sourceKeys) {
-      if (match.entry.files[key]) {
-        delete match.entry.files[key];
-        removed++;
-      }
-    }
-
-    if (removed > 0) {
-      await writeWorkspaceIndex(record);
-    }
-  } catch (error) {
-    logger.debug(`Failed to clean source index for "${packageName}": ${error}`);
+    logger.warn(`Post-move sync for "${packageName}" failed: ${error}`);
   }
 }
 
