@@ -3,6 +3,7 @@ import type { InstallOptions, ExecutionContext } from '../../../types/index.js';
 import type { ResolvedPackage } from '../../dependency-resolver/types.js';
 import type { WorkspaceIndex } from '../../../types/workspace-index.js';
 import type { ConflictSummary } from '../operations/installation-executor.js';
+import type { MutableSourceKind } from '../local-source-resolution.js';
 
 /**
  * Describes the scope of files this install context covers.
@@ -59,6 +60,15 @@ export interface PackageSource {
     gitUrl: string;
     gitRef?: string;
     gitPath?: string;
+  };
+
+  /** Mutable source override for manifest recording.
+   *  When source.type is 'registry' but the package was physically resolved
+   *  from a workspace or global mutable directory, carries the path so the
+   *  manifest phase writes path: instead of version:. */
+  mutableSourceOverride?: {
+    kind: MutableSourceKind;
+    packageRootDir: string;
   };
   
   // Resolved content root (populated after loading)

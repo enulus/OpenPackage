@@ -10,7 +10,7 @@ import { SCOPED_PACKAGE_REGEX, normalizePackageName } from '../../utils/package-
 import semver from 'semver';
 import type { InstallResolutionMode } from './types.js';
 
-type MutableSourceKind = 'workspaceMutable' | 'globalMutable';
+export type MutableSourceKind = 'workspaceMutable' | 'globalMutable';
 
 export interface MutableSourceInfo {
   kind: MutableSourceKind;

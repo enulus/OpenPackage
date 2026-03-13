@@ -50,6 +50,14 @@ export class RegistrySourceLoader implements PackageSourceLoader {
     const inRegistry = await hasPackageVersion(source.packageName, source.version);
     const availableLocally = !!(inWorkspace || inGlobal || inRegistry);
 
+    const mutableSource = inWorkspace ?? inGlobal;
+    if (mutableSource) {
+      source.mutableSourceOverride = {
+        kind: mutableSource.kind,
+        packageRootDir: mutableSource.packageRootDir,
+      };
+    }
+
     if (!availableLocally && mode !== 'local-only') {
       const pullResult = await pullPackageFromRemote(source.packageName, source.version, {
         profile: options.profile,
