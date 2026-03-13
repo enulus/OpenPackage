@@ -19,6 +19,8 @@ export interface MoveCleanupContext {
   resource: ResolvedResource;
   packageSourcePath: string | undefined;
   execContext: ExecutionContext;
+  /** Override for the directory that resource.targetFiles are relative to (e.g. HOME for global resources). */
+  resourceTargetDir?: string;
 }
 
 export interface MoveCleanupResult {
@@ -61,7 +63,7 @@ export async function performMoveCleanup(ctx: MoveCleanupContext): Promise<MoveC
     }
   } else {
     // Untracked resource — direct file deletion from workspace
-    const targetDir = execContext.targetDir;
+    const targetDir = ctx.resourceTargetDir ?? execContext.targetDir;
 
     for (const targetFile of resource.targetFiles) {
       const absPath = join(targetDir, targetFile);
