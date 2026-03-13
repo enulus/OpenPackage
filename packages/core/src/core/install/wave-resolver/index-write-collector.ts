@@ -35,6 +35,7 @@ export interface PackageEntryUpdate {
   dependencies?: string[];
   marketplace?: { url: string; commitSha: string; pluginName: string };
   platforms?: string[];
+  namespace?: string;
 }
 
 /**
@@ -189,6 +190,7 @@ function applyMutation(
       if (mutation.dependencies && mutation.dependencies.length > 0) {
         entry.dependencies = mutation.dependencies;
       }
+      if (mutation.namespace) entry.namespace = mutation.namespace;
       if (mutation.marketplace) entry.marketplace = mutation.marketplace;
       if (mutation.platforms && mutation.platforms.length > 0) entry.platforms = mutation.platforms;
       index.packages[mutation.packageName] = entry;

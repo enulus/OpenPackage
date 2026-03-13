@@ -58,6 +58,8 @@ export interface WorkspaceIndexPackage {
   files: Record<string, (string | WorkspaceIndexFileMapping)[]>;
   /** Platforms this package was installed to */
   platforms?: string[];
+  /** Namespace slug used for this package's resources (persisted across sync/reinstall) */
+  namespace?: string;
   /**
    * Marketplace source metadata for plugins defined in marketplace.json
    * When present, indicates this plugin came from a marketplace and may need

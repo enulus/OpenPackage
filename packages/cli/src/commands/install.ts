@@ -27,6 +27,7 @@ export async function setupInstallCommand(args: any[]): Promise<void> {
       conflicts?: string;
       interactive?: boolean;
       json?: boolean;
+      namespace?: boolean | string;
     },
     Command
   ];

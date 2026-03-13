@@ -22,7 +22,7 @@ import type { Flow, SwitchExpression } from "../types/flows.js"
 import type { GlobalFlowsConfig } from "../types/platform-flows.js"
 import type { Platform, PlatformDefinition, PlatformDetectionResult, PlatformPaths, PlatformDirectoryPaths } from "../types/platform.js"
 export type { Platform, PlatformDefinition, PlatformDetectionResult, PlatformPaths, PlatformDirectoryPaths }
-import { validateSwitchExpression } from "./flows/switch-resolver.js"
+import { validateSwitchExpression, isSwitchExpression } from "./flows/switch-resolver.js"
 import { 
   matchesAnyPattern, 
   extractSubdirectoriesFromPatterns 
@@ -306,17 +306,6 @@ function validateGlobalFlowsConfig(config: GlobalFlowsConfig): string[] {
 /**
  * Validate an array of flows
  */
-/**
- * Check if a value is a switch expression
- */
-function isSwitchExpression(value: any): boolean {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    '$switch' in value
-  );
-}
-
 /**
  * Check if a value is a pattern object (with pattern and optional schema)
  */
@@ -714,7 +703,10 @@ export function deriveRootDirFromFlows(definition: PlatformDefinition): string {
   const extractPathFromSwitch = (switchExpr: any): string | null => {
     if (isSwitchExpression(switchExpr)) {
       // Use default if available, otherwise first case value
-      return switchExpr.$switch.default || (switchExpr.$switch.cases[0]?.value);
+      const raw = switchExpr.$switch.default || (switchExpr.$switch.cases[0]?.value);
+      if (typeof raw === 'string') return raw;
+      if (typeof raw === 'object' && raw !== null && 'pattern' in raw) return (raw as { pattern: string }).pattern;
+      return null;
     }
     return null;
   };

@@ -293,6 +293,9 @@ export interface FlowContext {
 
   /** Dry run mode (don't write files) */
   dryRun?: boolean;
+
+  /** Target path remap from conflict resolver (original → namespaced) */
+  targetPathRemap?: Map<string, string>;
 }
 
 /**

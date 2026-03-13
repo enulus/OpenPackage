@@ -12,6 +12,7 @@ import type { PackageConversionContext } from '../../../types/conversion-context
 
 import type { RelocatedFile, OwnershipContext } from '../conflicts/file-conflict-resolver.js';
 import type { IndexWriteCollector } from '../wave-resolver/index-write-collector.js';
+import type { WorkspaceIndexRecord } from '../../../utils/workspace-index-yml.js';
 
 /**
  * Installation context
@@ -57,6 +58,13 @@ export interface FlowInstallContext {
    * Index write collector for deferred writes during parallel installs.
    */
   indexWriteCollector?: IndexWriteCollector;
+
+  /**
+   * Pre-read workspace index record from the top-level installer.
+   * When present, avoids redundant disk reads for ownership context,
+   * previous-record extraction, and persisted namespace lookup.
+   */
+  previousIndexRecord?: WorkspaceIndexRecord;
 }
 
 /**
@@ -72,6 +80,8 @@ export interface FlowInstallResult {
   fileMapping: Record<string, any[]>;
   /** True when namespace conflict resolution was triggered for this package */
   namespaced?: boolean;
+  /** The namespace slug used for this package (persisted to workspace index) */
+  namespaceSlug?: string;
   /** Files that were physically relocated on disk during namespace resolution */
   relocatedFiles?: RelocatedFile[];
   /** Workspace-relative paths of files that were auto-claimed (content identical, unowned on disk) */

@@ -51,7 +51,7 @@ import {
 import { extractAllKeys } from './flow-key-extractor.js';
 import { applyMapPipeline, createMapContext, validateMapPipeline, splitMapPipeline } from './map-pipeline/index.js';
 import { SourcePatternResolver } from './source-resolver.js';
-import { resolveSwitchExpression, validateSwitchExpression } from './switch-resolver.js';
+import { resolveSwitchExpression, validateSwitchExpression, isSwitchExpression } from './switch-resolver.js';
 import { smartEquals, smartNotEquals } from '../../utils/path-comparison.js';
 import { stripPlatformSuffixFromFilename } from './platform-suffix-handler.js';
 import { parseMarkdownDocument, serializeMarkdownDocument } from './markdown.js';
@@ -123,7 +123,7 @@ export class DefaultFlowExecutor implements FlowExecutor {
     try {
       // Resolve switch expressions in 'from' field
       let resolvedFrom = flow.from;
-      if (this.isSwitchExpression(flow.from)) {
+      if (isSwitchExpression(flow.from)) {
         try {
           resolvedFrom = resolveSwitchExpression(flow.from as any as SwitchExpression, context);
         } catch (error) {
@@ -140,7 +140,7 @@ export class DefaultFlowExecutor implements FlowExecutor {
 
       // Resolve switch expressions in 'to' field
       let resolvedTo = flow.to;
-      if (this.isSwitchExpression(flow.to)) {
+      if (isSwitchExpression(flow.to)) {
         try {
           resolvedTo = resolveSwitchExpression(flow.to as SwitchExpression, context);
         } catch (error) {
@@ -236,7 +236,7 @@ export class DefaultFlowExecutor implements FlowExecutor {
       return this.aggregateResults(results, startTime);
     } catch (error) {
       return {
-        source: this.isSwitchExpression(flow.from) ? '<switch>' : this.normalizeFromPattern(flow.from),
+        source: isSwitchExpression(flow.from) ? '<switch>' : this.normalizeFromPattern(flow.from),
         target: this.normalizeToPattern(flow.to),
         success: false,
         transformed: false,
@@ -368,7 +368,7 @@ export class DefaultFlowExecutor implements FlowExecutor {
     }
 
     // Validate switch expression in 'to' field
-    if (flow.to && this.isSwitchExpression(flow.to)) {
+    if (flow.to && isSwitchExpression(flow.to)) {
       const switchValidation = validateSwitchExpression(flow.to as SwitchExpression);
       if (!switchValidation.valid) {
         for (const error of switchValidation.errors) {
@@ -424,17 +424,6 @@ export class DefaultFlowExecutor implements FlowExecutor {
       errors,
       warnings: [],
     };
-  }
-
-  /**
-   * Check if a value is a switch expression
-   */
-  private isSwitchExpression(value: any): boolean {
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      '$switch' in value
-    );
   }
 
   /**
@@ -1195,7 +1184,7 @@ export class DefaultFlowExecutor implements FlowExecutor {
     pattern: string | string[] | SwitchExpression,
     context: FlowContext
   ): Promise<{ paths: string[]; warnings: string[] }> {
-    if (this.isSwitchExpression(pattern)) {
+    if (isSwitchExpression(pattern)) {
       throw new Error('Cannot resolve SwitchExpression - expression must be resolved first');
     }
     // Type narrowing: pattern is now string | string[]
@@ -1278,7 +1267,7 @@ export class DefaultFlowExecutor implements FlowExecutor {
    * Converts array to comma-separated string
    */
   private normalizeFromPattern(pattern: string | string[] | SwitchExpression): string {
-    if (this.isSwitchExpression(pattern)) {
+    if (isSwitchExpression(pattern)) {
       return '<switch>';
     }
     // Type narrowing: pattern is now string | string[]
@@ -1294,7 +1283,7 @@ export class DefaultFlowExecutor implements FlowExecutor {
     if (typeof pattern === 'string') {
       return pattern;
     }
-    if (this.isSwitchExpression(pattern)) {
+    if (isSwitchExpression(pattern)) {
       return '<switch>';
     }
     return Object.keys(pattern as MultiTargetFlows).join(', ');
@@ -1305,7 +1294,7 @@ export class DefaultFlowExecutor implements FlowExecutor {
    * Used for path resolution when multiple sources are specified
    */
   private getFirstPattern(pattern: string | string[] | SwitchExpression): string {
-    if (this.isSwitchExpression(pattern)) {
+    if (isSwitchExpression(pattern)) {
       throw new Error('Cannot get first pattern from SwitchExpression - expression must be resolved first');
     }
     // Type narrowing: pattern is now string | string[]

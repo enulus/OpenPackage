@@ -6,7 +6,7 @@
  */
 
 import { join, dirname, basename, relative, extname } from 'path';
-import type { Flow, FlowContext, FlowResult, SwitchExpression } from '../../types/flows.js';
+import type { Flow, FlowContext, FlowResult } from '../../types/flows.js';
 import type { FlowExecutor } from '../../types/flows.js';
 import type { Platform } from '../platforms.js';
 import type { WorkspaceIndexFileMapping } from '../../types/workspace-index.js';
@@ -19,7 +19,8 @@ import {
 import { resolveRecursiveGlobTargetRelativePath } from '../glob-target-mapping.js';
 import { logger } from '../../utils/logger.js';
 import { stripPlatformSuffixFromFilename } from './platform-suffix-handler.js';
-import { resolveSwitchExpression } from './switch-resolver.js';
+import { resolveSwitchExpression, isSwitchExpression } from './switch-resolver.js';
+import { normalizePathForProcessing } from '../../utils/path-normalization.js';
 
 /**
  * Execution result with enhanced metadata
@@ -157,17 +158,6 @@ interface SourceProcessingResult {
 }
 
 /**
- * Check if a value is a switch expression
- */
-function isSwitchExpression(value: any): value is SwitchExpression {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    '$switch' in value
-  );
-}
-
-/**
  * Process a single source file through a flow
  * 
  * @param flow - Flow to execute
@@ -222,12 +212,16 @@ async function processSourceFile(
     sourceContext
   );
   const targetRel = relative(context.workspaceRoot, targetAbs);
-  
+  // Apply namespace remap if present (prefix-based namespacing)
+  const targetRelNorm = normalizePathForProcessing(targetRel);
+  const remappedRel = context.targetPathRemap?.get(targetRelNorm);
+  const finalTargetRel = remappedRel ?? targetRelNorm;
+
   // Create concrete flow with resolved paths
   const concreteFlow: Flow = {
     ...flow,
     from: sourceRel,
-    to: targetRel
+    to: finalTargetRel
   };
   
   // Execute flow

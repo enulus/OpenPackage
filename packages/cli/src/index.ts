@@ -250,6 +250,7 @@ program
   .option('--dry-run', 'preview changes without applying them')
   .option('--force', 'overwrite existing files')
   .option('--conflicts <strategy>', 'conflict handling strategy: namespace, overwrite, skip, or ask')
+  .option('-n, --namespace [prefix]', 'force namespace prefix on resources (auto-derived slug or custom value)')
   .option('--dev', 'add resource to dev-dependencies (instead of dependencies)')
   .option('--remote', 'pull and install from remote registry, ignoring local versions')
   .option('--local', 'resolve and install using only local registry versions, skipping remote metadata and pulls')

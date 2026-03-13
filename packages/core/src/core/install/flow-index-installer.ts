@@ -25,7 +25,8 @@ import { formatPathForYaml } from '../../utils/path-resolution.js';
 import { sortMapping } from '../../utils/package-index-yml.js';
 import {
   readWorkspaceIndex,
-  writeWorkspaceIndex
+  writeWorkspaceIndex,
+  type WorkspaceIndexRecord
 } from '../../utils/workspace-index-yml.js';
 import { exists } from '../../utils/fs.js';
 import type { Platform } from '../platforms.js';
@@ -65,6 +66,8 @@ export interface IndexInstallResult {
   deletedFiles: string[];
   /** True when namespace conflict resolution was triggered for this package */
   namespaced?: boolean;
+  /** The namespace slug used for this package (persisted to workspace index) */
+  namespaceSlug?: string;
   /** Paths of files that were actually installed under namespace conflict resolution */
   namespacedFiles?: string[];
   /** Files that were physically relocated on disk during namespace resolution */
@@ -135,6 +138,7 @@ export async function installPackageByIndexWithFlows(
 
   const allTargetPaths = new Set<string>();
   const namespacedTargetPaths: string[] = [];
+  let resolvedNamespaceSlug: string | undefined;
   const claimedTargetPaths: string[] = [];
   const allConflicts: string[] = [];
   const allErrors: string[] = [];
@@ -196,11 +200,12 @@ export async function installPackageByIndexWithFlows(
   };
 
   // Snapshot previous file mapping for stale file detection
+  let previousIndexRecord: WorkspaceIndexRecord | null = null;
   let previousFiles: Record<string, (string | WorkspaceIndexFileMapping)[]> | null = null;
   if (!options.dryRun) {
     try {
-      const wsRecord = await readWorkspaceIndex(cwd);
-      const packageEntry = wsRecord.index.packages?.[packageName];
+      previousIndexRecord = await readWorkspaceIndex(cwd);
+      const packageEntry = previousIndexRecord.index.packages?.[packageName];
       if (packageEntry?.files && Object.keys(packageEntry.files).length > 0) {
         previousFiles = packageEntry.files;
       }
@@ -216,7 +221,7 @@ export async function installPackageByIndexWithFlows(
   let effectiveOwnershipContext: OwnershipContext | undefined;
   if (platforms.length > 1) {
     const ctx = sharedOwnershipContext ?? await buildOwnershipContext(
-      cwd, packageName, previousFiles ? { files: previousFiles } : null
+      cwd, packageName, previousFiles ? { files: previousFiles } : null, previousIndexRecord
     );
     ctx.currentRunWrittenPaths = ctx.currentRunWrittenPaths ?? new Set();
     effectiveOwnershipContext = ctx;
@@ -253,7 +258,8 @@ export async function installPackageByIndexWithFlows(
       prompt,
       // Parallel install support; use shared context with currentRunWrittenPaths when multi-platform
       sharedOwnershipContext: effectiveOwnershipContext ?? sharedOwnershipContext,
-      indexWriteCollector
+      indexWriteCollector,
+      previousIndexRecord: previousIndexRecord ?? undefined
     };
 
     try {
@@ -312,6 +318,9 @@ export async function installPackageByIndexWithFlows(
       // Propagate namespace metadata from the strategy result
       if (result.namespaced) {
         namespacedTargetPaths.push(...pathsThisPlatform);
+        if (result.namespaceSlug) {
+          resolvedNamespaceSlug = result.namespaceSlug;
+        }
       }
       if (result.claimedFiles && result.claimedFiles.length > 0) {
         claimedTargetPaths.push(...result.claimedFiles.map(rel => join(cwd, rel)));
@@ -395,7 +404,8 @@ export async function installPackageByIndexWithFlows(
       marketplaceMetadata,
       resourceVersion,
       indexWriteCollector,
-      platforms
+      platforms,
+      resolvedNamespaceSlug
     );
   }
 
@@ -404,6 +414,7 @@ export async function installPackageByIndexWithFlows(
   aggregatedResult.installedFiles = Array.from(allTargetPaths);
   if (namespacedTargetPaths.length > 0) {
     aggregatedResult.namespaced = true;
+    aggregatedResult.namespaceSlug = resolvedNamespaceSlug;
     aggregatedResult.namespacedFiles = namespacedTargetPaths;
   }
   if (claimedTargetPaths.length > 0) {
@@ -433,7 +444,8 @@ async function updateWorkspaceIndexForFlows(
   },
   resourceVersion?: string,
   indexWriteCollector?: IndexWriteCollector,
-  platforms?: Platform[]
+  platforms?: Platform[],
+  namespaceSlug?: string
 ): Promise<void> {
   const effectiveVersion = resourceVersion ?? version;
 
@@ -446,6 +458,7 @@ async function updateWorkspaceIndexForFlows(
       files: fileMapping,
       marketplace: marketplaceMetadata,
       platforms,
+      namespace: namespaceSlug,
     });
     return;
   }
@@ -477,6 +490,11 @@ async function updateWorkspaceIndexForFlows(
       files: sortMapping(files)
     };
     
+    // Add namespace slug if present
+    if (namespaceSlug) {
+      packageEntry.namespace = namespaceSlug;
+    }
+
     // Add platforms if present
     if (platforms && platforms.length > 0) {
       packageEntry.platforms = platforms;

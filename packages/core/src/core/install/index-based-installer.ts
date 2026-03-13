@@ -41,6 +41,7 @@ import {
 import {
   getWorkspaceIndexPath,
   readWorkspaceIndex,
+  type WorkspaceIndexRecord,
 } from '../../utils/workspace-index-yml.js';
 import {
   type WorkspaceConflictOwner
@@ -116,12 +117,11 @@ function normalizeRelativePath(cwd: string, absPath: string): string {
   return normalized.replace(/\\/g, '/');
 }
 
-export async function loadOtherPackageIndexes(
-  cwd: string,
+export function loadOtherPackageIndexesFromRecord(
+  record: WorkspaceIndexRecord,
   excludePackage: string
-): Promise<PackageIndexRecord[]> {
-  const record = await readWorkspaceIndex(cwd);
-  const wsPath = getWorkspaceIndexPath(cwd);
+): PackageIndexRecord[] {
+  const wsPath = record.path;
   const packages = record.index.packages ?? {};
   const results: PackageIndexRecord[] = [];
 
@@ -136,6 +136,14 @@ export async function loadOtherPackageIndexes(
   }
 
   return results;
+}
+
+export async function loadOtherPackageIndexes(
+  cwd: string,
+  excludePackage: string
+): Promise<PackageIndexRecord[]> {
+  const record = await readWorkspaceIndex(cwd);
+  return loadOtherPackageIndexesFromRecord(record, excludePackage);
 }
 
 async function collectFilesUnderDirectory(cwd: string, dirRelPath: string): Promise<string[]> {

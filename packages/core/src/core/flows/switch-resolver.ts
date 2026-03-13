@@ -236,6 +236,17 @@ export function validateSwitchExpression(
 /**
  * Check if a value is a valid SwitchCaseValue (string or FlowPattern with pattern field)
  */
+/**
+ * Check if a value is a switch expression
+ */
+export function isSwitchExpression(value: unknown): value is SwitchExpression {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    '$switch' in (value as object)
+  );
+}
+
 function isValidSwitchCaseValue(value: unknown): boolean {
   if (typeof value === 'string') {
     return true;

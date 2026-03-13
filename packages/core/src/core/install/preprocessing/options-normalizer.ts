@@ -20,13 +20,14 @@ export function normalizePluginsOption(value: string[] | undefined): string[] | 
  * This creates immutable, properly typed options for the install flow.
  */
 export function normalizeInstallOptions(
-  options: InstallOptions & { 
+  options: InstallOptions & {
     conflicts?: string;
     agents?: string[];
     skills?: string[];
     rules?: string[];
     commands?: string[];
     interactive?: boolean;
+    namespace?: boolean | string;
   }
 ): NormalizedInstallOptions {
   // Normalize platforms
@@ -53,5 +54,6 @@ export function normalizeInstallOptions(
     rules: options.rules,
     commands: options.commands,
     interactive: options.interactive,
+    namespace: options.namespace,
   };
 }

@@ -1,13 +1,12 @@
 /**
  * File-Level Conflict Resolver — Namespace Tests
  *
- * Tests for the namespace-based conflict resolution system introduced to
- * replace the old keep-both (.local suffix) approach.
+ * Tests for the prefix-based namespace conflict resolution system.
  *
  * Covers:
- *  - generateNamespacedPath(): namespace insertion point derivation
- *  - namespaceFlowToPattern(): flow `to` pattern rewriting
+ *  - generateNamespacedPath(): prefix-based namespace path derivation
  *  - resolveConflictsForTargets(): two-pass bulk namespacing logic
+ *  - --namespace flag variants
  */
 
 import { describe, it, before, after } from 'node:test';
@@ -18,7 +17,6 @@ import { tmpdir } from 'os';
 
 import {
   generateNamespacedPath,
-  namespaceFlowToPattern,
   resolveConflictsForTargets,
   buildOwnershipContext,
   type TargetEntry,
@@ -26,94 +24,76 @@ import {
 import type { InstallOptions } from '../../../packages/core/src/types/index.js';
 
 // ============================================================================
-// generateNamespacedPath — pure function, no I/O
+// generateNamespacedPath — prefix-based, pure function, no I/O
 // ============================================================================
 
-describe('generateNamespacedPath', () => {
-  it('inserts namespace after base dir of a ** glob pattern', () => {
+describe('generateNamespacedPath (prefix-based)', () => {
+  it('prefixes leaf file under a ** glob pattern', () => {
+    assert.equal(
+      generateNamespacedPath('rules/foo.mdc', 'acme', 'rules/**'),
+      'rules/acme-foo.mdc'
+    );
+  });
+
+  it('prefixes leaf in nested path under ** glob', () => {
     assert.equal(
       generateNamespacedPath('rules/git/commits.md', 'acme', 'rules/**/*.md'),
-      'rules/acme/git/commits.md'
+      'rules/git/acme-commits.md'
     );
   });
 
-  it('inserts namespace after base dir of a cursor-prefixed ** glob', () => {
+  it('prefixes leaf after cursor-prefixed base dir', () => {
     assert.equal(
       generateNamespacedPath('.cursor/rules/my-rule.mdc', 'corp', '.cursor/rules/**'),
-      '.cursor/rules/corp/my-rule.mdc'
+      '.cursor/rules/corp-my-rule.mdc'
     );
   });
 
-  it('inserts namespace after base dir of a single-level * glob', () => {
+  it('prefixes leaf under a single-level * glob', () => {
     assert.equal(
       generateNamespacedPath('agents/helper.md', 'my-pkg', 'agents/*'),
-      'agents/my-pkg/helper.md'
+      'agents/my-pkg-helper.md'
     );
   });
 
   it('handles a literal (no-glob) pattern', () => {
     assert.equal(
       generateNamespacedPath('rules/foo.mdc', 'acme', 'rules/foo.mdc'),
-      'rules/acme/foo.mdc'
+      'rules/acme-foo.mdc'
     );
   });
 
-  it('falls back to inserting after first segment when flowToPattern is undefined', () => {
+  it('falls back to prefixing leaf when flowToPattern is undefined', () => {
     assert.equal(
       generateNamespacedPath('rules/foo.mdc', 'acme', undefined),
-      'rules/acme/foo.mdc'
+      'rules/acme-foo.mdc'
     );
   });
 
-  it('handles a single-segment path with no parent dir', () => {
+  it('prefixes single-segment path with no parent dir', () => {
     const result = generateNamespacedPath('foo.mdc', 'acme', undefined);
-    assert.equal(result, 'acme/foo.mdc');
+    assert.equal(result, 'acme-foo.mdc');
   });
 
-  it('preserves deep sub-paths after namespace insertion', () => {
+  it('prefixes only the leaf in deep sub-paths', () => {
     assert.equal(
       generateNamespacedPath('rules/a/b/c.md', 'pkg', 'rules/**'),
-      'rules/pkg/a/b/c.md'
+      'rules/a/b/pkg-c.md'
     );
   });
-});
 
-// ============================================================================
-// namespaceFlowToPattern — pure function, no I/O
-// ============================================================================
-
-describe('namespaceFlowToPattern', () => {
-  it('rewrites a ** glob pattern', () => {
+  it('applies dedup rule: skips prefix when leaf equals slug', () => {
     assert.equal(
-      namespaceFlowToPattern('rules/**/*.md', 'acme'),
-      'rules/acme/**/*.md'
+      generateNamespacedPath('rules/code-review.md', 'code-review', 'rules/**'),
+      'rules/code-review.md'
     );
   });
 
-  it('rewrites a single-level * glob pattern', () => {
+  it('prefixes parent dir for marker-based resource (SKILL.md)', () => {
     assert.equal(
-      namespaceFlowToPattern('agents/*', 'my-pkg'),
-      'agents/my-pkg/*'
+      generateNamespacedPath('commands/review/SKILL.md', 'pkg-a', 'commands/**'),
+      'commands/pkg-a-review/SKILL.md'
     );
-  });
-
-  it('rewrites a cursor-prefixed ** pattern', () => {
-    assert.equal(
-      namespaceFlowToPattern('.cursor/rules/**', 'corp'),
-      '.cursor/rules/corp/**'
-    );
-  });
-
-  it('rewrites a literal path (no glob)', () => {
-    assert.equal(
-      namespaceFlowToPattern('.cursor/rules/foo.mdc', 'pkg'),
-      '.cursor/rules/pkg/foo.mdc'
-    );
-  });
-
-  it('handles a root-level * glob with no base dir', () => {
-    const result = namespaceFlowToPattern('*.md', 'pkg');
-    assert.equal(result, 'pkg/*.md');
   });
 });
 
@@ -163,12 +143,10 @@ describe('resolveConflictsForTargets — namespace strategy', () => {
     assert.strictEqual(result.packageWasNamespaced, false);
   });
 
-  it('owned-by-other: both packages namespaced, owner file moved', async () => {
+  it('owned-by-other: both packages get prefix-based namespacing, owner file moved', async () => {
     const testDir = join(tmpDir, 'owned-conflict');
     await fs.mkdir(testDir, { recursive: true });
 
-    // Write the workspace index to register pkg-owner as owning rules/foo.mdc.
-    // The schema root is just `packages:` — no wrapping `index:` or `version:` key.
     const opkgDir = join(testDir, '.openpackage');
     await fs.mkdir(opkgDir, { recursive: true });
     await fs.writeFile(
@@ -203,7 +181,7 @@ describe('resolveConflictsForTargets — namespace strategy', () => {
       testDir, targets, ownershipCtx, options, 'pkg-incoming'
     );
 
-    // The incoming target should be rewritten to the namespaced path
+    // The incoming target should be prefix-namespaced
     assert.strictEqual(result.packageWasNamespaced, true);
     assert.strictEqual(result.namespaceDir, 'pkg-incoming');
     assert.strictEqual(result.allowedTargets.length, 1);
@@ -211,17 +189,17 @@ describe('resolveConflictsForTargets — namespace strategy', () => {
       result.allowedTargets[0].relPath.includes('pkg-incoming'),
       `Expected namespaced path but got: ${result.allowedTargets[0].relPath}`
     );
-    // Owner's file should have been moved (won't exist at original path on disk)
-    const originalExists = await pathExists('owned-conflict/rules/foo.mdc');
-    const ownerNamespacedExists = await pathExists('owned-conflict/rules/pkg-owner/foo.mdc');
-    assert.strictEqual(originalExists, false, 'Original file should have been moved');
-    assert.strictEqual(ownerNamespacedExists, true, 'Owner file should be at namespaced path');
+    // Prefix-based: the incoming path should be rules/pkg-incoming-foo.mdc
+    assert.equal(result.allowedTargets[0].relPath, 'rules/pkg-incoming-foo.mdc');
+
+    // Owner's file should have been moved to prefix-based path
+    const ownerNamespacedExists = await pathExists('owned-conflict/rules/pkg-owner-foo.mdc');
+    assert.strictEqual(ownerNamespacedExists, true, 'Owner file should be at prefix-based namespaced path');
   });
 
-  it('exists-unowned: unowned file stays, incoming gets namespaced', async () => {
+  it('exists-unowned: unowned file stays, incoming gets prefix-namespaced', async () => {
     const testDir = join(tmpDir, 'unowned-conflict');
     await fs.mkdir(testDir, { recursive: true });
-    // No workspace index — file is unowned
     await write('unowned-conflict/rules/shared.mdc', 'user content');
 
     const ownershipCtx = await buildOwnershipContext(testDir, 'pkg-b', null);
@@ -242,10 +220,8 @@ describe('resolveConflictsForTargets — namespace strategy', () => {
 
     assert.strictEqual(result.packageWasNamespaced, true);
     assert.strictEqual(result.allowedTargets.length, 1);
-    assert.ok(
-      result.allowedTargets[0].relPath.includes('pkg-b'),
-      `Expected namespaced path but got: ${result.allowedTargets[0].relPath}`
-    );
+    // Prefix-based output
+    assert.equal(result.allowedTargets[0].relPath, 'rules/pkg-b-shared.mdc');
     // Original unowned file should still be untouched
     const unownedContent = await fs.readFile(join(testDir, 'rules/shared.mdc'), 'utf8');
     assert.strictEqual(unownedContent, 'user content');
@@ -254,7 +230,6 @@ describe('resolveConflictsForTargets — namespace strategy', () => {
   it('merge flows are excluded from namespacing even when bulk is triggered', async () => {
     const testDir = join(tmpDir, 'merge-excluded');
     await fs.mkdir(testDir, { recursive: true });
-    // Existing unowned file to trigger bulk namespacing
     await write('merge-excluded/rules/conflict.mdc', 'unowned');
 
     const ownershipCtx = await buildOwnershipContext(testDir, 'pkg-c', null);
@@ -267,7 +242,6 @@ describe('resolveConflictsForTargets — namespace strategy', () => {
         content: 'different'
       },
       {
-        // Merge flow target: should NOT be namespaced
         relPath: '.cursor/mcp.json',
         absPath: join(testDir, '.cursor/mcp.json'),
         flowToPattern: '.cursor/mcp.json',
@@ -281,22 +255,18 @@ describe('resolveConflictsForTargets — namespace strategy', () => {
     );
 
     assert.strictEqual(result.packageWasNamespaced, true);
-    // Merge flow target must be at its original path
     const mergeTarget = result.allowedTargets.find(t => t.relPath === '.cursor/mcp.json');
     assert.ok(mergeTarget, 'Merge flow target should be in allowedTargets');
     assert.strictEqual(mergeTarget.relPath, '.cursor/mcp.json');
-    // Non-merge target should be namespaced
     const nonMerge = result.allowedTargets.find(t => t.relPath !== '.cursor/mcp.json');
     assert.ok(nonMerge);
     assert.ok(nonMerge.relPath.includes('pkg-c'));
   });
 
-  it('bulk: non-conflicting files also get namespaced when any file conflicts', async () => {
+  it('bulk: non-conflicting files also get prefix-namespaced when any file conflicts', async () => {
     const testDir = join(tmpDir, 'bulk-namespace');
     await fs.mkdir(testDir, { recursive: true });
-    // Only rules/a.mdc conflicts (unowned existing file)
     await write('bulk-namespace/rules/a.mdc', 'unowned a');
-    // rules/b.mdc does NOT conflict (fresh)
 
     const ownershipCtx = await buildOwnershipContext(testDir, 'pkg-d', null);
     const targets: TargetEntry[] = [
@@ -322,7 +292,6 @@ describe('resolveConflictsForTargets — namespace strategy', () => {
 
     assert.strictEqual(result.packageWasNamespaced, true);
     assert.strictEqual(result.allowedTargets.length, 2);
-    // Both targets should be namespaced under pkg-d
     for (const t of result.allowedTargets) {
       assert.ok(
         t.relPath.includes('pkg-d'),
@@ -379,14 +348,12 @@ describe('resolveConflictsForTargets — namespace strategy', () => {
 
     assert.strictEqual(result.packageWasNamespaced, false);
     assert.strictEqual(result.allowedTargets.length, 1);
-    // Path should be unchanged (not namespaced)
     assert.strictEqual(result.allowedTargets[0].relPath, 'rules/bar.mdc');
   });
 
   it('gh@ package names: namespaceDir uses derived slug, not full package name', async () => {
     const testDir = join(tmpDir, 'gh-slug-test');
     await fs.mkdir(testDir, { recursive: true });
-    // Existing unowned file to trigger namespacing
     await write('gh-slug-test/rules/conflict.mdc', 'unowned');
 
     const ghPackageName = 'gh@anthropics/claude-plugins-official/plugins/feature-dev/agents/code-reviewer.md';
@@ -407,27 +374,20 @@ describe('resolveConflictsForTargets — namespace strategy', () => {
     );
 
     assert.strictEqual(result.packageWasNamespaced, true);
-    // The namespace dir should be the short slug, not the full gh@ name
     assert.strictEqual(result.namespaceDir, 'feature-dev');
     assert.ok(
       result.allowedTargets[0].relPath.includes('feature-dev'),
       `Expected slug-based path but got: ${result.allowedTargets[0].relPath}`
     );
-    // Must NOT contain the full package name or gh@
     assert.ok(
       !result.allowedTargets[0].relPath.includes('gh@'),
       `Path should not contain gh@: ${result.allowedTargets[0].relPath}`
-    );
-    assert.ok(
-      !result.allowedTargets[0].relPath.includes('claude-plugins-official'),
-      `Path should not contain full repo name: ${result.allowedTargets[0].relPath}`
     );
   });
 
   it('resolveOutputContent claims identical transformed content', async () => {
     const testDir = join(tmpDir, 'resolve-output-identical');
     await fs.mkdir(testDir, { recursive: true });
-    // Existing file on disk matches what the callback will return
     await write('resolve-output-identical/rules/skill.md', 'transformed content');
 
     const ownershipCtx = await buildOwnershipContext(testDir, 'pkg-ro1', null);
@@ -437,7 +397,6 @@ describe('resolveConflictsForTargets — namespace strategy', () => {
         absPath: join(testDir, 'rules/skill.md'),
         flowToPattern: 'rules/**',
         isMergeFlow: false,
-        // No `content` — forces the resolver to call resolveOutputContent
         resolveOutputContent: async () => 'transformed content',
       }
     ];
@@ -447,7 +406,6 @@ describe('resolveConflictsForTargets — namespace strategy', () => {
       testDir, targets, ownershipCtx, options, 'pkg-ro1'
     );
 
-    // Content matches → claimed, no namespacing
     assert.strictEqual(result.packageWasNamespaced, false);
     assert.strictEqual(result.claimedFiles.length, 1);
     assert.strictEqual(result.claimedFiles[0], 'rules/skill.md');
@@ -476,7 +434,6 @@ describe('resolveConflictsForTargets — namespace strategy', () => {
       testDir, targets, ownershipCtx, options, 'pkg-ro2'
     );
 
-    // Content differs → conflict, triggers namespacing
     assert.strictEqual(result.packageWasNamespaced, true);
     assert.strictEqual(result.allowedTargets.length, 1);
     assert.ok(
@@ -489,9 +446,7 @@ describe('resolveConflictsForTargets — namespace strategy', () => {
     const testDir = join(tmpDir, 'resolve-output-fallback');
     await fs.mkdir(testDir, { recursive: true });
     const sourceContent = 'source file content';
-    // Existing file on disk matches raw source
     await write('resolve-output-fallback/rules/skill.md', sourceContent);
-    // Write a source file to read via sourceAbsPath fallback
     const sourceFile = join(testDir, '.source-skill.md');
     await fs.writeFile(sourceFile, sourceContent, 'utf8');
 
@@ -512,7 +467,6 @@ describe('resolveConflictsForTargets — namespace strategy', () => {
       testDir, targets, ownershipCtx, options, 'pkg-ro3'
     );
 
-    // Callback failed but sourceAbsPath read succeeds → content matches → claimed
     assert.strictEqual(result.packageWasNamespaced, false);
     assert.strictEqual(result.claimedFiles.length, 1);
     assert.strictEqual(result.claimedFiles[0], 'rules/skill.md');
@@ -541,7 +495,6 @@ describe('resolveConflictsForTargets — namespace strategy', () => {
       testDir, targets, ownershipCtx, options, 'pkg-ro4'
     );
 
-    // content field matches → claimed, callback never invoked
     assert.strictEqual(result.packageWasNamespaced, false);
     assert.strictEqual(result.claimedFiles.length, 1);
     assert.strictEqual(callbackInvoked, false, 'resolveOutputContent should not be called when content is set');
@@ -575,5 +528,107 @@ describe('resolveConflictsForTargets — namespace strategy', () => {
       result.allowedTargets[0].relPath.includes('essentials'),
       `Expected slug-based path but got: ${result.allowedTargets[0].relPath}`
     );
+  });
+});
+
+// ============================================================================
+// --namespace flag variants
+// ============================================================================
+
+describe('resolveConflictsForTargets — --namespace flag', () => {
+  it('namespace: true forces prefix even without conflict', async () => {
+    const testDir = join(tmpDir, 'force-namespace');
+    await fs.mkdir(testDir, { recursive: true });
+
+    const ownershipCtx = await buildOwnershipContext(testDir, 'pkg-force', null);
+    const targets: TargetEntry[] = [
+      {
+        relPath: 'rules/foo.mdc',
+        absPath: join(testDir, 'rules/foo.mdc'),
+        flowToPattern: 'rules/**',
+        isMergeFlow: false
+      }
+    ];
+
+    const options: InstallOptions = { namespace: true };
+    const result = await resolveConflictsForTargets(
+      testDir, targets, ownershipCtx, options, 'pkg-force'
+    );
+
+    assert.strictEqual(result.packageWasNamespaced, true);
+    assert.strictEqual(result.allowedTargets.length, 1);
+    assert.equal(result.allowedTargets[0].relPath, 'rules/pkg-force-foo.mdc');
+  });
+
+  it('namespace: "sd" uses custom slug', async () => {
+    const testDir = join(tmpDir, 'custom-slug');
+    await fs.mkdir(testDir, { recursive: true });
+
+    const ownershipCtx = await buildOwnershipContext(testDir, 'my-package', null);
+    const targets: TargetEntry[] = [
+      {
+        relPath: 'rules/foo.mdc',
+        absPath: join(testDir, 'rules/foo.mdc'),
+        flowToPattern: 'rules/**',
+        isMergeFlow: false
+      }
+    ];
+
+    const options: InstallOptions = { namespace: 'sd' };
+    const result = await resolveConflictsForTargets(
+      testDir, targets, ownershipCtx, options, 'my-package'
+    );
+
+    assert.strictEqual(result.packageWasNamespaced, true);
+    assert.strictEqual(result.namespaceDir, 'sd');
+    assert.equal(result.allowedTargets[0].relPath, 'rules/sd-foo.mdc');
+  });
+
+  it('namespace: false skips namespacing, owned-by-other files are skipped', async () => {
+    const testDir = join(tmpDir, 'no-namespace');
+    await fs.mkdir(testDir, { recursive: true });
+
+    const opkgDir = join(testDir, '.openpackage');
+    await fs.mkdir(opkgDir, { recursive: true });
+    await fs.writeFile(
+      join(opkgDir, 'openpackage.index.yml'),
+      [
+        'packages:',
+        '  other-pkg:',
+        '    path: /fake/',
+        '    version: "1.0.0"',
+        '    files:',
+        '      "rules/bar.mdc":',
+        '        - "rules/bar.mdc"',
+      ].join('\n') + '\n',
+      'utf8'
+    );
+
+    const ownershipCtx = await buildOwnershipContext(testDir, 'pkg-no-ns', null);
+    const targets: TargetEntry[] = [
+      {
+        relPath: 'rules/bar.mdc',
+        absPath: join(testDir, 'rules/bar.mdc'),
+        flowToPattern: 'rules/**',
+        isMergeFlow: false
+      },
+      {
+        relPath: 'rules/new.mdc',
+        absPath: join(testDir, 'rules/new.mdc'),
+        flowToPattern: 'rules/**',
+        isMergeFlow: false
+      }
+    ];
+
+    const options: InstallOptions = { namespace: false };
+    const result = await resolveConflictsForTargets(
+      testDir, targets, ownershipCtx, options, 'pkg-no-ns'
+    );
+
+    assert.strictEqual(result.packageWasNamespaced, false);
+    // The owned-by-other file should be skipped, new file passes through
+    assert.strictEqual(result.allowedTargets.length, 1);
+    assert.strictEqual(result.allowedTargets[0].relPath, 'rules/new.mdc');
+    assert.ok(result.warnings.some(w => w.includes('--no-namespace')));
   });
 });

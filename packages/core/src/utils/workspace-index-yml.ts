@@ -81,6 +81,11 @@ function sanitizeWorkspaceIndexPackage(entry: any): WorkspaceIndexPackage | null
     }
   }
 
+  const rawNamespace = (entry as { namespace?: unknown }).namespace;
+  if (typeof rawNamespace === 'string' && rawNamespace.trim().length > 0) {
+    pkg.namespace = rawNamespace.trim();
+  }
+
   const rawFiles = (entry as { files?: unknown }).files;
   if (rawFiles && typeof rawFiles === 'object') {
     const files: Record<string, (string | WorkspaceIndexFileMapping)[]> = {};
@@ -332,6 +337,9 @@ export async function writeWorkspaceIndex(record: WorkspaceIndexRecord): Promise
     }
     if (pkg.platforms && pkg.platforms.length > 0) {
       sortedPkg.platforms = sortAndDedupeStrings(pkg.platforms);
+    }
+    if (pkg.namespace) {
+      sortedPkg.namespace = pkg.namespace;
     }
     if (pkg.marketplace) {
       sortedPkg.marketplace = pkg.marketplace;

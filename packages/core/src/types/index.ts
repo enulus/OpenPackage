@@ -230,6 +230,15 @@ export interface InstallOptions {
    * into the workspace `openpackage.yml`.
    */
   skipManifestUpdate?: boolean;
+
+  /**
+   * Namespace prefix control:
+   * - undefined: reactive (namespace on conflict only, default)
+   * - true: force prefix with auto-derived slug
+   * - string: force prefix with custom slug
+   * - false: opt out of namespacing
+   */
+  namespace?: boolean | string;
 }
 
 export interface UninstallOptions {
