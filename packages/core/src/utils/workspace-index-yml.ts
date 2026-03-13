@@ -33,11 +33,18 @@ function sortFilesMapping(files: Record<string, any[]>): Record<string, any[]> {
     // Handle both string[] and (string | WorkspaceIndexFileMapping)[]
     const hasComplex = values.some(v => typeof v === 'object' && v !== null);
     if (hasComplex) {
-      // Complex mappings - sort by target path
-      sorted[key] = values.sort((a, b) => {
+      // Complex mappings - sort by target path and deduplicate
+      const sortedValues = values.sort((a, b) => {
         const targetA = typeof a === 'string' ? a : a.target;
         const targetB = typeof b === 'string' ? b : b.target;
         return targetA.localeCompare(targetB);
+      });
+      const seen = new Set<string>();
+      sorted[key] = sortedValues.filter(item => {
+        const target = typeof item === 'string' ? item : item.target;
+        if (seen.has(target)) return false;
+        seen.add(target);
+        return true;
       });
     } else {
       // Simple string array
