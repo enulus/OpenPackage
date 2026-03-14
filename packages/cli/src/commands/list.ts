@@ -5,13 +5,14 @@ import { ValidationError } from '@opkg/core/utils/errors.js';
 import { createCliExecutionContext } from '../cli/context.js';
 import {
   collectScopedData,
+  collectWorkspaceRootNames,
   mergeTrackedAndUntrackedResources,
   mergeResourcesAcrossScopes,
   resolveWorkspaceHeader,
   type HeaderInfo
 } from '@opkg/core/core/list/scope-data-collector.js';
 import { dim, printDepsView, printResourcesView, printProvenanceView } from '@opkg/core/core/list/list-printers.js';
-import type { EnhancedResourceGroup, ResourceScope } from '@opkg/core/core/list/list-tree-renderer.js';
+import type { EnhancedResourceGroup, EnhancedResourceInfo, ResourceScope } from '@opkg/core/core/list/list-tree-renderer.js';
 import { resolveProvenance, type ProvenanceResult } from '@opkg/core/core/resources/resource-provenance.js';
 import { parseResourceQuery } from '@opkg/core/core/resources/resource-query.js';
 import type { TraverseScopesOptions } from '@opkg/core/core/resources/scope-traversal.js';
@@ -31,21 +32,27 @@ interface ListOptions {
 // JSON serialization helpers
 // ---------------------------------------------------------------------------
 
+function serializeResource(r: EnhancedResourceInfo) {
+  return {
+    name: r.name,
+    status: r.status,
+    scopes: [...r.scopes],
+    packages: r.packages ? [...r.packages] : [],
+    files: r.files.map(f => ({
+      source: f.source,
+      target: f.target,
+      status: f.status,
+      scope: f.scope,
+    })),
+    ...(r.version ? { version: r.version } : {}),
+    ...(r.children?.length ? { children: r.children.map(serializeResource) } : {}),
+  };
+}
+
 function serializeResourcesView(mergedResources: EnhancedResourceGroup[]) {
   return mergedResources.map(group => ({
     resourceType: group.resourceType,
-    resources: group.resources.map(r => ({
-      name: r.name,
-      status: r.status,
-      scopes: [...r.scopes],
-      packages: r.packages ? [...r.packages] : [],
-      files: r.files.map(f => ({
-        source: f.source,
-        target: f.target,
-        status: f.status,
-        scope: f.scope,
-      })),
-    })),
+    resources: group.resources.map(serializeResource),
   }));
 }
 
@@ -216,10 +223,12 @@ async function listCommand(
   // --- Resources view (default) ---
   const scopedResources: Array<{ scope: ResourceScope; groups: EnhancedResourceGroup[] }> = [];
 
+  const workspaceRootNames = collectWorkspaceRootNames(results);
+
   for (const { scope, result } of results) {
     // When listing a specific package, don't include untracked files
     const untrackedData = packageName ? undefined : result.data.untrackedFiles;
-    const merged = mergeTrackedAndUntrackedResources(result.tree, untrackedData, scope);
+    const merged = mergeTrackedAndUntrackedResources(result.tree, untrackedData, scope, workspaceRootNames);
     if (merged.length > 0) {
       scopedResources.push({ scope, groups: merged });
     }

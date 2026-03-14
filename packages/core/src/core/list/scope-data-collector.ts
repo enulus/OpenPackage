@@ -11,6 +11,8 @@ import { formatPathForDisplay } from '../../utils/formatters.js';
 import { resolveDeclaredPath } from '../../utils/path-resolution.js';
 import { classifyAndGroupUntrackedFiles } from '../resources/resource-classifier.js';
 import { RESOURCE_TYPE_ORDER_PLURAL, normalizeType, toPluralKey } from '../resources/resource-registry.js';
+import { isFullInstallScope } from '../../types/workspace-index.js';
+import { deriveNamespaceSlug } from '../../utils/plugin-naming.js';
 import type { EnhancedFileMapping, EnhancedResourceInfo, EnhancedResourceGroup, ResourceScope } from './list-tree-renderer.js';
 
 // ---------------------------------------------------------------------------
@@ -193,6 +195,9 @@ export async function collectScopedData(
 // Resource merging
 // ---------------------------------------------------------------------------
 
+/** Synthetic resource type for package-container entries (not in RESOURCE_TYPE_ORDER_PLURAL). */
+const PACKAGES_GROUP_TYPE = 'packages';
+
 function normalizeCategory(category: string): string {
   return toPluralKey(normalizeType(category));
 }
@@ -222,6 +227,93 @@ function calculateResourceStatus(files: EnhancedFileMapping[]): ResourceStatus {
   return 'mixed';
 }
 
+/** Map contentStatus → FileStatus. Missing files are handled separately. */
+const CONTENT_STATUS_MAP: Record<string, FileStatus> = {
+  modified: 'modified',
+  outdated: 'outdated',
+  diverged: 'diverged',
+  'source-deleted': 'outdated',
+  clean: 'clean',
+};
+
+/**
+ * Enhance files from a ListFileMapping to EnhancedFileMapping with status info.
+ */
+function enhanceFiles(files: ListFileMapping[], scope: ResourceScope): EnhancedFileMapping[] {
+  return files.map(f => ({
+    ...f,
+    status: !f.exists ? 'missing' : (CONTENT_STATUS_MAP[f.contentStatus ?? ''] ?? 'tracked') as FileStatus,
+    scope,
+  }));
+}
+
+/**
+ * Returns true when a tree node should be rendered as a package container
+ * (i.e. its resources are nested under a `packages/<namespace>` entry).
+ */
+function isPackageContainer(
+  node: ListTreeNode,
+  workspaceRootNames?: Set<string>
+): boolean {
+  return (
+    isFullInstallScope(node.report.installScope) &&
+    !node.report.isEmbedded &&
+    !workspaceRootNames?.has(node.report.name)
+  );
+}
+
+/**
+ * Collect workspace root names from scope results.
+ * These are self-entries representing each scope's root, not real dependency packages.
+ */
+export function collectWorkspaceRootNames(
+  results: Array<{ result: { headerType: string; headerName: string } }>
+): Set<string> {
+  const names = new Set<string>();
+  for (const { result } of results) {
+    if (result.headerType === 'workspace' && result.headerName) {
+      names.add(result.headerName);
+    }
+  }
+  return names;
+}
+
+/**
+ * Convert a typeMap into an ordered array of EnhancedResourceGroups.
+ * Handles known types (RESOURCE_TYPE_ORDER_PLURAL), the synthetic 'packages'
+ * group, and any remaining unknown types.
+ */
+function buildOrderedGroups(
+  typeMap: Map<string, Map<string, EnhancedResourceInfo>>
+): EnhancedResourceGroup[] {
+  const groups: EnhancedResourceGroup[] = [];
+
+  for (const type of RESOURCE_TYPE_ORDER_PLURAL) {
+    const resourcesMap = typeMap.get(type);
+    if (resourcesMap && resourcesMap.size > 0) {
+      const resources = Array.from(resourcesMap.values())
+        .sort((a, b) => a.name.localeCompare(b.name));
+      groups.push({ resourceType: type, resources });
+    }
+  }
+
+  const packagesMap = typeMap.get(PACKAGES_GROUP_TYPE);
+  if (packagesMap && packagesMap.size > 0) {
+    const resources = Array.from(packagesMap.values())
+      .sort((a, b) => a.name.localeCompare(b.name));
+    groups.push({ resourceType: PACKAGES_GROUP_TYPE, resources });
+  }
+
+  for (const [type, resourcesMap] of typeMap) {
+    if (RESOURCE_TYPE_ORDER_PLURAL.includes(type) || type === PACKAGES_GROUP_TYPE) continue;
+    const resources = Array.from(resourcesMap.values())
+      .sort((a, b) => a.name.localeCompare(b.name));
+    groups.push({ resourceType: type, resources });
+  }
+
+  return groups;
+}
+
 /**
  * Merge tracked resources from tree nodes with untracked file scan results
  * into a unified list of EnhancedResourceGroups.
@@ -229,11 +321,15 @@ function calculateResourceStatus(files: EnhancedFileMapping[]): ResourceStatus {
 export function mergeTrackedAndUntrackedResources(
   tree: ListTreeNode[],
   untrackedFiles: UntrackedScanResult | undefined,
-  scope: ResourceScope
+  scope: ResourceScope,
+  workspaceRootNames?: Set<string>
 ): EnhancedResourceGroup[] {
   const typeMap = new Map<string, Map<string, EnhancedResourceInfo>>();
 
-  function collectFromNode(node: ListTreeNode): void {
+  /**
+   * Collect resources from a node into the flat typeMap (non-container path).
+   */
+  function collectFlatFromNode(node: ListTreeNode): void {
     if (node.report.resourceGroups) {
       for (const group of node.report.resourceGroups) {
         if (!typeMap.has(group.resourceType)) {
@@ -244,31 +340,12 @@ export function mergeTrackedAndUntrackedResources(
         for (const resource of group.resources) {
           const pkgName = node.report.name;
           if (!resourcesMap.has(resource.name)) {
-            const enhancedFiles: EnhancedFileMapping[] = resource.files.map(f => {
-              let fileStatus: FileStatus;
-              if (!f.exists) {
-                fileStatus = 'missing';
-              } else if (f.contentStatus === 'modified') {
-                fileStatus = 'modified';
-              } else if (f.contentStatus === 'outdated') {
-                fileStatus = 'outdated';
-              } else if (f.contentStatus === 'diverged') {
-                fileStatus = 'diverged';
-              } else if (f.contentStatus === 'source-deleted') {
-                fileStatus = 'outdated';
-              } else if (f.contentStatus === 'clean') {
-                fileStatus = 'clean';
-              } else {
-                fileStatus = 'tracked';
-              }
-              return { ...f, status: fileStatus, scope };
-            });
-
+            const files = enhanceFiles(resource.files, scope);
             resourcesMap.set(resource.name, {
               name: resource.name,
               resourceType: resource.resourceType,
-              files: enhancedFiles,
-              status: 'tracked',
+              files,
+              status: calculateResourceStatus(files),
               scopes: new Set([scope]),
               packages: new Set([pkgName])
             });
@@ -280,10 +357,84 @@ export function mergeTrackedAndUntrackedResources(
         }
       }
     }
-    node.children.forEach(collectFromNode);
   }
 
-  tree.forEach(collectFromNode);
+  /**
+   * Collect all resources from a node (and its embedded children) as
+   * EnhancedResourceInfo children for a package container.
+   */
+  function collectChildResources(node: ListTreeNode, out: EnhancedResourceInfo[] = []): EnhancedResourceInfo[] {
+    if (node.report.resourceGroups) {
+      for (const group of node.report.resourceGroups) {
+        for (const resource of group.resources) {
+          const files = enhanceFiles(resource.files, scope);
+          out.push({
+            name: resource.name,
+            resourceType: resource.resourceType,
+            files,
+            status: calculateResourceStatus(files),
+            scopes: new Set([scope]),
+            packages: new Set([node.report.name])
+          });
+        }
+      }
+    }
+
+    // Fold embedded children's resources into this container
+    for (const child of node.children) {
+      if (child.report.isEmbedded) {
+        collectChildResources(child, out);
+      }
+    }
+
+    return out;
+  }
+
+  /**
+   * Walk the tree, partitioning nodes into containers vs flat contributors.
+   */
+  function walkTree(nodes: ListTreeNode[]): void {
+    for (const node of nodes) {
+      if (isPackageContainer(node, workspaceRootNames)) {
+        const children = collectChildResources(node);
+
+        if (children.length > 0) {
+          children.sort((a, b) => a.name.localeCompare(b.name));
+
+          const namespace = node.report.namespace ?? deriveNamespaceSlug(node.report.name);
+          const containerName = `${PACKAGES_GROUP_TYPE}/${namespace}`;
+
+          if (!typeMap.has(PACKAGES_GROUP_TYPE)) {
+            typeMap.set(PACKAGES_GROUP_TYPE, new Map());
+          }
+          const version = node.report.version && node.report.version !== '0.0.0'
+            ? node.report.version : undefined;
+          typeMap.get(PACKAGES_GROUP_TYPE)!.set(containerName, {
+            name: containerName,
+            resourceType: PACKAGES_GROUP_TYPE,
+            files: [],
+            children,
+            status: 'tracked',
+            scopes: new Set([scope]),
+            packages: new Set([node.report.name]),
+            version,
+          });
+        }
+
+        // Walk non-embedded children independently (they may be containers themselves)
+        for (const child of node.children) {
+          if (!child.report.isEmbedded) {
+            walkTree([child]);
+          }
+        }
+      } else {
+        collectFlatFromNode(node);
+        walkTree(node.children);
+      }
+    }
+  }
+
+  walkTree(tree);
 
   if (untrackedFiles && untrackedFiles.files.length > 0) {
     const grouped = classifyAndGroupUntrackedFiles(untrackedFiles.files);
@@ -296,7 +447,7 @@ export function mergeTrackedAndUntrackedResources(
       }
       const resourcesMap = typeMap.get(normalizedType)!;
 
-      const enhancedFiles: EnhancedFileMapping[] = group.filePaths.map(fp => ({
+      const untrackedEnhanced: EnhancedFileMapping[] = group.filePaths.map(fp => ({
         source: fp,
         target: fp,
         exists: true,
@@ -308,41 +459,28 @@ export function mergeTrackedAndUntrackedResources(
         resourcesMap.set(group.fullName, {
           name: group.fullName,
           resourceType: normalizedType,
-          files: enhancedFiles,
+          files: untrackedEnhanced,
           status: 'untracked',
           scopes: new Set([scope])
         });
       } else {
-        resourcesMap.get(group.fullName)!.files.push(...enhancedFiles);
+        const existing = resourcesMap.get(group.fullName)!;
+        existing.files.push(...untrackedEnhanced);
+        existing.status = calculateResourceStatus(existing.files);
       }
     }
   }
 
-  for (const resourcesMap of typeMap.values()) {
+  // Recompute status for flat resources that may have been merged with untracked files.
+  // Skip package containers — their status is 'tracked' (children carry their own status).
+  for (const [type, resourcesMap] of typeMap) {
+    if (type === PACKAGES_GROUP_TYPE) continue;
     for (const resource of resourcesMap.values()) {
       resource.status = calculateResourceStatus(resource.files);
     }
   }
 
-  const groups: EnhancedResourceGroup[] = [];
-
-  for (const type of RESOURCE_TYPE_ORDER_PLURAL) {
-    const resourcesMap = typeMap.get(type);
-    if (resourcesMap && resourcesMap.size > 0) {
-      const resources = Array.from(resourcesMap.values())
-        .sort((a, b) => a.name.localeCompare(b.name));
-      groups.push({ resourceType: type, resources });
-    }
-  }
-
-  for (const [type, resourcesMap] of typeMap) {
-    if (RESOURCE_TYPE_ORDER_PLURAL.includes(type)) continue;
-    const resources = Array.from(resourcesMap.values())
-      .sort((a, b) => a.name.localeCompare(b.name));
-    groups.push({ resourceType: type, resources });
-  }
-
-  return groups;
+  return buildOrderedGroups(typeMap);
 }
 
 /**
@@ -370,7 +508,8 @@ export function mergeResourcesAcrossScopes(
             ...resource,
             scopes: new Set([scope]),
             files: [...resource.files],
-            packages: resource.packages ? new Set(resource.packages) : undefined
+            packages: resource.packages ? new Set(resource.packages) : undefined,
+            children: resource.children ? [...resource.children] : undefined,
           });
         } else {
           const existing = resourcesMap.get(key)!;
@@ -387,25 +526,7 @@ export function mergeResourcesAcrossScopes(
     }
   }
 
-  const groups: EnhancedResourceGroup[] = [];
-
-  for (const type of RESOURCE_TYPE_ORDER_PLURAL) {
-    const resourcesMap = typeMap.get(type);
-    if (resourcesMap && resourcesMap.size > 0) {
-      const resources = Array.from(resourcesMap.values())
-        .sort((a, b) => a.name.localeCompare(b.name));
-      groups.push({ resourceType: type, resources });
-    }
-  }
-
-  for (const [type, resourcesMap] of typeMap) {
-    if (RESOURCE_TYPE_ORDER_PLURAL.includes(type)) continue;
-    const resources = Array.from(resourcesMap.values())
-      .sort((a, b) => a.name.localeCompare(b.name));
-    groups.push({ resourceType: type, resources });
-  }
-
-  return groups;
+  return buildOrderedGroups(typeMap);
 }
 
 /**

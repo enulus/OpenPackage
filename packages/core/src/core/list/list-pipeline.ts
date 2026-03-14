@@ -7,7 +7,7 @@ import { readWorkspaceIndex, getWorkspaceIndexPath } from '../../utils/workspace
 import { healAndPersistIndex } from '../../utils/workspace-index-healer.js';
 import { resolveDeclaredPath } from '../../utils/path-resolution.js';
 import { exists } from '../../utils/fs.js';
-import type { WorkspaceIndexPackage } from '../../types/workspace-index.js';
+import type { WorkspaceIndexPackage, InstallScope } from '../../types/workspace-index.js';
 import { logger } from '../../utils/logger.js';
 import { getTargetPath, findPackageInIndex } from '../../utils/workspace-index-helpers.js';
 import { parsePackageYml } from '../../utils/package-yml.js';
@@ -69,6 +69,8 @@ export interface ListPackageReport {
   sourceType?: string;
   isEmbedded?: boolean;
   parentPackageName?: string;
+  installScope?: InstallScope;
+  namespace?: string;
 }
 
 export interface ListTreeNode {
@@ -232,7 +234,9 @@ async function checkPackageStatus(
       state: 'missing',
       totalFiles: 0,
       existingFiles: 0,
-      fileList: includeFileList ? [] : undefined
+      fileList: includeFileList ? [] : undefined,
+      installScope: entry.installScope,
+      namespace: entry.namespace,
     };
   }
 
@@ -405,6 +409,8 @@ async function checkPackageStatus(
     sourceType: entry.sourceType,
     isEmbedded: !!entry.parent,
     parentPackageName: entry.parent,
+    installScope: entry.installScope,
+    namespace: entry.namespace,
   };
 }
 

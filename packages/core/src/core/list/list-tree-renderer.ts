@@ -24,6 +24,10 @@ export interface EnhancedResourceInfo {
   scopes: Set<ResourceScope>;
   /** Package(s) this resource belongs to (tracked resources only) */
   packages?: Set<string>;
+  /** Child resources (for package-container entries) */
+  children?: EnhancedResourceInfo[];
+  /** Package version (for package-container entries) */
+  version?: string;
 }
 
 /**
@@ -147,20 +151,33 @@ export function renderResource<TFile>(
 ): void {
   const out = output ?? resolveOutput();
   const enhanced = resource as EnhancedResourceInfo;
-  const packageLabels = config.getResourcePackageLabels?.(enhanced.packages) ?? [];
+  const hasChildren = enhanced.children !== undefined && enhanced.children.length > 0;
+  const packageLabels = hasChildren ? [] : (config.getResourcePackageLabels?.(enhanced.packages) ?? []);
 
   // Single source of truth: file branches (├─┬/└─┬) only when -f and resource has files.
   // Package-only uses ├──/└──; double │ for package labels only when file branches exist.
   const hasFileBranches = showFiles && resource.files.length > 0;
+  const hasBranches = hasChildren || hasFileBranches;
 
-  const connector = getTreeConnector(isLast, hasFileBranches);
+  const connector = getTreeConnector(isLast, hasBranches);
   const childPrefix = getChildPrefix(prefix, isLast);
   const packagePrefix = hasFileBranches ? childPrefix + '│ ' : childPrefix;
 
-  // Resource name with optional badge and status tag
+  // Resource name with optional version, badge, and status tag
+  const versionSuffix = enhanced.version ? ` ${dim(`(${enhanced.version})`)}` : '';
   const badge = config.getResourceBadge?.(enhanced.scopes) ?? '';
   const statusTag = config.getResourceStatusTag?.(enhanced) ?? '';
-  out.message(`${prefix}${connector}${resource.name}${badge ? ' ' + badge : ''}${statusTag ? ' ' + statusTag : ''}`);
+  out.message(`${prefix}${connector}${resource.name}${versionSuffix}${badge ? ' ' + badge : ''}${statusTag ? ' ' + statusTag : ''}`);
+
+  // When this resource has children (package container), render children recursively
+  if (hasChildren) {
+    for (let ci = 0; ci < enhanced.children!.length; ci++) {
+      const child = enhanced.children![ci];
+      const isLastChild = ci === enhanced.children!.length - 1;
+      renderResource(child, childPrefix, isLastChild, showFiles, config, output);
+    }
+    return;
+  }
 
   // Package labels: dimmed (package) under resource name, one per package.
   // With -f: align (package) with resource name (no extra spacing); without -f: 2 spaces.

@@ -1,7 +1,7 @@
 import type { ListPackageReport, ListTreeNode } from './list-pipeline.js';
 import { flattenResourceGroups, renderFlatResourceList, renderFlatFileList, getChildPrefix, getTreeConnector, type TreeRenderConfig, type EnhancedFileMapping, type EnhancedResourceInfo, type EnhancedResourceGroup, type ResourceScope } from './list-tree-renderer.js';
 import { formatScopeBadge, formatScopeBadgeAlways, formatPathForDisplay } from '../../utils/formatters.js';
-import type { ScopeResult, HeaderInfo } from './scope-data-collector.js';
+import { collectWorkspaceRootNames, type ScopeResult, type HeaderInfo } from './scope-data-collector.js';
 import type { ProvenanceResult } from '../resources/resource-provenance.js';
 import type { ViewMetadataEntry } from './view-metadata.js';
 import type { OutputPort } from '../ports/output.js';
@@ -270,14 +270,7 @@ export function printDepsView(
     return;
   }
 
-  // Collect workspace root names from ALL scope results — these are self-entries
-  // representing each scope's root, not real dependency packages.
-  const workspaceRootNames = new Set<string>();
-  for (const { result } of results) {
-    if (result.headerType === 'workspace' && result.headerName) {
-      workspaceRootNames.add(result.headerName);
-    }
-  }
+  const workspaceRootNames = collectWorkspaceRootNames(results);
 
   // Also include the display header's workspace name
   let workspaceEntry: DepsPackageEntry | undefined;

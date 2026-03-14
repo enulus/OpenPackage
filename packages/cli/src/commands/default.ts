@@ -1,6 +1,7 @@
 import { createCliExecutionContext } from '../cli/context.js';
 import {
   collectScopedData,
+  collectWorkspaceRootNames,
   mergeTrackedAndUntrackedResources,
 } from '@opkg/core/core/list/scope-data-collector.js';
 import { RESOURCE_TYPES } from '@opkg/core/core/resources/resource-registry.js';
@@ -65,7 +66,7 @@ function countResources(groups: EnhancedResourceGroup[]): Array<{ label: string;
 
     // Look up the human-friendly label from RESOURCE_TYPES
     const def = RESOURCE_TYPES.find(d => d.pluralKey === group.resourceType);
-    const label = def?.labelPlural ?? group.resourceType;
+    const label = def?.labelPlural ?? (group.resourceType === 'packages' ? 'Packages' : group.resourceType);
     counts.push({ label, count: group.resources.length });
   }
 
@@ -163,8 +164,10 @@ export async function runDefaultView(cwd?: string): Promise<void> {
   // Build per-scope summaries
   const summaries: ScopeSummary[] = [];
 
+  const workspaceRootNames = collectWorkspaceRootNames(results);
+
   for (const { scope, result } of results) {
-    const merged = mergeTrackedAndUntrackedResources(result.tree, result.data.untrackedFiles, scope);
+    const merged = mergeTrackedAndUntrackedResources(result.tree, result.data.untrackedFiles, scope, workspaceRootNames);
     const resourceCounts = countResources(merged);
     const totalResources = resourceCounts.reduce((sum, c) => sum + c.count, 0);
     const packageCount = result.data.packages?.length ?? 0;
