@@ -98,6 +98,7 @@ const testFiles: string[] = [
   // Core - Move
   'tests/core/move/move-validator.test.ts',
   'tests/core/move/move-rename-executor.test.ts',
+  'tests/core/move/move-workspace-rename-executor.test.ts',
   'tests/core/move/move-cleanup.test.ts',
   'tests/core/move/move-entry-builders.test.ts',
 

@@ -5,32 +5,48 @@ import { validateMoveArgs, validateNotNoop } from '../../../packages/core/src/co
 
 describe('move-validator', () => {
   describe('validateMoveArgs', () => {
-    it('throws when neither newName nor --to is provided', () => {
+    it('throws when no newName, no --to, no --from', () => {
+      assert.throws(() => validateMoveArgs(undefined, undefined, undefined), /At least one of/);
+    });
+
+    it('throws when no newName, no --to, no --from (omitted arg)', () => {
       assert.throws(() => validateMoveArgs(undefined, undefined), /At least one of/);
     });
 
     it('passes with newName only', () => {
-      assert.doesNotThrow(() => validateMoveArgs('new-name', undefined));
+      assert.doesNotThrow(() => validateMoveArgs('new-name', undefined, undefined));
     });
 
     it('passes with --to only', () => {
-      assert.doesNotThrow(() => validateMoveArgs(undefined, 'some-pkg'));
+      assert.doesNotThrow(() => validateMoveArgs(undefined, 'some-pkg', undefined));
     });
 
     it('passes with both newName and --to', () => {
-      assert.doesNotThrow(() => validateMoveArgs('new-name', 'some-pkg'));
+      assert.doesNotThrow(() => validateMoveArgs('new-name', 'some-pkg', undefined));
+    });
+
+    it('passes with --from only (eject)', () => {
+      assert.doesNotThrow(() => validateMoveArgs(undefined, undefined, 'some-pkg'));
+    });
+
+    it('passes with --from and newName', () => {
+      assert.doesNotThrow(() => validateMoveArgs('new-name', undefined, 'some-pkg'));
+    });
+
+    it('passes with --from and --to', () => {
+      assert.doesNotThrow(() => validateMoveArgs(undefined, 'dest-pkg', 'src-pkg'));
     });
 
     it('rejects newName with slashes', () => {
-      assert.throws(() => validateMoveArgs('foo/bar', undefined), /slashes/);
+      assert.throws(() => validateMoveArgs('foo/bar', undefined, undefined), /slashes/);
     });
 
     it('rejects newName with dots', () => {
-      assert.throws(() => validateMoveArgs('foo.md', undefined), /dots/);
+      assert.throws(() => validateMoveArgs('foo.md', undefined, undefined), /dots/);
     });
 
     it('rejects newName with whitespace', () => {
-      assert.throws(() => validateMoveArgs('foo bar', undefined), /whitespace/);
+      assert.throws(() => validateMoveArgs('foo bar', undefined, undefined), /whitespace/);
     });
   });
 

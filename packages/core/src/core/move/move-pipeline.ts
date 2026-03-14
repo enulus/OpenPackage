@@ -1,11 +1,13 @@
 /**
  * Move Pipeline
  *
- * Core orchestrator for the `opkg move` command. Supports four scenarios:
+ * Core orchestrator for the `opkg move` command. Supports six scenarios:
  * - Rename-only: in-place rename within the same package (source-only)
  * - Relocate-only: move resource from one package to another (source-only)
  * - Rename + Relocate: rename and move in one step (source-only)
  * - Adopt: bring untracked workspace resources into a package via --to
+ * - Eject: detach a tracked resource from its package, keeping workspace files
+ * - Workspace rename: rename an untracked resource in the workspace
  *
  * After source-level changes, new files are synced to the workspace and the
  * workspace index is updated so that `ls`, `view`, and `status` reflect the move.
@@ -25,11 +27,14 @@ import { isProjectScopedPath } from '../scope-resolution.js';
 import { addSourceEntriesToPackage } from '../add/add-to-source-pipeline.js';
 import { performMoveCleanup } from '../add/move-cleanup.js';
 import { renameEntries } from '../add/entry-renamer.js';
-import { walkFiles } from '../../utils/fs.js';
+import { walkFiles, remove } from '../../utils/fs.js';
 import { getRelativePathFromBase } from '../../utils/path-normalization.js';
 import { resolveOutput, resolvePrompt } from '../ports/resolve.js';
 import { validateMoveArgs, validateNotNoop } from './move-validator.js';
 import { executeInPlaceRename } from './move-rename-executor.js';
+import { executeWorkspaceRename as executeWorkspaceRenameOnDisk } from './move-workspace-rename-executor.js';
+import { collectRemovalEntries } from '../remove/removal-collector.js';
+import { cleanupEmptyParents } from '../../utils/cleanup-empty-parents.js';
 import { disambiguatePlatform, groupFilesByPlatform } from '../platform/platform-disambiguation.js';
 import { discoverResources } from '../install/resource-discoverer.js';
 import type { ResourceType } from '../install/resource-types.js';
@@ -57,7 +62,7 @@ export interface MoveOptions {
 }
 
 export interface MoveResult {
-  action: 'rename' | 'relocate' | 'rename-relocate' | 'adopt';
+  action: 'rename' | 'relocate' | 'rename-relocate' | 'adopt' | 'eject' | 'workspace-rename';
   sourcePath: string;
   sourcePackage?: string;
   resourceName: string;
@@ -65,6 +70,7 @@ export interface MoveResult {
   destPackage?: string;
   renamedFiles?: number;
   movedFiles?: number;
+  ejectedFiles?: number;
   dryRun: boolean;
 }
 
@@ -82,7 +88,7 @@ export async function runMovePipeline(
 
   // 1. Validate arguments
   try {
-    validateMoveArgs(newName, options.to);
+    validateMoveArgs(newName, options.to, options.from);
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
@@ -162,12 +168,37 @@ export async function runMovePipeline(
     ? resourceInput.split('/')[0]
     : undefined;
 
-  // Route untracked resources to adopt flow
+  // Route untracked resources to workspace-rename or adopt flow
   if (!sourcePackage) {
+    // Untracked rename: newName provided, no --to needed
+    if (newName && !options.to) {
+      if (newName === resourceName) {
+        return { success: false, error: `Nothing to do: "${resourceName}" is already named "${newName}".` };
+      }
+      if (options.dryRun) {
+        return {
+          success: true,
+          data: {
+            action: 'workspace-rename',
+            sourcePath: cwd,
+            resourceName,
+            newName,
+            renamedFiles: resource.targetFiles.length,
+            dryRun: true,
+          },
+        };
+      }
+      try {
+        return await executeWorkspaceRename(resource, resourceName, newName, target.targetDir);
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+
     if (!options.to) {
       return {
         success: false,
-        error: `Resource "${resourceInput}" is untracked (not owned by any package).\nUse --to <package> to adopt it into a package.`,
+        error: `Resource "${resourceInput}" is untracked (not owned by any package).\nUse --to <package> to adopt it, or provide a <new-name> to rename it.`,
       };
     }
 
@@ -235,6 +266,28 @@ export async function runMovePipeline(
       success: false,
       error: `Resource "${resourceInput}" belongs to package "${sourcePackage}", not "${options.from}".`,
     };
+  }
+
+  // Detect eject: tracked resource, --from specified, no --to, no newName
+  if (options.from && !options.to && !newName) {
+    if (options.dryRun) {
+      return {
+        success: true,
+        data: {
+          action: 'eject',
+          sourcePath: packageSourcePath,
+          sourcePackage,
+          resourceName,
+          ejectedFiles: resource.sourceKeys.size,
+          dryRun: true,
+        },
+      };
+    }
+    try {
+      return await executeEject(resource, packageSourcePath, execContext);
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
   }
 
   // 3. Validate not a no-op
@@ -403,6 +456,76 @@ async function executeAdopt(
       newName: isRename ? newName : undefined,
       destPackage: options.to,
       movedFiles: addResult.data?.filesAdded,
+      dryRun: false,
+    },
+  };
+}
+
+async function executeEject(
+  resource: ResolvedResource,
+  packageSourcePath: string,
+  execContext: ExecutionContext,
+): Promise<CommandResult<MoveResult>> {
+  const sourcePackage = resource.packageName!;
+
+  // 1. Remove source files from package
+  const deletedAbsPaths: string[] = [];
+  for (const sourceKey of resource.sourceKeys) {
+    try {
+      const removalEntries = await collectRemovalEntries(packageSourcePath, sourceKey);
+      for (const entry of removalEntries) {
+        await remove(entry.packagePath);
+        deletedAbsPaths.push(entry.packagePath);
+      }
+    } catch (error) {
+      logger.debug(`Eject: skipping source key "${sourceKey}"`, { error });
+    }
+  }
+
+  // 2. Cleanup empty parent directories in package source
+  if (deletedAbsPaths.length > 0) {
+    await cleanupEmptyParents(packageSourcePath, deletedAbsPaths);
+  }
+
+  // 3. Remove workspace index entries (prevents sync from deleting workspace files)
+  try {
+    const record = await readWorkspaceIndex(execContext.targetDir);
+    removeWorkspaceIndexFileKeys(record.index, sourcePackage, resource.sourceKeys);
+    await writeWorkspaceIndex(record);
+  } catch (error) {
+    logger.warn(`Failed to update workspace index during eject: ${error}`);
+  }
+
+  // 4. Workspace files intentionally left untouched
+
+  return {
+    success: true,
+    data: {
+      action: 'eject',
+      sourcePath: packageSourcePath,
+      sourcePackage,
+      resourceName: resource.resourceName,
+      ejectedFiles: deletedAbsPaths.length,
+      dryRun: false,
+    },
+  };
+}
+
+async function executeWorkspaceRename(
+  resource: ResolvedResource,
+  resourceName: string,
+  newName: string,
+  targetDir: string,
+): Promise<CommandResult<MoveResult>> {
+  const result = await executeWorkspaceRenameOnDisk(resource.resourceType, resourceName, newName, targetDir);
+  return {
+    success: true,
+    data: {
+      action: 'workspace-rename',
+      sourcePath: targetDir,
+      resourceName,
+      newName,
+      renamedFiles: result.renamedFiles,
       dryRun: false,
     },
   };

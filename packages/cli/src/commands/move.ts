@@ -161,5 +161,20 @@ function formatOutput(
         out.message(`  ${data.movedFiles} file${data.movedFiles !== 1 ? 's' : ''} added`);
       }
       break;
+
+    case 'eject':
+      out.success(`${dryPrefix}Ejected ${data.resourceName} from ${data.sourcePackage}`);
+      if (data.ejectedFiles) {
+        out.message(`  ${data.ejectedFiles} source file${data.ejectedFiles !== 1 ? 's' : ''} removed`);
+      }
+      out.message('  Workspace files preserved (now untracked)');
+      break;
+
+    case 'workspace-rename':
+      out.success(`${dryPrefix}Renamed ${data.resourceName} -> ${data.newName} in workspace`);
+      if (data.renamedFiles) {
+        out.message(`  ${data.renamedFiles} file${data.renamedFiles !== 1 ? 's' : ''} updated`);
+      }
+      break;
   }
 }
