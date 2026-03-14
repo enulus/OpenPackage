@@ -13,6 +13,7 @@ import { exists } from '../../utils/fs.js';
 import { getAllPlatforms } from '../platforms.js';
 import type { Platform } from '../platforms.js';
 import { logger } from '../../utils/logger.js';
+import { normalizePathForProcessing } from '../../utils/path-normalization.js';
 
 function isFlowPatternValue(value: any): value is { pattern: string; schema?: string } {
   return (
@@ -25,6 +26,11 @@ function isFlowPatternValue(value: any): value is { pattern: string; schema?: st
 
 function unwrapPatternValue(value: any): any {
   return isFlowPatternValue(value) ? value.pattern : value;
+}
+
+/** Compute a forward-slash relative path (cross-platform safe). */
+function relativeForward(base: string, target: string): string {
+  return normalizePathForProcessing(relative(base, target));
 }
 
 /**
@@ -245,7 +251,7 @@ export async function matchPattern(pattern: string, baseDir: string): Promise<st
     
     // Check for exact match
     if (await exists(exactPath)) {
-      matches.push(relative(baseDir, exactPath));
+      matches.push(relativeForward(baseDir, exactPath));
     }
     
     // Also check for platform-specific variants
@@ -282,7 +288,7 @@ export async function matchPattern(pattern: string, baseDir: string): Promise<st
     for (const entry of entries) {
       if (!entry.isFile()) continue;
       if (!regex.test(entry.name)) continue;
-      matches.push(relative(baseDir, join(searchDir, entry.name)));
+      matches.push(relativeForward(baseDir, join(searchDir, entry.name)));
     }
     
     return matches;
@@ -332,7 +338,7 @@ async function findPlatformVariants(
     const platformPath = join(dirPath, platformFileName);
     
     if (await exists(platformPath)) {
-      matches.push(relative(baseDir, platformPath));
+      matches.push(relativeForward(baseDir, platformPath));
     }
   }
   
@@ -358,7 +364,7 @@ async function findMatchingFiles(
     
     for (const entry of entries) {
       const fullPath = join(dir, entry.name);
-      const rel = relative(baseDir, fullPath);
+      const rel = relativeForward(baseDir, fullPath);
       
       if (entry.isDirectory()) {
         await findMatchingFiles(fullPath, pattern, baseDir, matches);
