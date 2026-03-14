@@ -16,6 +16,7 @@ import { normalizePackageName, validatePackageName } from '../../utils/package-n
 import { ValidationError, UserCancellationError } from '../../utils/errors.js';
 import { resolvePlatformName } from '../platforms.js';
 import { resolveMutableSource } from '../source-resolution/resolve-mutable-source.js';
+import { getLocalPackageYmlPath, getLocalOpenPackageDir } from '../../utils/paths.js';
 import type { PromptPort } from '../ports/prompt.js';
 import { resolvePrompt } from '../ports/resolve.js';
 import { 
@@ -61,24 +62,34 @@ async function resolvePackageForSet(
     };
   }
   
-  // No package name - check CWD
-  const manifestPath = path.join(cwd, FILE_PATTERNS.OPENPACKAGE_YML);
-  if (!(await exists(manifestPath))) {
-    throw new Error(
-      'No openpackage.yml found in current directory.\n' +
-      'Either specify a package name or run from a package root:\n' +
-      '  opkg set <package-name> [options]\n' +
-      '  opkg set [options]  # When in package root'
-    );
+  // No package name - check CWD first, then workspace manifest
+  const cwdManifestPath = path.join(cwd, FILE_PATTERNS.OPENPACKAGE_YML);
+  if (await exists(cwdManifestPath)) {
+    const manifest = await parsePackageYml(cwdManifestPath);
+    return {
+      packagePath: cwd,
+      packageName: manifest.name,
+      sourceType: 'cwd'
+    };
   }
-  
-  const manifest = await parsePackageYml(manifestPath);
-  
-  return {
-    packagePath: cwd,
-    packageName: manifest.name,
-    sourceType: 'cwd'
-  };
+
+  // Check workspace manifest at .openpackage/openpackage.yml
+  const workspaceManifestPath = getLocalPackageYmlPath(cwd);
+  if (await exists(workspaceManifestPath)) {
+    const manifest = await parsePackageYml(workspaceManifestPath);
+    return {
+      packagePath: getLocalOpenPackageDir(cwd),
+      packageName: manifest.name || path.basename(cwd),
+      sourceType: 'workspace'
+    };
+  }
+
+  throw new Error(
+    'No openpackage.yml found in current directory or workspace.\n' +
+    'Either specify a package name or run from a package root:\n' +
+    '  opkg set <package-name> [options]\n' +
+    '  opkg set [options]  # When in package root'
+  );
 }
 
 /**
@@ -477,7 +488,7 @@ export async function runSetPipeline(
     }
     
     const message = error instanceof Error ? error.message : String(error);
-    logger.error('Set pipeline failed', { error: message });
+    logger.debug('Set pipeline failed', { error: message });
     
     return {
       success: false,

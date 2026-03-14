@@ -113,6 +113,27 @@ describe('opkg set command', () => {
   });
 
   describe('Workspace package updates', () => {
+    it('should resolve workspace manifest when no CWD-level openpackage.yml exists', async () => {
+      const workspaceDir = join(testDir, '.openpackage');
+      await mkdir(workspaceDir, { recursive: true });
+
+      const manifestPath = join(workspaceDir, 'openpackage.yml');
+      await writeFile(manifestPath, 'name: workspace-pkg\nver: 1.0.0\n');
+
+      await withCwd(testDir, async () => {
+        const result = await runSetPipeline(undefined, {
+          ver: '2.0.0',
+          nonInteractive: true
+        });
+
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(result.data?.sourceType, 'workspace');
+
+        const content = await readFile(manifestPath, 'utf-8');
+        assert.match(content, /version: 2\.0\.0/);
+      });
+    });
+
     it('should update workspace package by name', async () => {
       const workspaceDir = join(testDir, '.openpackage', 'packages', 'test-pkg');
       await mkdir(workspaceDir, { recursive: true });
@@ -219,7 +240,7 @@ describe('opkg set command', () => {
         });
 
         assert.strictEqual(result.success, false);
-        assert.match(result.error || '', /No openpackage\.yml found/);
+        assert.match(result.error || '', /No openpackage\.yml found in current directory or workspace/);
       });
     });
 
