@@ -322,7 +322,8 @@ export function mergeTrackedAndUntrackedResources(
   tree: ListTreeNode[],
   untrackedFiles: UntrackedScanResult | undefined,
   scope: ResourceScope,
-  workspaceRootNames?: Set<string>
+  workspaceRootNames?: Set<string>,
+  flat?: boolean
 ): EnhancedResourceGroup[] {
   const typeMap = new Map<string, Map<string, EnhancedResourceInfo>>();
 
@@ -391,50 +392,106 @@ export function mergeTrackedAndUntrackedResources(
   }
 
   /**
-   * Walk the tree, partitioning nodes into containers vs flat contributors.
+   * Build an EnhancedResourceInfo container from a package container node.
    */
-  function walkTree(nodes: ListTreeNode[]): void {
-    for (const node of nodes) {
-      if (isPackageContainer(node, workspaceRootNames)) {
-        const children = collectChildResources(node);
+  function buildContainer(node: ListTreeNode, children: EnhancedResourceInfo[], isMissing: boolean): EnhancedResourceInfo {
+    const sorted = [...children].sort((a, b) => a.name.localeCompare(b.name));
+    const namespace = node.report.namespace ?? deriveNamespaceSlug(node.report.name);
+    const containerName = `${PACKAGES_GROUP_TYPE}/${namespace}`;
+    const version = node.report.version && node.report.version !== '0.0.0'
+      ? node.report.version : undefined;
+    return {
+      name: containerName,
+      resourceType: PACKAGES_GROUP_TYPE,
+      files: [],
+      children: sorted,
+      status: isMissing ? 'missing' : 'tracked',
+      scopes: new Set([scope]),
+      packages: new Set([node.report.name]),
+      version,
+    };
+  }
 
-        if (children.length > 0) {
-          children.sort((a, b) => a.name.localeCompare(b.name));
+  /**
+   * Add a container to the typeMap's packages group.
+   */
+  function addContainerToTypeMap(container: EnhancedResourceInfo): void {
+    if (!typeMap.has(PACKAGES_GROUP_TYPE)) {
+      typeMap.set(PACKAGES_GROUP_TYPE, new Map());
+    }
+    typeMap.get(PACKAGES_GROUP_TYPE)!.set(container.name, container);
+  }
 
-          const namespace = node.report.namespace ?? deriveNamespaceSlug(node.report.name);
-          const containerName = `${PACKAGES_GROUP_TYPE}/${namespace}`;
+  /**
+   * Flat mode: process a single node, placing containers at root level in typeMap.
+   */
+  function visitNodeFlat(node: ListTreeNode): void {
+    if (isPackageContainer(node, workspaceRootNames)) {
+      const children = collectChildResources(node);
+      const isMissing = node.report.state === 'missing';
 
-          if (!typeMap.has(PACKAGES_GROUP_TYPE)) {
-            typeMap.set(PACKAGES_GROUP_TYPE, new Map());
-          }
-          const version = node.report.version && node.report.version !== '0.0.0'
-            ? node.report.version : undefined;
-          typeMap.get(PACKAGES_GROUP_TYPE)!.set(containerName, {
-            name: containerName,
-            resourceType: PACKAGES_GROUP_TYPE,
-            files: [],
-            children,
-            status: 'tracked',
-            scopes: new Set([scope]),
-            packages: new Set([node.report.name]),
-            version,
-          });
+      if (children.length > 0 || isMissing) {
+        addContainerToTypeMap(buildContainer(node, children, isMissing));
+      }
+
+      // Walk non-embedded children independently (they may be containers themselves)
+      for (const child of node.children) {
+        if (!child.report.isEmbedded) {
+          visitNodeFlat(child);
         }
-
-        // Walk non-embedded children independently (they may be containers themselves)
-        for (const child of node.children) {
-          if (!child.report.isEmbedded) {
-            walkTree([child]);
-          }
-        }
-      } else {
-        collectFlatFromNode(node);
-        walkTree(node.children);
+      }
+    } else {
+      collectFlatFromNode(node);
+      for (const child of node.children) {
+        visitNodeFlat(child);
       }
     }
   }
 
-  walkTree(tree);
+  /**
+   * Tree mode: recursively process nodes, nesting child containers inside
+   * parent containers rather than placing them all at root level.
+   * Returns any containers found among the given nodes so parent can nest them.
+   */
+  function processNodes(nodes: ListTreeNode[]): EnhancedResourceInfo[] {
+    const containers: EnhancedResourceInfo[] = [];
+
+    for (const node of nodes) {
+      if (isPackageContainer(node, workspaceRootNames)) {
+        // Collect own resources + embedded children's resources
+        const ownResources = collectChildResources(node);
+        const isMissing = node.report.state === 'missing';
+
+        // Recurse into non-embedded children to find nested containers
+        const nonEmbeddedChildren = node.children.filter(c => !c.report.isEmbedded);
+        const nestedContainers = processNodes(nonEmbeddedChildren);
+
+        // Combine own resources with nested containers as children
+        const allChildren = [...ownResources, ...nestedContainers];
+
+        if (allChildren.length > 0 || isMissing) {
+          containers.push(buildContainer(node, allChildren, isMissing));
+        }
+      } else {
+        // Non-container: collect resources flat into typeMap, recurse children
+        collectFlatFromNode(node);
+        const nested = processNodes(node.children);
+        for (const c of nested) containers.push(c);
+      }
+    }
+
+    return containers;
+  }
+
+  if (flat) {
+    for (const node of tree) visitNodeFlat(node);
+  } else {
+    // Tree mode: top-level containers go into typeMap
+    const topContainers = processNodes(tree);
+    for (const container of topContainers) {
+      addContainerToTypeMap(container);
+    }
+  }
 
   if (untrackedFiles && untrackedFiles.files.length > 0) {
     const grouped = classifyAndGroupUntrackedFiles(untrackedFiles.files);

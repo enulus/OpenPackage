@@ -167,7 +167,7 @@ export async function runDefaultView(cwd?: string): Promise<void> {
   const workspaceRootNames = collectWorkspaceRootNames(results);
 
   for (const { scope, result } of results) {
-    const merged = mergeTrackedAndUntrackedResources(result.tree, result.data.untrackedFiles, scope, workspaceRootNames);
+    const merged = mergeTrackedAndUntrackedResources(result.tree, result.data.untrackedFiles, scope, workspaceRootNames, true);
     const resourceCounts = countResources(merged);
     const totalResources = resourceCounts.reduce((sum, c) => sum + c.count, 0);
     const packageCount = result.data.packages?.length ?? 0;

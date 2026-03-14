@@ -11,7 +11,7 @@ import {
   resolveWorkspaceHeader,
   type HeaderInfo
 } from '@opkg/core/core/list/scope-data-collector.js';
-import { dim, printDepsView, printResourcesView, printProvenanceView } from '@opkg/core/core/list/list-printers.js';
+import { dim, printResourcesView, printProvenanceView } from '@opkg/core/core/list/list-printers.js';
 import type { EnhancedResourceGroup, EnhancedResourceInfo, ResourceScope } from '@opkg/core/core/list/list-tree-renderer.js';
 import { resolveProvenance, type ProvenanceResult } from '@opkg/core/core/resources/resource-provenance.js';
 import { parseResourceQuery } from '@opkg/core/core/resources/resource-query.js';
@@ -24,7 +24,7 @@ interface ListOptions {
   files?: boolean;
   status?: boolean;
   platforms?: string[];
-  deps?: boolean;
+  flat?: boolean;
   json?: boolean;
 }
 
@@ -53,28 +53,6 @@ function serializeResourcesView(mergedResources: EnhancedResourceGroup[]) {
   return mergedResources.map(group => ({
     resourceType: group.resourceType,
     resources: group.resources.map(serializeResource),
-  }));
-}
-
-function serializeDepsView(results: Array<{ scope: ResourceScope; result: any }>) {
-  return results.map(({ scope, result }) => ({
-    scope,
-    packages: (result.data.packages ?? []).map((pkg: any) => ({
-      name: pkg.packageName ?? pkg.name,
-      version: pkg.version,
-      state: pkg.state ?? 'installed',
-      dependencies: pkg.dependencies ?? [],
-      ...(pkg.modifiedCount !== undefined ? { modifiedCount: pkg.modifiedCount } : {}),
-      ...(pkg.outdatedCount !== undefined ? { outdatedCount: pkg.outdatedCount } : {}),
-      ...(pkg.divergedCount !== undefined ? { divergedCount: pkg.divergedCount } : {}),
-      ...(pkg.isRegistryPackage !== undefined ? { isRegistryPackage: pkg.isRegistryPackage } : {}),
-      files: (pkg.files ?? []).map((f: any) => ({
-        source: f.source,
-        target: f.target,
-        status: f.status,
-        scope: f.scope,
-      })),
-    })),
   }));
 }
 
@@ -182,7 +160,7 @@ async function listCommand(
       showGlobal,
       pipelineOptions: {
         files: options.files || options.status, // status implies file-level detail
-        all: true, // Always build full tree: deps view needs it for display, resources view needs it to collect from transitive deps
+        all: true, // Always build full tree: resources view needs it to collect from transitive deps
         status: options.status,
         platforms: options.platforms
       },
@@ -197,30 +175,14 @@ async function listCommand(
       return handleResourceProvenance(packageName, options, programOpts);
     }
     if (options.json) {
-      const view = options.deps ? 'deps' : 'resources';
-      printJsonSuccess(view === 'deps' ? { view, scopes: [] } : { view, resources: [] });
+      printJsonSuccess({ view: 'resources', resources: [] });
       return { success: true };
     }
-    if (options.deps) {
-      console.log(dim('No packages installed.'));
-    } else {
-      console.log(dim('No resources found.'));
-    }
+    console.log(dim('No resources found.'));
     return { success: true };
   }
 
-  // --- Deps view ---
-  if (options.deps) {
-    if (options.json) {
-      printJsonSuccess({ view: 'deps', scopes: serializeDepsView(results) });
-      return { success: true };
-    }
-    const listHeaderInfo = await buildListHeaderInfo(packageName, results, showProject, programOpts);
-    printDepsView(results, !!options.files, listHeaderInfo, undefined, !!options.status);
-    return { success: true };
-  }
-
-  // --- Resources view (default) ---
+  // --- Resources view ---
   const scopedResources: Array<{ scope: ResourceScope; groups: EnhancedResourceGroup[] }> = [];
 
   const workspaceRootNames = collectWorkspaceRootNames(results);
@@ -228,7 +190,7 @@ async function listCommand(
   for (const { scope, result } of results) {
     // When listing a specific package, don't include untracked files
     const untrackedData = packageName ? undefined : result.data.untrackedFiles;
-    const merged = mergeTrackedAndUntrackedResources(result.tree, untrackedData, scope, workspaceRootNames);
+    const merged = mergeTrackedAndUntrackedResources(result.tree, untrackedData, scope, workspaceRootNames, !!options.flat);
     if (merged.length > 0) {
       scopedResources.push({ scope, groups: merged });
     }

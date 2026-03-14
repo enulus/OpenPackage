@@ -128,7 +128,7 @@ Use the list command to show an overview of packages and files installed.
 | Option | Description |
 | --- | --- |
 | `-s, --scope <scope>`        | Workspace scope: project or global (default: both) |
-| `-d, --deps`                 | Show dependency tree (full tree including transitive dependencies) |
+| `--flat`                     | List packages at root level without nesting |
 | `-f, --files`                | Show individual file paths |
 | `-t, --tracked`              | Show only tracked resources (skip untracked scan) |
 | `-u, --untracked`            | Show only untracked resources |

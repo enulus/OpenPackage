@@ -286,7 +286,7 @@ program
   .argument('[package]', 'filter by package or resource name')
   .option('-g, --global', 'list global scope only')
   .option('--project', 'list project scope only')
-  .option('-d, --deps', 'show dependency tree (full tree including transitive dependencies)')
+  .option('--flat', 'list packages at root level without nesting')
   .option('-f, --files', 'show individual file paths')
   .option('-s, --status', 'show content change status (modified/clean)')
   .option('-p, --platforms <platforms...>', 'filter by specific platforms (e.g., cursor, claude)')
