@@ -1,6 +1,6 @@
 {
   "name": "@opkg/core",
-  "version": "0.9.5",
+  "version": "0.10.0",
   "description": "Core business logic for OpenPackage - the package manager for AI coding.",
   "license": "Apache-2.0",
   "author": "Eric Lee",
