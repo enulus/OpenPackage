@@ -154,7 +154,8 @@ const testFiles: string[] = [
   'tests/integration/nested-deps.test.ts',
   'tests/integration/install-flags.test.ts',
   'tests/integration/conflict-strategies.test.ts',
-  'tests/integration/error-handling.test.ts'
+  'tests/integration/error-handling.test.ts',
+  'tests/integration/advanced-install.test.ts'
 ];
 
 function runTestFile(relPath: string): void {

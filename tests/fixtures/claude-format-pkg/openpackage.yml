@@ -1,0 +1,5 @@
+name: test-claude-format
+version: 1.0.0
+description: Test package in Claude platform format for conversion testing
+dependencies: []
+dev-dependencies: []

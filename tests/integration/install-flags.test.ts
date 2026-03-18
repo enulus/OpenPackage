@@ -283,6 +283,38 @@ await withWorkspace('selective-commands', async (dir) => {
 
 console.log('  Sub-test 3c: Selective --commands ✓');
 
+// ── SUB-TEST 3d: Selective --skills ──────────────────────────────────
+console.log('  Sub-test 3d: Selective --skills...');
+
+await withWorkspace('selective-skills', async (dir) => {
+  const result = runCli(
+    ['install', './test-packages/package-c', '--skills', 'greeter-skill', '--force', '--conflicts', 'overwrite'],
+    dir,
+    { CI: 'true' }
+  );
+
+  assert.strictEqual(
+    result.code,
+    0,
+    `Selective --skills should succeed.\nstdout: ${result.stdout}\nstderr: ${result.stderr}`
+  );
+
+  const cursorFiles = await listAllFiles(path.join(dir, '.cursor'));
+  const claudeFiles = await listAllFiles(path.join(dir, '.claude'));
+  const allFiles = [...cursorFiles, ...claudeFiles];
+
+  assert.ok(
+    allFiles.some(f => f.includes('greeter-skill') || f.includes('SKILL')),
+    `Selected skill (greeter-skill) should be installed (got: ${allFiles.join(', ')})`
+  );
+  assert.ok(
+    !allFiles.some(f => f.includes('greet') && !f.includes('greeter-skill')),
+    'Non-selected command (greet) should not be installed with --skills filter'
+  );
+});
+
+console.log('  Sub-test 3d: Selective --skills ✓');
+
 // ══════════════════════════════════════════════════════════════════════
 // SUB-TEST 4: Global install — resources go to HOME, not workspace
 // ══════════════════════════════════════════════════════════════════════
