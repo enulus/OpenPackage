@@ -50,6 +50,13 @@ export async function convertPhase(ctx: InstallationContext): Promise<void> {
   if (ctx.source.pluginMetadata?.pluginType === 'marketplace') {
     return;
   }
+
+  // Skip conversion for subset installs (individual resource selections via --agents, etc.).
+  // These are single-file or single-directory resources where format conversion is unnecessary
+  // and would break the matchedPattern by redirecting contentRoot to a temp directory.
+  if ((ctx as { installScope?: string }).installScope === 'subset') {
+    return;
+  }
   
   try {
     // Load package files
