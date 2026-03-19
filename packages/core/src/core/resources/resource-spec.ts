@@ -138,6 +138,16 @@ export async function resolveResourceSpec(
     );
   }
 
+  // Bare-name preference: when input has no type qualifier,
+  // prefer package candidates over resource candidates.
+  // Resources require type qualification (e.g., skills/name).
+  if (!typeFilter && filtered.length > 1) {
+    const packageCandidates = filtered.filter(p => p.candidate.kind === 'package');
+    if (packageCandidates.length > 0) {
+      filtered = packageCandidates;
+    }
+  }
+
   // Scope preference: if preferred scope has candidates, drop others
   if (options?.scopePreference && filtered.length > 1) {
     const preferred = filtered.filter(p => getCandidateScope(p.candidate) === options.scopePreference);
@@ -159,7 +169,7 @@ export async function resolveResourceSpec(
       value: p,
     }),
     {
-      notFoundMessage: options?.notFoundMessage ?? `"${input}" not found as a resource or package.\nRun \`opkg ls\` to see installed resources.`,
+      notFoundMessage: options?.notFoundMessage ?? `"${input}" not found as a package.\nHint: To target a resource, use its qualified name (e.g., skills/${input}).\nRun \`opkg ls\` to see installed resources.`,
       ambiguousHeader: options?.ambiguousHeader,
       promptMessage: options?.promptMessage ?? 'Select which to act on:',
       multi: options?.multi,

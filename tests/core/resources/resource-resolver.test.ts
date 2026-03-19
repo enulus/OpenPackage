@@ -124,4 +124,24 @@ function makePackage(overrides: Partial<ResolvedPackage> & { packageName: string
   console.log('✓ matchCandidates — returns multiple matching resources');
 }
 
+// ---------------------------------------------------------------------------
+// matchCandidates — resource + package name collision
+// ---------------------------------------------------------------------------
+
+{
+  const workspace: WorkspaceResources = {
+    resources: [
+      makeResource({ resourceName: 'openpackage', resourceType: 'skill', packageName: 'openpackage' }),
+    ],
+    packages: [
+      makePackage({ packageName: 'openpackage' }),
+    ],
+  };
+  const result = matchCandidates(workspace, 'openpackage');
+  assert.equal(result.length, 2);
+  assert.equal(result[0].kind, 'resource');
+  assert.equal(result[1].kind, 'package');
+  console.log('✓ matchCandidates — returns both resource and package when names collide');
+}
+
 console.log('\nAll resource-resolver tests passed.');

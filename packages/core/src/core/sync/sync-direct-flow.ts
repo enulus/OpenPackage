@@ -44,7 +44,7 @@ export async function runDirectSyncFlow(
   ctx?: ExecutionContext,
 ): Promise<DirectSyncResult> {
   const selected = await resolveResourceSpec(nameArg, traverseOpts, {
-    notFoundMessage: `"${nameArg}" not found as a resource or package.\nRun \`opkg ls\` to see installed resources.`,
+    notFoundMessage: `"${nameArg}" not found as a package.\nHint: To target a resource, use its qualified name (e.g., skills/${nameArg}).\nRun \`opkg ls\` to see installed resources.`,
     promptMessage: 'Select which to sync:',
     multi: false,
   }, ctx);

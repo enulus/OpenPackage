@@ -58,7 +58,7 @@ export async function runDirectUninstallFlow(
   });
 
   const selected = await resolveResourceSpec(name, traverseOpts, {
-    notFoundMessage: `"${name}" not found as a resource or package.\nRun \`opkg ls\` to see installed resources.`,
+    notFoundMessage: `"${name}" not found as a package.\nHint: To target a resource, use its qualified name (e.g., skills/${name}).\nRun \`opkg ls\` to see installed resources.`,
     promptMessage: 'Select which to uninstall:',
   }, disambiguationCtx);
 
