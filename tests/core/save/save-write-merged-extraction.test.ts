@@ -293,30 +293,65 @@ describe('save-write-merged-extraction', () => {
     assert.strictEqual(results[0].operation.operation, 'skipped');
   });
   
-  it('should handle composite merge strategy gracefully', async () => {
+  it('should extract only marker section for composite merge write', async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'opkg-write-merge-test-'));
     const packageRoot = tempDir;
-    
-    const compositeContent = '# Header\n\nBase content\n\n<!-- package-start -->\nPackage content\n<!-- package-end -->';
-    
+
+    const compositeContent = [
+      '# Project AGENTS',
+      '',
+      '<!-- package: my-pkg -->',
+      'Package instructions here',
+      '<!-- -->',
+      '',
+      '<!-- package: other-pkg -->',
+      'Other content',
+      '<!-- -->'
+    ].join('\n');
+
     const candidate = createCandidate({
       content: compositeContent,
       mergeStrategy: 'composite',
-      mergeKeys: ['package-marker']
+      mergeKeys: ['my-pkg']
     });
-    
+
     const resolution: ResolutionResult = {
       selection: candidate,
       platformSpecific: [],
       strategy: 'write-single',
       wasInteractive: false
     };
-    
-    await writeResolution(packageRoot, 'README.md', resolution);
-    
-    // Composite extraction not implemented - should write full content as fallback
-    const writtenContent = await readTextFile(join(packageRoot, 'README.md'));
-    assert.strictEqual(writtenContent, compositeContent);
+
+    await writeResolution(packageRoot, 'AGENTS.md', resolution);
+
+    const writtenContent = await readTextFile(join(packageRoot, 'AGENTS.md'));
+    assert.strictEqual(writtenContent, 'Package instructions here');
+  });
+
+  it('should fall back to full content when composite markers not found', async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'opkg-write-merge-test-'));
+    const packageRoot = tempDir;
+
+    const noMarkersContent = '# Header\n\nBase content without markers';
+
+    const candidate = createCandidate({
+      content: noMarkersContent,
+      mergeStrategy: 'composite',
+      mergeKeys: ['missing-pkg']
+    });
+
+    const resolution: ResolutionResult = {
+      selection: candidate,
+      platformSpecific: [],
+      strategy: 'write-single',
+      wasInteractive: false
+    };
+
+    await writeResolution(packageRoot, 'AGENTS.md', resolution);
+
+    // No markers found → extraction fails → fallback to full content
+    const writtenContent = await readTextFile(join(packageRoot, 'AGENTS.md'));
+    assert.strictEqual(writtenContent, noMarkersContent);
   });
   
   it('should apply import transformation for OpenCode platform (mcp → mcpServers)', async () => {

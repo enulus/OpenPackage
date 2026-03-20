@@ -15,6 +15,7 @@
 
 import { logger } from '../../utils/logger.js';
 import { calculateFileHash } from '../../utils/hash-utils.js';
+import { extractPackageContentFromRootFile } from '../../utils/root-file-extractor.js';
 import type { SaveCandidate } from './save-types.js';
 
 /**
@@ -79,11 +80,10 @@ export async function extractPackageContribution(
         const normalizedKeys = normalizeKeysToParent(mergeKeys);
         return await extractFromJsonMerge(content, normalizedKeys);
       
-      case 'composite':
-        return {
-          success: false,
-          error: 'Composite merge extraction not yet implemented'
-        };
+      case 'composite': {
+        const packageName = mergeKeys[0];
+        return await extractFromComposite(content, packageName);
+      }
       
       case 'replace':
         // Replace strategy doesn't merge, so extraction not applicable
@@ -130,6 +130,56 @@ export async function extractContentByKeys(
       error: error instanceof Error ? error.message : String(error)
     };
   }
+}
+
+/**
+ * Extract composite (marker-based) content from raw file content.
+ *
+ * Symmetric with `extractContentByKeys()` — used by the status checker
+ * to extract a package's marker section from a root file.
+ *
+ * @param content - Full file content containing marker sections
+ * @param packageName - Package name to extract markers for
+ * @returns Extract result with extracted content and hash
+ */
+export async function extractCompositeContent(
+  content: string,
+  packageName: string
+): Promise<ExtractResult> {
+  return extractFromComposite(content, packageName);
+}
+
+/**
+ * Extract content between composite markers for a given package.
+ *
+ * Uses `extractPackageContentFromRootFile()` to find the section
+ * between `<!-- package: name -->` and `<!-- -->` markers.
+ */
+async function extractFromComposite(
+  content: string,
+  packageName: string
+): Promise<ExtractResult> {
+  const extracted = extractPackageContentFromRootFile(content, packageName);
+  if (extracted === null) {
+    return {
+      success: false,
+      error: `No composite markers found for package "${packageName}"`
+    };
+  }
+
+  const trimmed = extracted.trim();
+  const extractedHash = await calculateFileHash(trimmed);
+
+  logger.debug(
+    `Extracted composite section for package "${packageName}"`,
+    { contentLength: trimmed.length }
+  );
+
+  return {
+    success: true,
+    extractedContent: trimmed,
+    extractedHash
+  };
 }
 
 /**

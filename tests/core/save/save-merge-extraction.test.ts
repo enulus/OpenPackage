@@ -190,16 +190,78 @@ describe('save-merge-extractor', () => {
       assert.ok(result.error!.includes('No merge metadata'));
     });
 
-    it('should return error for composite merge strategy', async () => {
+    it('should extract composite content from marker sections', async () => {
+      const compositeContent = [
+        '# Project AGENTS',
+        '',
+        '<!-- package: my-pkg -->',
+        'Package instructions here',
+        'More package content',
+        '<!-- -->',
+        '',
+        '<!-- package: other-pkg -->',
+        'Other package content',
+        '<!-- -->'
+      ].join('\n');
+
       const candidate = createCandidate({
+        content: compositeContent,
         mergeStrategy: 'composite',
-        mergeKeys: ['key']
+        mergeKeys: ['my-pkg']
       });
-      
+
       const result = await extractPackageContribution(candidate);
-      
+
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.extractedContent, 'Package instructions here\nMore package content');
+      assert.notStrictEqual(result.extractedHash, undefined);
+    });
+
+    it('should fail composite extraction when no markers found', async () => {
+      const content = '# Some content\nNo markers here';
+
+      const candidate = createCandidate({
+        content,
+        mergeStrategy: 'composite',
+        mergeKeys: ['missing-pkg']
+      });
+
+      const result = await extractPackageContribution(candidate);
+
       assert.strictEqual(result.success, false);
-      assert.ok(result.error!.includes('Composite merge extraction not yet implemented'));
+      assert.ok(result.error!.includes('No composite markers found'));
+    });
+
+    it('should handle composite extraction with empty section', async () => {
+      const content = '<!-- package: empty-pkg -->\n   \n<!-- -->';
+
+      const candidate = createCandidate({
+        content,
+        mergeStrategy: 'composite',
+        mergeKeys: ['empty-pkg']
+      });
+
+      const result = await extractPackageContribution(candidate);
+
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.extractedContent, '');
+    });
+
+    it('should produce consistent hash for composite extraction', async () => {
+      const content = '<!-- package: pkg -->\nSome content\n<!-- -->';
+
+      const candidate = createCandidate({
+        content,
+        mergeStrategy: 'composite',
+        mergeKeys: ['pkg']
+      });
+
+      const result1 = await extractPackageContribution(candidate);
+      const result2 = await extractPackageContribution(candidate);
+
+      assert.strictEqual(result1.success, true);
+      assert.strictEqual(result2.success, true);
+      assert.strictEqual(result1.extractedHash, result2.extractedHash);
     });
 
     it('should return error for replace strategy', async () => {

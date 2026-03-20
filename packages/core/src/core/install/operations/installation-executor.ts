@@ -17,8 +17,9 @@ import type { RelocatedFile } from '../conflicts/file-conflict-resolver.js';
 import type { IndexWriteCollector } from '../wave-resolver/index-write-collector.js';
 import { checkAndHandleAllPackageConflicts } from './conflict-handler.js';
 import { readWorkspaceIndex, writeWorkspaceIndex } from '../../../utils/workspace-index-yml.js';
+import { deduplicateTargets } from '../../../utils/workspace-index-helpers.js';
 import type { PromptPort } from '../../ports/prompt.js';
-import type { InstallScope } from '../../../types/workspace-index.js';
+import type { InstallScope, WorkspaceIndexFileMapping } from '../../../types/workspace-index.js';
 
 export type ConflictSummary = Awaited<ReturnType<typeof checkAndHandleAllPackageConflicts>>;
 
@@ -191,9 +192,9 @@ export async function performIndexBasedInstallationPhases(params: InstallationPh
     if (indexWriteCollector) {
       // Defer to collector (parallel install mode)
       for (const [packageName, { rootFilePaths }] of rootFileAugmentations) {
-        const files: Record<string, string[]> = {};
-        for (const path of rootFilePaths) {
-          files[path] = [path];
+        const files: Record<string, (string | WorkspaceIndexFileMapping)[]> = {};
+        for (const p of rootFilePaths) {
+          files[p] = [{ target: p, merge: 'composite', keys: [packageName] }];
         }
         indexWriteCollector.recordFileAugmentation({ packageName, files });
       }
@@ -205,11 +206,10 @@ export async function performIndexBasedInstallationPhases(params: InstallationPh
           const entry = wsRecord.index.packages[packageName];
           if (!entry) continue;
           const files = { ...(entry.files ?? {}) };
-          for (const path of rootFilePaths) {
-            const existing = files[path] ?? [];
-            if (!existing.includes(path)) {
-              files[path] = [...existing, path];
-            }
+          for (const p of rootFilePaths) {
+            const incoming: WorkspaceIndexFileMapping = { target: p, merge: 'composite', keys: [packageName] };
+            const existing = files[p] ?? [];
+            files[p] = deduplicateTargets(existing, [incoming]);
           }
           wsRecord.index.packages[packageName] = { ...entry, files };
         }

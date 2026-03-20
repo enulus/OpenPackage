@@ -17,7 +17,7 @@ import { calculateFileHash } from '../../utils/hash-utils.js';
 import { readTextFile, exists } from '../../utils/fs.js';
 import { getTargetPath, isComplexMapping, isMergedMapping } from '../../utils/workspace-index-helpers.js';
 import { readWorkspaceIndex, writeWorkspaceIndex } from '../../utils/workspace-index-yml.js';
-import { extractContentByKeys } from '../save/save-merge-extractor.js';
+import { extractContentByKeys, extractCompositeContent } from '../save/save-merge-extractor.js';
 import type { WorkspaceIndexFileMapping } from '../../types/workspace-index.js';
 import { logger } from '../../utils/logger.js';
 
@@ -61,7 +61,8 @@ export async function checkContentStatus(
         const status = await checkMergedFileStatus(
           absTarget,
           path.join(packageSourceRoot, sourceKey),
-          (mapping as WorkspaceIndexFileMapping).keys!
+          (mapping as WorkspaceIndexFileMapping).keys!,
+          (mapping as WorkspaceIndexFileMapping).merge!
         );
         results.set(key, status);
       } else {
@@ -154,7 +155,8 @@ async function checkThreeWayStatus(
 async function checkMergedFileStatus(
   absWorkspacePath: string,
   absSourcePath: string,
-  mergeKeys: string[]
+  mergeKeys: string[],
+  mergeType: 'deep' | 'shallow' | 'replace' | 'composite'
 ): Promise<ContentStatus> {
   try {
     if (!(await exists(absSourcePath))) {
@@ -166,6 +168,17 @@ async function checkMergedFileStatus(
       readTextFile(absSourcePath)
     ]);
 
+    // Composite merges: workspace has markers, source is raw content (no markers)
+    if (mergeType === 'composite') {
+      const workspaceExtract = await extractCompositeContent(workspaceContent, mergeKeys[0]);
+      if (!workspaceExtract.success) {
+        return 'merged';
+      }
+      const sourceHash = await calculateFileHash(sourceContent.trim());
+      return workspaceExtract.extractedHash === sourceHash ? 'clean' : 'modified';
+    }
+
+    // Deep/shallow merges: extract by JSON keys from both sides
     const [workspaceExtract, sourceExtract] = await Promise.all([
       extractContentByKeys(workspaceContent, mergeKeys),
       extractContentByKeys(sourceContent, mergeKeys)
