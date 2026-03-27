@@ -18,6 +18,7 @@ import { getTargetPath, findPackageInIndex } from '../../utils/workspace-index-h
 import { getEmbeddedChildren } from '../../utils/qualified-name.js';
 import { buildPreservedDirectoriesSet } from '../platform/directory-preservation.js';
 import { cleanupEmptyParents } from '../../utils/cleanup-empty-parents.js';
+import { removeLockfileEntry } from '../../utils/lockfile-yml.js';
 import type { WorkspaceIndexFileMapping } from '../../types/workspace-index.js';
 import type { OutputPort } from '../ports/output.js';
 import { resolveOutput } from '../ports/resolve.js';
@@ -163,6 +164,7 @@ export async function runUninstallPipeline(
 
       await processRootFileRemovals(targetDir, [childMatch.key]);
       removeWorkspaceIndexEntry(index, childMatch.key);
+      await removeLockfileEntry(targetDir, childMatch.key);
       await removePackageFromOpenpackageYml(targetDir, childMatch.key);
 
       logger.info(`Uninstalled embedded package ${childMatch.key}: removed ${childDeleted.length} files`);
@@ -211,6 +213,9 @@ export async function runUninstallPipeline(
   // Update workspace index (migration will happen on write)
   removeWorkspaceIndexEntry(index, resolvedName);
   await writeWorkspaceIndex({ path: indexPath, index });
+
+  // Clean up lockfile entry
+  await removeLockfileEntry(targetDir, resolvedName);
 
   // Update openpackage.yml (migration will happen on write)
   await removePackageFromOpenpackageYml(targetDir, resolvedName);
@@ -299,6 +304,12 @@ export async function runSelectiveUninstallPipeline(
 
   removeWorkspaceIndexFileKeys(index, resolvedName, sourceKeysToRemove);
   await writeWorkspaceIndex({ path: indexPath, index });
+
+  // Clean lockfile if package has no files remaining
+  const updatedEntry = index.packages[resolvedName];
+  if (!updatedEntry || Object.keys(updatedEntry.files ?? {}).length === 0) {
+    await removeLockfileEntry(targetDir, resolvedName);
+  }
 
   const preservedDirs = buildPreservedDirectoriesSet(targetDir);
   const deletedAbsolutePaths = deleted.map(relativePath => path.join(targetDir, relativePath));

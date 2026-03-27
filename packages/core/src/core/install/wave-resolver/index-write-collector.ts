@@ -20,6 +20,7 @@ import { normalizePathForProcessing } from '../../../utils/path-normalization.js
 import { logger } from '../../../utils/logger.js';
 import type { IndexSourceType } from '../../../constants/index.js';
 import type { InstallScope } from '../../../types/workspace-index.js';
+import { readLockfile, writeLockfile } from '../../../utils/lockfile-yml.js';
 
 // ============================================================================
 // Types
@@ -170,6 +171,22 @@ export class IndexWriteCollector {
       logger.debug(`IndexWriteCollector: flushed ${this.mutations.length} mutations`);
     } catch (error) {
       logger.warn(`IndexWriteCollector: failed to write workspace index: ${error}`);
+    }
+
+    // Flush resolution metadata to lockfile (best-effort)
+    try {
+      const lockRecord = await readLockfile(targetDir);
+      for (const mutation of this.mutations) {
+        if (mutation.type !== 'upsert') continue;
+        lockRecord.lockfile.packages[mutation.packageName] = {
+          version: mutation.version,
+          dependencies: mutation.dependencies,
+          marketplace: mutation.marketplace,
+        };
+      }
+      await writeLockfile(lockRecord);
+    } catch (lockError) {
+      logger.debug(`IndexWriteCollector: failed to flush lockfile: ${lockError}`);
     }
 
     this.mutations = [];

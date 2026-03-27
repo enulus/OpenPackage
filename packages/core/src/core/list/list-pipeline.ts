@@ -4,6 +4,7 @@ import type { CommandResult, ExecutionContext } from '../../types/index.js';
 import { ValidationError } from '../../utils/errors.js';
 import { getLocalOpenPackageDir, getLocalPackageYmlPath } from '../../utils/paths.js';
 import { readWorkspaceIndex, getWorkspaceIndexPath } from '../../utils/workspace-index-yml.js';
+import { readLockfile } from '../../utils/lockfile-yml.js';
 import { healAndPersistIndex } from '../../utils/workspace-index-healer.js';
 import { resolveDeclaredPath } from '../../utils/path-resolution.js';
 import { exists } from '../../utils/fs.js';
@@ -517,6 +518,17 @@ export async function runListPipeline(
   }
 
   const { index } = await readWorkspaceIndex(targetDir);
+
+  // Enrich index entries with lockfile resolution metadata
+  try {
+    const { lockfile } = await readLockfile(targetDir);
+    for (const [pkgName, lockEntry] of Object.entries(lockfile.packages)) {
+      const indexEntry = index.packages?.[pkgName];
+      if (!indexEntry) continue;
+      if (lockEntry.version) indexEntry.version = lockEntry.version;
+      if (lockEntry.dependencies) indexEntry.dependencies = lockEntry.dependencies;
+    }
+  } catch { /* lockfile enrichment is best-effort */ }
 
   // Self-heal stale index entries when status checking is enabled
   if (status) {

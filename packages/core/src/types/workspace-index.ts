@@ -40,6 +40,16 @@ export interface WorkspaceIndexFileMapping {
 /** Scope of the original installation: 'full' (all resources) or 'subset' (specific resources). */
 export type InstallScope = 'full' | 'subset';
 
+/** Marketplace source metadata for plugins */
+export interface MarketplaceMetadata {
+  /** Git URL of the marketplace repository */
+  url: string;
+  /** Commit SHA of the cached marketplace */
+  commitSha: string;
+  /** Plugin name within the marketplace (before scoping) */
+  pluginName: string;
+}
+
 export interface WorkspaceIndexPackage {
   /**
    * Declared path (tilde/relative preserved) or absolute path if inferred.
@@ -68,14 +78,7 @@ export interface WorkspaceIndexPackage {
    * When present, indicates this plugin came from a marketplace and may need
    * marketplace metadata for apply operations.
    */
-  marketplace?: {
-    /** Git URL of the marketplace repository */
-    url: string;
-    /** Commit SHA of the cached marketplace */
-    commitSha: string;
-    /** Plugin name within the marketplace (before scoping) */
-    pluginName: string;
-  };
+  marketplace?: MarketplaceMetadata;
   /** Source type classification (project, global, registry, git) */
   sourceType?: 'project' | 'global' | 'registry' | 'git';
   /** Back-pointer to parent package name (for embedded packages) */

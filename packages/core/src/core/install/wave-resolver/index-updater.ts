@@ -8,7 +8,9 @@
  */
 
 import { readWorkspaceIndex, writeWorkspaceIndex } from '../../../utils/workspace-index-yml.js';
-import type { WaveGraph } from './types.js';
+import { readLockfile, writeLockfile } from '../../../utils/lockfile-yml.js';
+import type { LockfilePackage } from '../../../types/lockfile.js';
+import type { WaveGraph, WaveNode } from './types.js';
 import { getNodePackageName } from './types.js';
 import { logger } from '../../../utils/logger.js';
 import { classifyIndexSourceType } from '../../source-mutability.js';
@@ -59,18 +61,7 @@ export async function updateWorkspaceIndex(
     // Classify source type for index persistence
     const indexSourceType = classifyIndexSourceType(node.sourceType, contentRoot ?? '');
 
-    // Build dependency list from children
-    const dependencies: string[] = [];
-    for (const childId of node.children) {
-      const childNode = graph.nodes.get(childId);
-      if (childNode) {
-        const childName =
-          getNodePackageName(childNode);
-        if (childName) {
-          dependencies.push(childName);
-        }
-      }
-    }
+    const dependencies = collectChildNames(node, graph);
 
     if (existing) {
       // Update existing entry -- preserve file mappings
@@ -153,4 +144,57 @@ export async function updateWorkspaceIndex(
       logger.warn(`Failed to write workspace index: ${error}`);
     }
   }
+
+  // Write resolution metadata to lockfile (best-effort, authoritative pass with source provenance)
+  try {
+    const lockRecord = await readLockfile(targetDir);
+    for (const node of graph.nodes.values()) {
+      if (node.isMarketplace) continue;
+      const packageName = getNodePackageName(node);
+      if (!packageName) continue;
+
+      const version = node.resolvedVersion ?? node.metadata?.version;
+      const dependencies = collectChildNames(node, graph);
+
+      const existing = lockRecord.lockfile.packages[packageName] ?? {};
+      lockRecord.lockfile.packages[packageName] = {
+        ...existing,
+        version: version ?? existing.version,
+        dependencies: dependencies.length > 0 ? dependencies : existing.dependencies,
+        ...buildLockfileSource(node),
+      };
+    }
+    await writeLockfile(lockRecord);
+  } catch (lockError) {
+    logger.debug(`Failed to update lockfile: ${lockError}`);
+  }
+}
+
+function collectChildNames(node: WaveNode, graph: WaveGraph): string[] {
+  const names: string[] = [];
+  for (const childId of node.children) {
+    const childNode = graph.nodes.get(childId);
+    if (childNode) {
+      const name = getNodePackageName(childNode);
+      if (name) names.push(name);
+    }
+  }
+  return names;
+}
+
+function buildLockfileSource(node: WaveNode): Pick<LockfilePackage, 'path' | 'url' | 'ref'> {
+  const src = node.source;
+  if (src.type === 'git') {
+    return {
+      url: src.gitUrl,
+      ref: src.gitRef,
+      path: src.resourcePath,
+    };
+  }
+  if (src.type === 'path') {
+    return {
+      path: src.absolutePath ?? src.contentRoot,
+    };
+  }
+  return {};
 }

@@ -7,6 +7,7 @@
  */
 
 import { join } from 'path';
+import { readLockfile, writeLockfile } from '../../utils/lockfile-yml.js';
 import { parsePackageYml } from '../../utils/package-yml.js';
 import { getLocalPackageYmlPath } from '../../utils/paths.js';
 import { arePackageNamesEquivalent, normalizePackageName } from '../../utils/package-name.js';
@@ -243,6 +244,16 @@ export async function updateIndexVersion(
     pkg.version = newVersion;
     await writeWorkspaceIndex(record);
     logger.debug(`Updated workspace index version for ${packageName} to ${newVersion}`);
+
+    // Update lockfile version too (best-effort)
+    try {
+      const lockRecord = await readLockfile(cwd);
+      const lockPkg = lockRecord.lockfile.packages[packageName];
+      if (lockPkg) {
+        lockPkg.version = newVersion;
+        await writeLockfile(lockRecord);
+      }
+    } catch { /* lockfile update is best-effort */ }
   } catch (error) {
     logger.warn(`Failed to update index version: ${error}`);
   }

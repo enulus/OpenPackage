@@ -15,6 +15,9 @@
 
 import { join, relative } from 'path';
 import { promises as fs } from 'fs';
+import { readLockfile, writeLockfile } from '../../utils/lockfile-yml.js';
+import type { LockfilePackage } from '../../types/lockfile.js';
+import { isRegistryPath } from '../source-mutability.js';
 import {
   installPackageWithFlows,
   type FlowInstallContext
@@ -509,6 +512,24 @@ async function updateWorkspaceIndexForFlows(
     
     await writeWorkspaceIndex(wsRecord);
     logger.debug(`Updated workspace index for ${packageName}@${version}`);
+
+    // Write resolution metadata to lockfile (best-effort)
+    try {
+      const lockRecord = await readLockfile(cwd);
+      const lockEntry: LockfilePackage = {
+        version: effectiveVersion,
+        dependencies: packageEntry.dependencies,
+        marketplace: marketplaceMetadata,
+      };
+      // Add path source provenance for non-registry packages
+      if (packagePath && !isRegistryPath(packagePath)) {
+        lockEntry.path = packagePath;
+      }
+      lockRecord.lockfile.packages[packageName] = lockEntry;
+      await writeLockfile(lockRecord);
+    } catch (lockError) {
+      logger.debug(`Failed to update lockfile for ${packageName}: ${lockError}`);
+    }
   } catch (error) {
     logger.warn(`Failed to update workspace index for ${packageName}: ${error}`);
   }

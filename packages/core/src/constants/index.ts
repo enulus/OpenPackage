@@ -31,6 +31,7 @@ export const FILE_PATTERNS = {
   // File patterns arrays
   MARKDOWN_FILES: ['.md', '.mdc'],
   YML_FILE: '.yml',
+  OPENPACKAGE_LOCK: 'openpackage.lock',
 } as const;
 
 /**

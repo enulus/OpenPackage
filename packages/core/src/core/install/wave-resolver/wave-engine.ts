@@ -361,7 +361,7 @@ export async function resolveWave(options: WaveResolverOptions): Promise<WaveRes
  * resulting array -- the correct installation order when dependencies must be
  * installed before dependents.
  */
-function topologicalSort(nodes: Map<string, WaveNode>, roots: string[]): string[] {
+export function topologicalSort(nodes: Map<string, WaveNode>, roots: string[]): string[] {
   const order: string[] = [];
   const visited = new Set<string>();
 

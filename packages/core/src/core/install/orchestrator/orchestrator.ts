@@ -35,6 +35,7 @@ import { createAllStrategies } from './strategies/index.js';
 import { resolveWave, updateWorkspaceIndex } from '../wave-resolver/index.js';
 import { installInWaves, type WaveInstallResult } from '../wave-resolver/wave-installer.js';
 import type { WaveResolverOptions, WaveVersionConflict } from '../wave-resolver/types.js';
+import { installFromLockfile } from '../wave-resolver/lockfile-resolver.js';
 import { getManifestPathAtContentRoot } from '../wave-resolver/manifest-reader.js';
 import { handleListSelection } from '../list-handler.js';
 import { discoverResources } from '../resource-discoverer.js';
@@ -858,7 +859,22 @@ export class InstallOrchestrator {
       };
     }
 
-    // Resolve dependency graph via wave BFS
+    // Try lockfile-first install (bypasses orchestrator, installs directly)
+    if (!options.force) {
+      const lockfileResult = await installFromLockfile(waveOptions, execContext, options);
+      if (lockfileResult) {
+        const { installed, failed, skipped } = lockfileResult;
+        out.success(`Installation complete: ${installed} installed${failed > 0 ? `, ${failed} failed` : ''}${skipped > 0 ? `, ${skipped} skipped` : ''}`);
+        return {
+          success: failed === 0,
+          data: { installed, skipped: failed + skipped },
+          error: failed > 0 ? `${failed} packages failed to install` : undefined,
+          warnings: []
+        };
+      }
+    }
+
+    // Fallback: resolve dependency graph via wave BFS (full resolution)
     const waveResult = await resolveWave(waveOptions);
 
     // Check for unresolved conflicts
