@@ -182,7 +182,8 @@ dependencies:
         // Should auto-migrate to new format
         assert.ok(parsed.dependencies);
         assert.strictEqual(parsed.dependencies[0].url, 'https://github.com/user/repo.git#main');
-        assert.strictEqual(parsed.dependencies[0].path, 'plugins/x');
+        assert.strictEqual(parsed.dependencies[0].base, 'plugins/x');
+        assert.strictEqual(parsed.dependencies[0].path, undefined);
         assert.strictEqual(parsed.dependencies[0].git, undefined);
         assert.strictEqual(parsed.dependencies[0].ref, undefined);
         
@@ -269,7 +270,7 @@ dependencies:
         // Verify new format is used
         assert.ok(written.includes('url: https://github.com/user/repo1.git#v1.0.0'));
         assert.ok(written.includes('url: https://github.com/user/repo2.git#main'));
-        assert.ok(written.includes('path: plugins/x'));
+        assert.ok(written.includes('base: plugins/x'));
         
       } finally {
         await rm(tmpDir, { recursive: true, force: true });
@@ -297,12 +298,14 @@ dependencies:
         
         const parsed = await parsePackageYml(manifestPath);
         
-        // Git source: path is subdirectory
+        // Git source: non-resource path migrates to base (subdirectory)
         assert.strictEqual(parsed.dependencies![0].url, 'https://github.com/user/repo.git#main');
-        assert.strictEqual(parsed.dependencies![0].path, 'plugins/x');
-        
-        // Local source: path is filesystem path
-        assert.strictEqual(parsed.dependencies![1].path, './local-dir');
+        assert.strictEqual(parsed.dependencies![0].base, 'plugins/x');
+        assert.strictEqual(parsed.dependencies![0].path, undefined);
+
+        // Local source: path migrates to base (filesystem path)
+        assert.strictEqual(parsed.dependencies![1].base, './local-dir');
+        assert.strictEqual(parsed.dependencies![1].path, undefined);
         assert.strictEqual(parsed.dependencies![1].url, undefined);
         
       } finally {
@@ -389,10 +392,11 @@ dependencies:
           await writeTextFile(manifestPath, content);
         }
         
-        // Final verification
+        // Final verification — plugins/x migrates from path to base on first cycle
         const final = await parsePackageYml(manifestPath);
         assert.strictEqual(final.dependencies![0].url, 'https://github.com/user/repo.git#v1.0.0');
-        assert.strictEqual(final.dependencies![0].path, 'plugins/x');
+        assert.strictEqual(final.dependencies![0].base, 'plugins/x');
+        assert.strictEqual(final.dependencies![0].path, undefined);
         assert.strictEqual(final.dependencies![0].git, undefined);
         assert.strictEqual(final.dependencies![0].ref, undefined);
         

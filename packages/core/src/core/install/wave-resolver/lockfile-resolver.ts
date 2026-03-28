@@ -43,7 +43,7 @@ export interface LockfileInstallResult {
 
 function inferSourceType(entry: LockfilePackage): 'git' | 'path' | 'registry' {
   if (entry.url) return 'git';
-  if (entry.path) return 'path';
+  if (entry.base || entry.path) return 'path';
   return 'registry';
 }
 
@@ -65,8 +65,9 @@ async function computeContentRoot(
     return null;
   }
 
-  if (entry.path && !entry.url) {
-    return resolve(targetDir, entry.path);
+  const sourcePath = entry.base ?? entry.path;
+  if (sourcePath && !entry.url) {
+    return resolve(targetDir, sourcePath);
   }
 
   // Registry: cheap filesystem lookup in packages/ then registry/
@@ -109,9 +110,9 @@ function buildContextFromLockfileEntry(
       version: entry.version,
       contentRoot,
       // Git fields for manifest recording
-      ...(entry.url ? { gitUrl: entry.url, gitRef: entry.ref, gitPath: entry.path } : {}),
-      // Path fields
-      ...(entry.path && !entry.url ? { localPath: entry.path } : {}),
+      ...(entry.url ? { gitUrl: entry.url, gitRef: entry.ref, gitPath: entry.base ?? entry.path } : {}),
+      // Path fields (prefer base, fall back to path for old lockfiles)
+      ...(!entry.url && (entry.base || entry.path) ? { localPath: entry.base ?? entry.path } : {}),
     },
     mode: 'install',
     options,

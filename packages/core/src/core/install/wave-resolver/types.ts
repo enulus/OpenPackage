@@ -19,10 +19,12 @@ export type ParsedManifest = PackageYml;
 export interface DependencyDeclaration {
   name: string;
   version?: string;
+  /** Path from source root to package root (local filesystem path or git subdirectory). */
+  base?: string;
+  /** Resource selection path within the package (partial install filter). */
   path?: string;
   url?: string;
   ref?: string;
-  base?: string;
   isDev: boolean;
   declaredIn: string;
   depth: number;

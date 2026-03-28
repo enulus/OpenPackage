@@ -27,7 +27,7 @@ function setupWorkspace(name: string, deps: PackageYml['dependencies']): string 
 
 async function testFindPathSource(): Promise<void> {
   const workspace = setupWorkspace('path-test', [
-    { name: 'my-package', path: '/absolute/path/to/package' },
+    { name: 'my-package', base: '/absolute/path/to/package' },
     { name: 'registry-package', version: '^1.0.0' }
   ]);
 
@@ -68,7 +68,7 @@ async function testDevPackagesChecked(): Promise<void> {
   const manifest: PackageYml = {
     name: 'test-workspace',
     dependencies: [{ name: 'prod-pkg', version: '^1.0.0' }],
-    'dev-dependencies': [{ name: 'dev-pkg', path: './local/dev-pkg' }]
+    'dev-dependencies': [{ name: 'dev-pkg', base: './local/dev-pkg' }]
   };
 
   const manifestPath = path.join(opkgDir, 'openpackage.yml');
@@ -82,9 +82,9 @@ async function testDevPackagesChecked(): Promise<void> {
 
 async function testRelativePaths(): Promise<void> {
   const workspace = setupWorkspace('relative-test', [
-    { name: 'relative-pkg', path: './packages/my-pkg' },
-    { name: 'parent-pkg', path: '../shared/pkg' },
-    { name: 'tilde-pkg', path: '~/.openpackage/packages/pkg' }
+    { name: 'relative-pkg', base: './packages/my-pkg' },
+    { name: 'parent-pkg', base: '../shared/pkg' },
+    { name: 'tilde-pkg', base: '~/.openpackage/packages/pkg' }
   ]);
 
   const relative = await findExistingPathOrGitSource(workspace, 'relative-pkg');

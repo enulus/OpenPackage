@@ -8,16 +8,16 @@ import { logger } from '../../../../utils/logger.js';
  */
 export async function updateManifestPhase(ctx: InstallationContext): Promise<void> {
   const mainPackage = ctx.resolvedPackages.find(pkg => pkg.isRoot);
-  
+
   if (!mainPackage) {
     logger.warn(`No root package found in resolved packages, skipping manifest update`);
     return;
   }
-  
+
   try {
     // Determine fields based on source type
     const fields = buildManifestFields(ctx, mainPackage);
-    
+
     await addPackageToYml(
       ctx.targetDir,
       ctx.source.packageName,
@@ -25,15 +25,14 @@ export async function updateManifestPhase(ctx: InstallationContext): Promise<voi
       ctx.options.dev ?? false,
       fields.range,
       fields.force,
-      fields.path,
+      fields.base,
       fields.gitUrl,
       fields.gitRef,
-      fields.gitPath,
-      fields.base  // Phase 4: Pass base field for resource model
+      fields.resourcePath,
     );
-    
+
     logger.info(`Updated manifest for ${ctx.source.packageName}`);
-    
+
   } catch (error) {
     logger.warn(`Failed to update manifest: ${error}`);
     // Non-fatal - installation succeeded even if manifest update failed
@@ -44,63 +43,58 @@ export function buildManifestFields(ctx: InstallationContext, mainPackage: any) 
   const fields: any = {
     range: undefined,
     force: true,
-    path: undefined,
+    base: undefined,        // path from source root to package root
+    resourcePath: undefined, // resource selection within package
     gitUrl: undefined,
     gitRef: undefined,
-    gitPath: undefined,
-    base: undefined  // Phase 4: Base field for resource model
   };
-  
+
   // Check for git source override first (for marketplace plugins)
   // This allows path-based loading with git-based manifest recording
   if (ctx.source.gitSourceOverride) {
     fields.gitUrl = ctx.source.gitSourceOverride.gitUrl;
     fields.gitRef = ctx.source.gitSourceOverride.gitRef;
-    // If this install was scoped to a specific resource, record the full repo-relative resource path.
-    // This keeps manifest entries logically consistent with ctx.source.packageName (which includes the resource path).
-    fields.gitPath = ctx.source.resourcePath ?? ctx.source.gitSourceOverride.gitPath;
+    // Split: gitPath → base (subdirectory), resourcePath → path (resource selection)
+    fields.base = ctx.source.gitSourceOverride.gitPath;
+    fields.resourcePath = ctx.source.resourcePath;
     return fields;
   }
 
-  // Mutable source override: workspace/global packages write path: instead of version:
+  // Mutable source override: auto-discovered workspace/global packages → name-only
+  // The resolved path goes to the lockfile, not the manifest.
   if (ctx.source.mutableSourceOverride) {
-    fields.path = formatPathForYaml(
-      ctx.source.mutableSourceOverride.packageRootDir,
-      ctx.targetDir
-    );
+    // Name-only entry — return empty fields
     return fields;
   }
 
-  // Phase 4: Record base field if user-selected or non-default
-  // This ensures reproducible installs when ambiguity was resolved
-  if (ctx.baseRelative && ctx.baseSource === 'user-selection') {
+  // Record base field for reproducible installs
+  if (ctx.baseRelative) {
     fields.base = ctx.baseRelative;
   }
-  
+
   switch (ctx.source.type) {
     case 'registry':
       // Registry packages get version range
       fields.range = ctx.source.version;
       break;
-    
+
     case 'path':
-      // Path packages get path field
-      // Use centralized path formatting for consistency with workspace index
-      fields.path = formatPathForYaml(ctx.source.localPath || '', ctx.targetDir);
+      // Explicit path packages: source location → base field
+      fields.base = formatPathForYaml(ctx.source.localPath || '', ctx.targetDir);
       break;
-    
+
     case 'git':
-      // Git packages get git fields
+      // Git packages: url + base (subdirectory) + resourcePath (resource selection)
       fields.gitUrl = ctx.source.gitUrl;
       fields.gitRef = ctx.source.gitRef;
-      // For resource-scoped installs, prefer recording the concrete resource path (file or dir).
-      fields.gitPath = ctx.source.resourcePath ?? ctx.source.gitPath;
+      fields.base = ctx.source.gitPath || undefined; // subdirectory (omit if repo root)
+      fields.resourcePath = ctx.source.resourcePath;  // resource selection (omit if full)
       break;
-    
+
     case 'workspace':
       // Workspace (apply) doesn't update manifest
       break;
   }
-  
+
   return fields;
 }

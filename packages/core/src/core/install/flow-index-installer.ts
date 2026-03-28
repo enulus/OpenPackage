@@ -521,9 +521,9 @@ async function updateWorkspaceIndexForFlows(
         dependencies: packageEntry.dependencies,
         marketplace: marketplaceMetadata,
       };
-      // Add path source provenance for non-registry packages
+      // Add source provenance for non-registry packages
       if (packagePath && !isRegistryPath(packagePath)) {
-        lockEntry.path = packagePath;
+        lockEntry.base = packagePath;
       }
       lockRecord.lockfile.packages[packageName] = lockEntry;
       await writeLockfile(lockRecord);

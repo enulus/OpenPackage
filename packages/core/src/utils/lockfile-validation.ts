@@ -58,7 +58,7 @@ export function validateLockfileFreshness(
   // Check source stability
   for (const [pkgName, entry] of Object.entries(lockfile.packages)) {
     // Path sources: content may have changed on disk
-    if (entry.path && !entry.url) {
+    if ((entry.base || entry.path) && !entry.url) {
       return { fresh: false, reason: `Path source for ${pkgName}` };
     }
     // Git sources without pinned commit SHA: branch may have moved

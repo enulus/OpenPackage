@@ -100,7 +100,7 @@ dependencies:
       
       // Verify new format is used
       assert.ok(written.includes('url: https://github.com/user/repo.git#v1.0.0'));
-      assert.ok(written.includes('path: plugins/x'));
+      assert.ok(written.includes('base: plugins/x'));
       assert.ok(!written.includes('git:'));
       assert.ok(!written.includes('ref:'));
       
@@ -208,7 +208,7 @@ dependencies:
       assert.ok(parsed.dependencies);
       const dep = parsed.dependencies[0];
       assert.strictEqual(dep.url, 'https://github.com/user/repo.git#v1.0.0');
-      assert.strictEqual(dep.path, 'plugins/x');
+      assert.strictEqual(dep.base, 'plugins/x');
       assert.strictEqual(dep.git, undefined);
       assert.strictEqual(dep.ref, undefined);
       assert.strictEqual(dep.subdirectory, undefined);
@@ -370,12 +370,12 @@ dependencies:
       // Read back
       const reparsed = await parsePackageYml(manifestPath);
       
-      // First dep: path is subdirectory (because url is present)
+      // First dep: plugins/x is not a resource prefix, so it migrates to base
       assert.strictEqual(reparsed.dependencies![0].url, 'https://github.com/user/repo.git#main');
-      assert.strictEqual(reparsed.dependencies![0].path, 'plugins/x');
-      
-      // Second dep: path is local filesystem path (no url)
-      assert.strictEqual(reparsed.dependencies![1].path, './local-dir');
+      assert.strictEqual(reparsed.dependencies![0].base, 'plugins/x');
+
+      // Second dep: local filesystem path migrates to base
+      assert.strictEqual(reparsed.dependencies![1].base, './local-dir');
       assert.strictEqual(reparsed.dependencies![1].url, undefined);
       
     } finally {

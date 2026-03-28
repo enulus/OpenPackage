@@ -36,7 +36,8 @@ dependencies:
       // Phase 2: git field migrated to url field
       assert.strictEqual(dep.url, 'https://github.com/anthropics/claude-plugins-official.git');
       assert.strictEqual(dep.git, undefined); // Migrated to url
-      assert.strictEqual(dep.path, 'plugins/feature-dev'); // Leading ./ stripped
+      assert.strictEqual(dep.base, 'plugins/feature-dev'); // Leading ./ stripped, migrated to base
+      assert.strictEqual(dep.path, undefined); // Not a resource path
       assert.strictEqual(dep.subdirectory, undefined); // Removed
       
       // Verify migration flag is set
@@ -73,9 +74,10 @@ dependencies:
       
       assert.ok(reparsed.dependencies);
       const dep = reparsed.dependencies[0];
-      assert.strictEqual(dep.path, 'plugins/feature-dev');
+      assert.strictEqual(dep.base, 'plugins/feature-dev');
+      assert.strictEqual(dep.path, undefined);
       assert.strictEqual(dep.subdirectory, undefined);
-      
+
       // Migration flag should not be set on second read (already migrated)
       assert.strictEqual((reparsed as any)._needsSubdirectoryMigration, undefined);
       
@@ -110,16 +112,19 @@ dependencies:
       assert.ok(parsed.dependencies);
       assert.strictEqual(parsed.dependencies.length, 3);
       
-      // First dep: migrated from subdirectory to path
-      assert.strictEqual(parsed.dependencies[0].path, 'plugins/feature-dev');
+      // First dep: subdirectory → base (git subdirectory)
+      assert.strictEqual(parsed.dependencies[0].base, 'plugins/feature-dev');
+      assert.strictEqual(parsed.dependencies[0].path, undefined);
       assert.strictEqual(parsed.dependencies[0].subdirectory, undefined);
-      
-      // Second dep: already has path, unchanged
-      assert.strictEqual(parsed.dependencies[1].path, 'plugins/another');
+
+      // Second dep: old path (non-resource prefix) → base
+      assert.strictEqual(parsed.dependencies[1].base, 'plugins/another');
+      assert.strictEqual(parsed.dependencies[1].path, undefined);
       assert.strictEqual(parsed.dependencies[1].subdirectory, undefined);
-      
-      // Third dep: local path, unchanged
-      assert.strictEqual(parsed.dependencies[2].path, './local');
+
+      // Third dep: local path → base
+      assert.strictEqual(parsed.dependencies[2].base, './local');
+      assert.strictEqual(parsed.dependencies[2].path, undefined);
       assert.strictEqual(parsed.dependencies[2].subdirectory, undefined);
       
     } finally {
@@ -127,13 +132,14 @@ dependencies:
     }
   });
   
-  it('should preserve path field if both subdirectory and path exist', async () => {
+  it('should handle both subdirectory and path gracefully', async () => {
     const tmpDir = await mkdtemp(join(tmpdir(), 'opkg-test-'));
-    
+
     try {
       const manifestPath = join(tmpDir, 'openpackage.yml');
-      
-      // Edge case: both fields present (shouldn't happen, but handle gracefully)
+
+      // Edge case: both fields present. subdirectory migrates to base,
+      // path stays as-is (since base is now set, path→base migration is skipped)
       const conflictManifest = `name: test-package
 version: 1.0.0
 dependencies:
@@ -142,15 +148,18 @@ dependencies:
     path: plugins/feature
     subdirectory: old-path
 `;
-      
+
       await writeTextFile(manifestPath, conflictManifest);
-      
-      // Should throw due to validation
-      await assert.rejects(
-        async () => await parsePackageYml(manifestPath),
-        /has both subdirectory and path fields/
-      );
-      
+
+      const parsed = await parsePackageYml(manifestPath);
+      assert.ok(parsed.dependencies);
+      const dep = parsed.dependencies[0];
+      // subdirectory migrated to base
+      assert.strictEqual(dep.base, 'old-path');
+      // path kept (base already set, so path→base migration skipped)
+      assert.strictEqual(dep.path, 'plugins/feature');
+      assert.strictEqual(dep.subdirectory, undefined);
+
     } finally {
       await rm(tmpDir, { recursive: true, force: true });
     }
@@ -202,7 +211,7 @@ dependencies:
       const parsed = await parsePackageYml(manifestPath);
       
       assert.ok(parsed.dependencies);
-      assert.strictEqual(parsed.dependencies[0].path, 'plugins/feature'); // ./ stripped
+      assert.strictEqual(parsed.dependencies[0].base, 'plugins/feature'); // ./ stripped, migrated to base
       
     } finally {
       await rm(tmpDir, { recursive: true, force: true });
@@ -229,7 +238,8 @@ dev-dependencies:
       
       assert.ok(parsed['dev-dependencies']);
       assert.strictEqual(parsed['dev-dependencies'].length, 1);
-      assert.strictEqual(parsed['dev-dependencies'][0].path, 'tools/dev-tool');
+      assert.strictEqual(parsed['dev-dependencies'][0].base, 'tools/dev-tool');
+      assert.strictEqual(parsed['dev-dependencies'][0].path, undefined);
       assert.strictEqual(parsed['dev-dependencies'][0].subdirectory, undefined);
       
     } finally {

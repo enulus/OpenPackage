@@ -178,10 +178,12 @@ export class IndexWriteCollector {
       const lockRecord = await readLockfile(targetDir);
       for (const mutation of this.mutations) {
         if (mutation.type !== 'upsert') continue;
+        const existing = lockRecord.lockfile.packages[mutation.packageName] ?? {};
         lockRecord.lockfile.packages[mutation.packageName] = {
-          version: mutation.version,
-          dependencies: mutation.dependencies,
-          marketplace: mutation.marketplace,
+          ...existing,
+          version: mutation.version ?? existing.version,
+          dependencies: mutation.dependencies ?? existing.dependencies,
+          marketplace: mutation.marketplace ?? existing.marketplace,
         };
       }
       await writeLockfile(lockRecord);

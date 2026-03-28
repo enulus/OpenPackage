@@ -109,11 +109,11 @@ export async function findExistingPathOrGitSource(
     // Use embedded ref if present, otherwise fall back to separate ref field
     const ref = embeddedRef || dep.ref;
     
-    return { type: 'git', url: gitUrl, ref, subdir: dep.path };
+    return { type: 'git', url: gitUrl, ref, subdir: dep.base ?? dep.path };
   }
 
-  if (dep.path) {
-    return { type: 'path', path: dep.path };
+  if (dep.base || dep.path) {
+    return { type: 'path', path: (dep.base ?? dep.path)! };
   }
 
   return null;

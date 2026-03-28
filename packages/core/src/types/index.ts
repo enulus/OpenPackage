@@ -92,63 +92,60 @@ export interface PackageRepository {
 export interface PackageDependency {
   name: string;
   
-  // === Source fields (mutually exclusive) ===
-  
+  // === Source fields ===
+
   /**
-   * Registry source: semver version or range
-   * Mutually exclusive with path (local) and url
+   * Registry source: semver version or range.
+   * Mutually exclusive with base (local) and url (git).
    */
   version?: string;
-  
+
   /**
-   * Dual meaning based on context:
-   * - When url is absent: Local filesystem path
-   * - When url is present: Subdirectory within git repository
+   * Path from source root to package root.
+   * - When url is absent: local filesystem path to the package
+   * - When url is present: subdirectory within the git repository
+   * Omitted when the package root IS the source root, or when
+   * the package is auto-discovered by name (name-only entry).
+   */
+  base?: string;
+
+  /**
+   * Resource selection path within the package (partial install).
+   * Specifies which files/directories to install from the package.
+   * Omitted for full package installs. Can coexist with any source type.
    */
   path?: string;
-  
+
   /**
-   * Git/HTTP source URL with optional embedded ref (#ref)
+   * Git/HTTP source URL with optional embedded ref (#ref).
    * Format: <git-url>[#<ref>]
    * Examples:
    *   - https://github.com/user/repo.git
    *   - https://github.com/user/repo.git#main
    *   - https://github.com/user/repo.git#v1.0.0
-   * Mutually exclusive with version
+   * Mutually exclusive with version.
    */
   url?: string;
-  
+
   // === Deprecated fields (backward compat) ===
-  
+
   /**
    * @deprecated Use url instead
    * Still read for backward compatibility, never written
    */
   git?: string;
-  
+
   /**
    * @deprecated Embed in url as #ref
    * Still read for backward compatibility, never written
    */
   ref?: string;
-  
+
   /**
-   * @deprecated Use path instead
+   * @deprecated Use base instead
    * Already migrated in v0.8.x, kept for older files
    */
   subdirectory?: string;
-  
-  // === Other fields ===
-  
-  /**
-   * Base path within the repository (Phase 5: Resource model)
-   * Relative path from repository root to the installation base.
-   * Used for reproducibility when ambiguous base was resolved by user.
-   * Examples:
-   *   - "" (empty string) = repo root
-   *   - "plugins/my-plugin" = subdirectory within repo
-   */
-  base?: string;
 }
 
 export interface PackageYml {

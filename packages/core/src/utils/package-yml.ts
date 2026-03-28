@@ -25,126 +25,74 @@ export async function parsePackageYml(packageYmlPath: string): Promise<PackageYm
     // Delete old key to ensure it doesn't persist through round-trip serialization
     delete parsed['dev-packages'];
     
-    // Auto-migrate old plugin naming format
-    let needsPluginMigration = false;
-    let needsGitHubMigration = false;
-    let needsSubdirectoryMigration = false;
+    // Auto-migrate old dependency formats
+    const migrations = { plugin: false, gitHub: false, subdirectory: false, pathToBase: false };
     const { detectOldPluginNaming, detectOldGitHubNaming } = await import('./plugin-naming.js');
-    
-    if (parsed.dependencies) {
-      for (const dep of parsed.dependencies) {
-        // Ignore deprecated include field from legacy manifests
-        delete (dep as any).include;
 
-        // Check for old plugin naming (marketplace name vs repo name)
-        const newPluginName = detectOldPluginNaming(dep);
-        if (newPluginName) {
-          dep.name = newPluginName;
-          needsPluginMigration = true;
-        }
-        
-        // Check for old GitHub naming (@username/repo vs gh@username/repo)
-        const newGitHubName = detectOldGitHubNaming(dep);
-        if (newGitHubName) {
-          dep.name = newGitHubName;
-          needsGitHubMigration = true;
-        }
-        
-        // Migrate git → url and ref → embed in url
-        if (dep.git && !dep.url) {
-          dep.url = dep.git;
-          if (dep.ref) {
-            // Only embed ref if url doesn't already have one
-            if (!dep.url.includes('#')) {
-              dep.url = `${dep.url}#${dep.ref}`;
-            }
-            delete dep.ref;
+    const RESOURCE_PREFIXES = ['agents/', 'skills/', 'commands/', 'rules/', 'hooks/', 'mcps/'];
+
+    const migrateDep = (dep: PackageDependency): void => {
+      delete (dep as any).include;
+
+      const newPluginName = detectOldPluginNaming(dep);
+      if (newPluginName) { dep.name = newPluginName; migrations.plugin = true; }
+
+      const newGitHubName = detectOldGitHubNaming(dep);
+      if (newGitHubName) { dep.name = newGitHubName; migrations.gitHub = true; }
+
+      if (dep.git && !dep.url) {
+        dep.url = dep.git;
+        if (dep.ref && !dep.url.includes('#')) { dep.url = `${dep.url}#${dep.ref}`; }
+        delete dep.ref;
+        delete dep.git;
+      }
+
+      if (dep.subdirectory && (dep.git || dep.url) && !dep.base) {
+        dep.base = dep.subdirectory.startsWith('./') ? dep.subdirectory.substring(2) : dep.subdirectory;
+        delete dep.subdirectory;
+        migrations.subdirectory = true;
+      }
+
+      if (dep.path && !dep.base) {
+        if (dep.url) {
+          if (!RESOURCE_PREFIXES.some(p => dep.path!.startsWith(p))) {
+            dep.base = dep.path;
+            delete dep.path;
+            migrations.pathToBase = true;
           }
-          delete dep.git;
-        }
-        
-        // Migrate subdirectory field to path field
-        if (dep.subdirectory && (dep.git || dep.url) && !dep.path) {
-          // Normalize path: strip leading ./ if present
-          const normalizedPath = dep.subdirectory.startsWith('./')
-            ? dep.subdirectory.substring(2)
-            : dep.subdirectory;
-          dep.path = normalizedPath;
-          delete dep.subdirectory;
-          needsSubdirectoryMigration = true;
+        } else if (!dep.version) {
+          if (dep.path.includes('.openpackage/packages/')) {
+            delete dep.path;
+          } else {
+            dep.base = dep.path;
+            delete dep.path;
+          }
+          migrations.pathToBase = true;
         }
       }
-    }
-    
-    if (parsed['dev-dependencies']) {
-      for (const dep of parsed['dev-dependencies']) {
-        // Ignore deprecated include field from legacy manifests
-        delete (dep as any).include;
+    };
 
-        // Check for old plugin naming (marketplace name vs repo name)
-        const newPluginName = detectOldPluginNaming(dep);
-        if (newPluginName) {
-          dep.name = newPluginName;
-          needsPluginMigration = true;
-        }
-        
-        // Check for old GitHub naming (@username/repo vs gh@username/repo)
-        const newGitHubName = detectOldGitHubNaming(dep);
-        if (newGitHubName) {
-          dep.name = newGitHubName;
-          needsGitHubMigration = true;
-        }
-        
-        // Migrate git → url and ref → embed in url
-        if (dep.git && !dep.url) {
-          dep.url = dep.git;
-          if (dep.ref) {
-            // Only embed ref if url doesn't already have one
-            if (!dep.url.includes('#')) {
-              dep.url = `${dep.url}#${dep.ref}`;
-            }
-            delete dep.ref;
-          }
-          delete dep.git;
-        }
-        
-        // Migrate subdirectory field to path field
-        if (dep.subdirectory && (dep.git || dep.url) && !dep.path) {
-          // Normalize path: strip leading ./ if present
-          const normalizedPath = dep.subdirectory.startsWith('./')
-            ? dep.subdirectory.substring(2)
-            : dep.subdirectory;
-          dep.path = normalizedPath;
-          delete dep.subdirectory;
-          needsSubdirectoryMigration = true;
-        }
-      }
-    }
+    if (parsed.dependencies) parsed.dependencies.forEach(migrateDep);
+    if (parsed['dev-dependencies']) parsed['dev-dependencies'].forEach(migrateDep);
     
     // Mark for logging on write
-    if (needsPluginMigration) {
-      (parsed as any)._needsPluginMigration = true;
-    }
-    if (needsGitHubMigration) {
-      (parsed as any)._needsGitHubMigration = true;
-    }
-    if (needsSubdirectoryMigration) {
-      (parsed as any)._needsSubdirectoryMigration = true;
-    }
-    
+    if (migrations.plugin) (parsed as any)._needsPluginMigration = true;
+    if (migrations.gitHub) (parsed as any)._needsGitHubMigration = true;
+    if (migrations.subdirectory) (parsed as any)._needsSubdirectoryMigration = true;
+    if (migrations.pathToBase) (parsed as any)._needsPathToBaseMigration = true;
+
     const validateDependencies = (deps: PackageDependency[] | undefined, section: string): void => {
       if (!deps) return;
       for (const dep of deps) {
-        // For git/url sources, path is a subdirectory, not a source
-        // For non-git sources, path is a source
+        // Source fields: version, base (local path), url (git). path is resource selection, not a source.
         const hasGitSource = dep.git || dep.url;
         const sources = hasGitSource
           ? [dep.version, dep.git, dep.url].filter(Boolean)
-          : [dep.version, dep.path, dep.git, dep.url].filter(Boolean);
+          : [dep.version, dep.base, dep.git, dep.url].filter(Boolean);
         
         if (sources.length > 1) {
           throw new Error(
-            `openpackage.yml ${section}: dependency '${dep.name}' has multiple sources; specify at most one of version, path, url, or git`
+            `openpackage.yml ${section}: dependency '${dep.name}' has multiple sources; specify at most one of version, base, url, or git`
           );
         }
         if (dep.ref && !(dep.git || dep.url)) {
@@ -164,16 +112,15 @@ export async function parsePackageYml(packageYmlPath: string): Promise<PackageYm
             `openpackage.yml ${section}: dependency '${dep.name}' has both subdirectory and path fields; use path only`
           );
         }
-        // Phase 5: Validate base field
+        // Validate base field
         if (dep.base !== undefined) {
-          // Base should be a string (relative path)
           if (typeof dep.base !== 'string') {
             throw new Error(
               `openpackage.yml ${section}: dependency '${dep.name}' has invalid base field; must be a string`
             );
           }
-          // Base should not start with / or be absolute
-          if (dep.base.startsWith('/')) {
+          // For git sources, base must be relative (subdirectory within repo)
+          if (dep.base.startsWith('/') && (dep.url || dep.git)) {
             throw new Error(
               `openpackage.yml ${section}: dependency '${dep.name}' has absolute base path; base must be relative to repository root`
             );
@@ -324,8 +271,15 @@ export async function writePackageYml(packageYmlPath: string, config: PackageYml
   // Log if subdirectory field was migrated
   if ((config as any)._needsSubdirectoryMigration) {
     const { logger } = await import('./logger.js');
-    logger.info('✓ Migrated subdirectory fields to path');
+    logger.info('✓ Migrated subdirectory fields to base');
     delete (migratedConfig as any)._needsSubdirectoryMigration;
+  }
+
+  // Log if path→base migration occurred
+  if ((config as any)._needsPathToBaseMigration) {
+    const { logger } = await import('./logger.js');
+    logger.info('✓ Migrated path fields to base (source navigation)');
+    delete (migratedConfig as any)._needsPathToBaseMigration;
   }
   
   const content = serializePackageYml(migratedConfig);

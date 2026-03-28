@@ -105,7 +105,7 @@ function nodeToInstallInput(node: WaveNode): string | null {
   }
 
   if (node.sourceType === 'path') {
-    return node.source.absolutePath ?? node.source.contentRoot ?? decl.path ?? null;
+    return node.source.absolutePath ?? node.source.contentRoot ?? decl.base ?? null;
   }
 
   // Registry deps: name with optional version

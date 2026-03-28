@@ -76,13 +76,18 @@ function toDependencyDeclaration(
     typeof urlRaw === 'string' && urlRaw.includes('#') ? urlRaw.split('#', 2) : [urlRaw, undefined];
   const ref = embeddedRef ?? (dep as { ref?: string }).ref;
 
+  // Backward compat: if old manifest has path but no base and no url,
+  // treat path as source navigation (base), not resource selection
+  const effectiveBase = dep.base ?? (!dep.url && !dep.version && dep.path ? dep.path : undefined);
+  const effectivePath = dep.base ? dep.path : (dep.url ? dep.path : undefined);
+
   return {
     name: dep.name,
     version: dep.version,
-    path: dep.path,
+    base: effectiveBase,
+    path: effectivePath,
     url: typeof url === 'string' ? url : undefined,
     ref,
-    base: dep.base,
     isDev,
     declaredIn,
     depth

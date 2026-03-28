@@ -7,6 +7,7 @@
  * ensuring the index reflects actually-installed packages.
  */
 
+import { relative } from 'path';
 import { readWorkspaceIndex, writeWorkspaceIndex } from '../../../utils/workspace-index-yml.js';
 import { readLockfile, writeLockfile } from '../../../utils/lockfile-yml.js';
 import type { LockfilePackage } from '../../../types/lockfile.js';
@@ -158,9 +159,9 @@ export async function updateWorkspaceIndex(
 
       const existing = lockRecord.lockfile.packages[packageName] ?? {};
       lockRecord.lockfile.packages[packageName] = {
-        ...existing,
         version: version ?? existing.version,
         dependencies: dependencies.length > 0 ? dependencies : existing.dependencies,
+        marketplace: existing.marketplace,
         ...buildLockfileSource(node),
       };
     }
@@ -182,18 +183,27 @@ function collectChildNames(node: WaveNode, graph: WaveGraph): string[] {
   return names;
 }
 
-function buildLockfileSource(node: WaveNode): Pick<LockfilePackage, 'path' | 'url' | 'ref'> {
+function buildLockfileSource(node: WaveNode): Pick<LockfilePackage, 'base' | 'path' | 'url' | 'ref'> {
   const src = node.source;
   if (src.type === 'git') {
+    // Compute git subdirectory from repoRoot + contentRoot
+    let gitSubdir: string | undefined;
+    if (node.repoRoot && node.contentRoot) {
+      const rel = relative(node.repoRoot, node.contentRoot);
+      if (rel && rel !== '.' && !rel.startsWith('..')) {
+        gitSubdir = rel;
+      }
+    }
     return {
       url: src.gitUrl,
       ref: src.gitRef,
+      base: gitSubdir,
       path: src.resourcePath,
     };
   }
   if (src.type === 'path') {
     return {
-      path: src.absolutePath ?? src.contentRoot,
+      base: src.absolutePath ?? src.contentRoot,
     };
   }
   return {};

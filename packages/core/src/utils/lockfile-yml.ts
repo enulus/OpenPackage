@@ -50,6 +50,10 @@ function sanitizeLockfilePackage(entry: unknown): LockfilePackage | null {
     );
   }
 
+  if (typeof raw.base === 'string' && raw.base.trim().length > 0) {
+    pkg.base = raw.base.trim();
+  }
+
   if (typeof raw.path === 'string' && raw.path.trim().length > 0) {
     pkg.path = raw.path.trim();
   }
@@ -158,6 +162,7 @@ export async function writeLockfile(record: LockfileRecord): Promise<void> {
       out.dependencies = sortAndDedupeStrings(pkg.dependencies);
     }
     if (pkg.marketplace) out.marketplace = pkg.marketplace;
+    if (pkg.base) out.base = pkg.base;
     if (pkg.path) out.path = pkg.path;
     if (pkg.url) out.url = pkg.url;
     if (pkg.ref) out.ref = pkg.ref;

@@ -42,13 +42,15 @@ dependencies:
       assert.strictEqual(parsed.dependencies[0].url, 'https://github.com/user/plugin-a.git#v1.0.0');
       assert.strictEqual(parsed.dependencies[0].git, undefined);
       assert.strictEqual(parsed.dependencies[0].ref, undefined);
-      assert.strictEqual(parsed.dependencies[0].path, 'plugins/feature');
-      
+      assert.strictEqual(parsed.dependencies[0].base, 'plugins/feature');  // non-resource path → base
+      assert.strictEqual(parsed.dependencies[0].path, undefined);
+
       assert.strictEqual(parsed.dependencies[1].url, 'https://github.com/user/plugin-b.git');
       assert.strictEqual(parsed.dependencies[1].git, undefined);
-      
-      // Local path unchanged
-      assert.strictEqual(parsed.dependencies[2].path, './local/plugin');
+
+      // Local path migrated to base
+      assert.strictEqual(parsed.dependencies[2].base, './local/plugin');
+      assert.strictEqual(parsed.dependencies[2].path, undefined);
       assert.strictEqual(parsed.dependencies[2].url, undefined);
       
       // Build contexts (this is what install command does with no packageInput)

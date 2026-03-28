@@ -32,7 +32,7 @@ dependencies:
       const dep = parsed.dependencies[0];
       // Name should be updated to include full path
       assert.strictEqual(dep.name, 'gh@wshobson/agents/plugins/cicd-automation');
-      assert.strictEqual(dep.path, 'plugins/cicd-automation');
+      assert.strictEqual(dep.base, 'plugins/cicd-automation');
       
     } finally {
       await rm(tmpDir, { recursive: true, force: true });
@@ -119,7 +119,7 @@ dependencies:
       
       // Both migrations should happen
       assert.strictEqual(dep.name, 'gh@wshobson/agents/plugins/cicd-automation');
-      assert.strictEqual(dep.path, 'plugins/cicd-automation');
+      assert.strictEqual(dep.base, 'plugins/cicd-automation');
       assert.strictEqual(dep.subdirectory, undefined);
       
     } finally {
@@ -209,7 +209,7 @@ dependencies:
       const dep = reparsed.dependencies[0];
       
       assert.strictEqual(dep.name, 'gh@wshobson/agents/plugins/cicd-automation');
-      assert.strictEqual(dep.path, 'plugins/cicd-automation');
+      assert.strictEqual(dep.base, 'plugins/cicd-automation');
       assert.strictEqual(dep.subdirectory, undefined);
       
       // Should not need migration on second read

@@ -188,11 +188,10 @@ export async function addPackageToYml(
   isDev: boolean = false,
   originalVersion?: string, // The original version/range that was requested
   silent: boolean = false,
-  path?: string,  // Path to local directory or tarball (for path-based dependencies)
-  git?: string,   // Git source url (DEPRECATED: use url) (mutually exclusive with path/version)
+  base?: string,  // Path from source root to package root (local path or git subdirectory)
+  git?: string,   // Git source url (DEPRECATED: use url) (mutually exclusive with base/version)
   ref?: string,   // Git ref (DEPRECATED: embed in url as #ref)
-  gitPath?: string,  // Git subdirectory path (for plugins in marketplaces)
-  base?: string,  // Phase 4: Base field for resource model
+  resourcePath?: string,  // Resource selection path within the package (partial installs)
   output?: OutputPort
 ): Promise<void> {
   const out = output ?? resolveOutput();
@@ -285,10 +284,9 @@ export async function addPackageToYml(
   const dependency: PackageDependency = {
     name: normalizedPackageName,
     ...(versionToWrite ? { version: versionToWrite } : {}),
-    ...(path && !git ? { path } : {}),  // Only use path for local sources
-    ...(urlField ? { url: urlField } : {}),  // Use url with embedded ref
-    ...(gitPath ? { path: gitPath } : {}),  // Use path field for git subdirectory
-    ...(base ? { base } : {})  // Phase 4: Base field for resource model
+    ...(base ? { base } : {}),               // source navigation (local path or git subdirectory)
+    ...(urlField ? { url: urlField } : {}),   // git source URL
+    ...(resourcePath ? { path: resourcePath } : {}),  // resource selection (partial installs)
   };
   
   // Determine target location (dependencies vs dev-dependencies)

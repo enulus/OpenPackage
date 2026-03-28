@@ -88,7 +88,6 @@ export async function runAddDependencyFlow(
     classification.gitUrl,
     classification.gitRef,
     gitPath,
-    undefined
   );
 
   logger.info(`Added ${packageName} to workspace manifest [${section}]`);

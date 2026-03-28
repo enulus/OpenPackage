@@ -35,8 +35,8 @@ export function computeWaveId(
 ): { id: string; displayName: string; sourceType: 'registry' | 'path' | 'git' } {
   const depName = String(declaration.name ?? '').trim();
 
-  // Embedded package: qualified name without url/path
-  if (!declaration.url && !declaration.path && isQualifiedName(depName)) {
+  // Embedded package: qualified name without url/base
+  if (!declaration.url && !declaration.base && isQualifiedName(depName)) {
     const id = `embedded:${depName}`;
     return { id, displayName: depName, sourceType: 'path' };
   }
@@ -55,15 +55,16 @@ export function computeWaveId(
         resourcePath = parts.slice(2).join('/');
       }
     }
-    const id = `git:${normalizedUrl}#${ref}:${resourcePath}`;
+    const base = declaration.base ?? '';
+    const id = `git:${normalizedUrl}#${ref}:${base}:${resourcePath}`;
     const displayName = depName || (resourcePath ? `git@${normalizedUrl}/${resourcePath}` : `git@${normalizedUrl}`);
     return { id, displayName, sourceType: 'git' };
   }
 
-  if (declaration.path) {
-    const { absolute } = resolveDeclaredPath(declaration.path, declaredInDir);
+  if (declaration.base) {
+    const { absolute } = resolveDeclaredPath(declaration.base, declaredInDir);
     const id = `path:${absolute}`;
-    const displayName = depName || declaration.path;
+    const displayName = depName || declaration.base;
     return { id, displayName, sourceType: 'path' };
   }
 
@@ -103,8 +104,8 @@ export function resolveSourceFromDeclaration(
     };
   }
 
-  if (declaration.path) {
-    const { absolute } = resolveDeclaredPath(declaration.path, pathResolutionDir);
+  if (declaration.base) {
+    const { absolute } = resolveDeclaredPath(declaration.base, pathResolutionDir);
     return { type: 'path', absolutePath: absolute, contentRoot: absolute };
   }
 
@@ -298,7 +299,7 @@ export class PathFetcher implements PackageFetcher {
  */
 export function createFetcher(declaration: DependencyDeclaration): PackageFetcher {
   if (declaration.url) return new GitFetcher();
-  if (declaration.path) return new PathFetcher();
+  if (declaration.base) return new PathFetcher();
   // Qualified names use PathFetcher with embedded resolution
   if (isQualifiedName(declaration.name)) return new PathFetcher();
   return new RegistryFetcher();

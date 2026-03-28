@@ -139,13 +139,13 @@ export async function resolveWave(options: WaveResolverOptions): Promise<WaveRes
       // For registry-only declarations, prefer local mutable copies over registry.
       // Skip registry here — the fetcher handles registry resolution separately.
       let effectiveDecl = decl;
-      if (!decl.path && !decl.url) {
+      if (!decl.base && !decl.url) {
         try {
           const resolved = await resolveNamedDependency(decl.name, workspaceRoot, {
             version: decl.version,
             skipRegistry: true
           });
-          effectiveDecl = { ...decl, path: resolved.absolutePath };
+          effectiveDecl = { ...decl, base: resolved.absolutePath };
         } catch {
           // Not found locally — continue with registry declaration
         }
@@ -237,7 +237,7 @@ export async function resolveWave(options: WaveResolverOptions): Promise<WaveRes
       if (error || !result) continue;
 
       if (item.sourceType === 'path' && !result.contentRoot && !result.metadata) {
-        const declaredPath = item.decl.path ?? item.displayName;
+        const declaredPath = item.decl.base ?? item.decl.path ?? item.displayName;
         warnings.push(`Dependency '${item.displayName}' path not found: ${declaredPath} — skipping`);
         logger.warn(`Skipping missing path dependency '${item.displayName}': ${declaredPath}`);
         continue;
@@ -310,7 +310,7 @@ export async function resolveWave(options: WaveResolverOptions): Promise<WaveRes
             childNode.parents.push(item.id);
           }
           // Still add constraint for the existing node
-          if (childDecl.version && !childDecl.url && !childDecl.path) {
+          if (childDecl.version && !childDecl.url && !childDecl.base) {
             versionSolver.addConstraint(childDecl.name, childDecl.version, childDecl.declaredIn);
           }
         }

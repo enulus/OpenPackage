@@ -50,8 +50,8 @@ function buildPackageSource(node: WaveNode): PackageSource {
       packageName: node.metadata?.name ?? decl?.name ?? node.displayName,
       gitUrl: s.gitUrl,
       gitRef: s.gitRef,
-      gitPath: s.resourcePath ? undefined : decl?.path,
-      resourcePath: s.resourcePath,
+      gitPath: s.resourcePath ? undefined : decl?.base,
+      resourcePath: s.resourcePath ?? decl?.path,
       manifestBase: decl?.base,
       contentRoot: s.contentRoot ?? node.contentRoot
     };
