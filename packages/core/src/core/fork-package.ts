@@ -1,8 +1,11 @@
 import { join, dirname } from 'path';
+import * as yaml from 'js-yaml';
 import { classifyInputBase } from './install/input-classifier-base.js';
 import { loadPackageFromPath } from './install/path-package-loader.js';
 import { loadPackageFromGit } from './install/git-package-loader.js';
 import { writeTextFile, ensureDir } from '../utils/fs.js';
+import { writePackageYml } from '../utils/package-yml.js';
+import type { PackageYml } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 
 export interface ForkPackageOptions {
@@ -22,8 +25,10 @@ export interface ForkPackageResult {
 }
 
 /**
- * Fork a package from a source, copying its files to the target directory
- * but NOT copying the openpackage.yml manifest (which was already created by createPackage).
+ * Fork a package from a source, copying all files to the target directory.
+ * The source manifest is copied with full metadata (description, version,
+ * keywords, dependencies, etc.) but with the name field updated to the
+ * new package name. This overwrites the minimal manifest created by createPackage.
  */
 export async function forkPackageFromSource(options: ForkPackageOptions): Promise<ForkPackageResult> {
   const { source, targetDir, newPackageName, cwd } = options;
@@ -67,17 +72,26 @@ export async function forkPackageFromSource(options: ForkPackageOptions): Promis
   const sourcePackageName = pkg.metadata?.name || 'unknown';
   let filesCopied = 0;
 
-  // Copy all files except openpackage.yml (which is the package identity)
+  // Copy all non-manifest files
   for (const file of pkg.files) {
-    // Skip the manifest - the target already has its own from createPackage()
-    if (file.path === 'openpackage.yml' || file.path.endsWith('/openpackage.yml')) {
-      continue;
+    if (file.path === 'openpackage.yml') {
+      continue; // root manifest handled separately below
     }
 
     const targetPath = join(targetDir, file.path);
     await ensureDir(dirname(targetPath));
     await writeTextFile(targetPath, file.content);
     filesCopied++;
+  }
+
+  // Copy source manifest with name updated to new package name.
+  // This overwrites the minimal manifest created by createPackage(),
+  // preserving description, version, keywords, dependencies, etc.
+  const manifestFile = pkg.files.find(f => f.path === 'openpackage.yml');
+  if (manifestFile) {
+    const sourceManifest = yaml.load(manifestFile.content) as PackageYml;
+    sourceManifest.name = newPackageName;
+    await writePackageYml(join(targetDir, 'openpackage.yml'), sourceManifest);
   }
 
   logger.info('Forked package files', {

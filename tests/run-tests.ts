@@ -126,6 +126,9 @@ const testFiles: string[] = [
   'tests/core/uninstall/package-name-formats.test.ts',
   'tests/core/uninstall/uninstall-merged-files.test.ts',
 
+  // Core - Fork
+  'tests/core/fork-package.test.ts',
+
   // Core - Other
   'tests/core/cache-manager.test.ts',
   'tests/core/execution-context.test.ts',
