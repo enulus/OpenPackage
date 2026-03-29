@@ -28,6 +28,8 @@ export interface EnhancedResourceInfo {
   children?: EnhancedResourceInfo[];
   /** Package version (for package-container entries) */
   version?: string;
+  /** Entry represents a dependency pointer, not an owned resource */
+  isDependencyRef?: boolean;
 }
 
 /**
@@ -151,6 +153,14 @@ export function renderResource<TFile>(
 ): void {
   const out = output ?? resolveOutput();
   const enhanced = resource as EnhancedResourceInfo;
+
+  // Dependency references render as a dimmed pointer line, no subtree
+  if (enhanced.isDependencyRef) {
+    const connector = getTreeConnector(isLast, false);
+    out.message(`${prefix}${connector}${dim(`↳ ${resource.name}`)}`);
+    return;
+  }
+
   const hasChildren = enhanced.children !== undefined && enhanced.children.length > 0;
   const packageLabels = hasChildren ? [] : (config.getResourcePackageLabels?.(enhanced.packages) ?? []);
 

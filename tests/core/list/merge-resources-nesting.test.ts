@@ -2,10 +2,10 @@
  * Unit tests for mergeTrackedAndUntrackedResources tree vs flat mode.
  *
  * Verifies that:
- * - Tree mode nests child containers inside parent containers
- * - Flat mode places all containers at root level
- * - Missing packages appear with status 'missing'
+ * - Dependencies are shown as flat reference entries, not nested subtrees
  * - Embedded children's resources fold into the parent container
+ * - Missing packages appear with status 'missing'
+ * - Both tree and flat modes produce consistent non-nested output
  */
 
 import assert from 'node:assert/strict';
@@ -81,7 +81,7 @@ function getPackagesGroup(groups: ReturnType<typeof mergeTrackedAndUntrackedReso
 
 describe('mergeTrackedAndUntrackedResources nesting', () => {
   describe('tree mode (flat=false)', () => {
-    it('nests child container inside parent container', () => {
+    it('shows dependency as a reference, not a nested container', () => {
       // pkg-a depends on pkg-b (non-embedded)
       const pkgB = makeNode('pkg-b', [], {
         installScope: 'full',
@@ -101,16 +101,18 @@ describe('mergeTrackedAndUntrackedResources nesting', () => {
       assert.ok(containerA.name.includes('pkg-a'), 'Root container should be pkg-a');
       assert.ok(containerA.children, 'pkg-a should have children');
 
-      // pkg-a children: rule-a (own resource) + pkg-b (nested container)
-      const nestedB = containerA.children!.find(c => c.name.includes('pkg-b'));
-      assert.ok(nestedB, 'pkg-b should be nested inside pkg-a');
-      assert.ok(nestedB!.children, 'pkg-b should have children (its resources)');
+      // pkg-b should be a dependency reference, not a nested container
+      const depRef = containerA.children!.find(c => c.name === 'pkg-b');
+      assert.ok(depRef, 'pkg-b should appear as a dependency reference');
+      assert.equal(depRef!.isDependencyRef, true, 'Should be marked as dependency reference');
+      assert.equal(depRef!.children, undefined, 'Dependency ref should not have children');
 
-      const skillB = nestedB!.children!.find(c => c.name === 'skill-b');
-      assert.ok(skillB, 'skill-b should be inside pkg-b container');
+      // own resource should still be present
+      const ruleA = containerA.children!.find(c => c.name === 'rule-a');
+      assert.ok(ruleA, 'rule-a should be a direct child of pkg-a');
     });
 
-    it('preserves three-level nesting: A -> B -> C', () => {
+    it('shows transitive deps as flat references (A -> B -> C)', () => {
       const pkgC = makeNode('pkg-c', [], {
         installScope: 'full',
         resourceGroups: [makeResourceGroup('agents', ['agent-c'])],
@@ -130,17 +132,18 @@ describe('mergeTrackedAndUntrackedResources nesting', () => {
       assert.equal(pkgGroup!.resources.length, 1, 'Only pkg-a at root');
 
       const containerA = pkgGroup!.resources[0];
-      const nestedB = containerA.children!.find(c => c.name.includes('pkg-b'));
-      assert.ok(nestedB, 'pkg-b nested in pkg-a');
 
-      const nestedC = nestedB!.children!.find(c => c.name.includes('pkg-c'));
-      assert.ok(nestedC, 'pkg-c nested in pkg-b');
+      // pkg-b should be a dep ref of pkg-a, not a nested container
+      const depRefB = containerA.children!.find(c => c.name === 'pkg-b');
+      assert.ok(depRefB, 'pkg-b should be a dep ref');
+      assert.equal(depRefB!.isDependencyRef, true);
 
-      const agentC = nestedC!.children!.find(c => c.name === 'agent-c');
-      assert.ok(agentC, 'agent-c inside pkg-c');
+      // pkg-c should NOT appear inside pkg-a (it's a transitive dep)
+      const depRefC = containerA.children!.find(c => c.name === 'pkg-c');
+      assert.equal(depRefC, undefined, 'pkg-c should NOT appear in pkg-a (transitive)');
     });
 
-    it('marks missing package with status missing', () => {
+    it('marks missing package dependency as reference', () => {
       const pkgB = makeNode('pkg-b', [], {
         installScope: 'full',
         state: 'missing',
@@ -155,12 +158,13 @@ describe('mergeTrackedAndUntrackedResources nesting', () => {
       assert.ok(pkgGroup);
 
       const containerA = pkgGroup!.resources[0];
-      const nestedB = containerA.children!.find(c => c.name.includes('pkg-b'));
-      assert.ok(nestedB, 'Missing pkg-b should still appear');
-      assert.equal(nestedB!.status, 'missing', 'Missing container should have status=missing');
+      // Missing dep still appears as a reference
+      const depRef = containerA.children!.find(c => c.name === 'pkg-b');
+      assert.ok(depRef, 'Missing pkg-b should appear as dep ref');
+      assert.equal(depRef!.isDependencyRef, true);
     });
 
-    it('folds embedded children into parent, nests non-embedded as sub-container', () => {
+    it('folds embedded children into parent, shows non-embedded as dep ref', () => {
       const embeddedD = makeNode('pkg-d', [], {
         installScope: 'full',
         isEmbedded: true,
@@ -186,15 +190,16 @@ describe('mergeTrackedAndUntrackedResources nesting', () => {
       const skillD = containerA.children!.find(c => c.name === 'skill-d');
       assert.ok(skillD, 'Embedded skill-d should be folded into pkg-a');
 
-      // pkg-b should be a nested sub-container
-      const nestedB = containerA.children!.find(c => c.name.includes('pkg-b'));
-      assert.ok(nestedB, 'Non-embedded pkg-b should be nested container');
-      assert.ok(nestedB!.children, 'pkg-b should have children');
+      // pkg-b should be a dep ref, not a nested container
+      const depRef = containerA.children!.find(c => c.name === 'pkg-b');
+      assert.ok(depRef, 'Non-embedded pkg-b should be a dep ref');
+      assert.equal(depRef!.isDependencyRef, true);
+      assert.equal(depRef!.children, undefined, 'Dep ref should not have children');
     });
   });
 
   describe('flat mode (flat=true)', () => {
-    it('places all containers at root level', () => {
+    it('places package at root with dep refs', () => {
       const pkgB = makeNode('pkg-b', [], {
         installScope: 'full',
         resourceGroups: [makeResourceGroup('skills', ['skill-b'])],
@@ -207,19 +212,18 @@ describe('mergeTrackedAndUntrackedResources nesting', () => {
       const result = mergeTrackedAndUntrackedResources([pkgA], undefined, 'project', undefined, true);
       const pkgGroup = getPackagesGroup(result);
       assert.ok(pkgGroup, 'Should have a packages group');
-      assert.equal(pkgGroup!.resources.length, 2, 'Both pkg-a and pkg-b at root level');
+      assert.equal(pkgGroup!.resources.length, 1, 'Only pkg-a (dep children not expanded)');
 
       const containerA = pkgGroup!.resources.find(r => r.name.includes('pkg-a'));
-      const containerB = pkgGroup!.resources.find(r => r.name.includes('pkg-b'));
       assert.ok(containerA, 'pkg-a should be at root');
-      assert.ok(containerB, 'pkg-b should be at root');
 
-      // pkg-a should NOT contain pkg-b as a nested child
-      const nestedB = containerA!.children?.find(c => c.name.includes('pkg-b'));
-      assert.equal(nestedB, undefined, 'pkg-b should NOT be nested in pkg-a in flat mode');
+      // pkg-b should be a dep ref inside pkg-a, not a separate root container
+      const depRef = containerA!.children?.find(c => c.name === 'pkg-b');
+      assert.ok(depRef, 'pkg-b should be a dep ref');
+      assert.equal(depRef!.isDependencyRef, true);
     });
 
-    it('shows missing containers at root level in flat mode', () => {
+    it('shows missing containers as dep refs in flat mode', () => {
       const pkgB = makeNode('pkg-b', [], {
         installScope: 'full',
         state: 'missing',
@@ -233,9 +237,12 @@ describe('mergeTrackedAndUntrackedResources nesting', () => {
       const pkgGroup = getPackagesGroup(result);
       assert.ok(pkgGroup);
 
-      const containerB = pkgGroup!.resources.find(r => r.name.includes('pkg-b'));
-      assert.ok(containerB, 'Missing pkg-b should appear at root in flat mode');
-      assert.equal(containerB!.status, 'missing');
+      const containerA = pkgGroup!.resources.find(r => r.name.includes('pkg-a'));
+      assert.ok(containerA);
+
+      const depRef = containerA!.children?.find(c => c.name === 'pkg-b');
+      assert.ok(depRef, 'Missing pkg-b should appear as dep ref');
+      assert.equal(depRef!.isDependencyRef, true);
     });
   });
 });

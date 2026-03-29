@@ -395,7 +395,11 @@ export function mergeTrackedAndUntrackedResources(
    * Build an EnhancedResourceInfo container from a package container node.
    */
   function buildContainer(node: ListTreeNode, children: EnhancedResourceInfo[], isMissing: boolean): EnhancedResourceInfo {
-    const sorted = [...children].sort((a, b) => a.name.localeCompare(b.name));
+    const resources = children.filter(c => !c.isDependencyRef);
+    const depRefs = children.filter(c => c.isDependencyRef);
+    resources.sort((a, b) => a.name.localeCompare(b.name));
+    depRefs.sort((a, b) => a.name.localeCompare(b.name));
+    const sorted = [...resources, ...depRefs];
     const namespace = node.report.namespace ?? deriveNamespaceSlug(node.report.name);
     const containerName = `${PACKAGES_GROUP_TYPE}/${namespace}`;
     const version = node.report.version && node.report.version !== '0.0.0'
@@ -427,18 +431,15 @@ export function mergeTrackedAndUntrackedResources(
    */
   function visitNodeFlat(node: ListTreeNode): void {
     if (isPackageContainer(node, workspaceRootNames)) {
-      const children = collectChildResources(node);
+      const ownResources = collectChildResources(node);
       const isMissing = node.report.state === 'missing';
 
-      if (children.length > 0 || isMissing) {
-        addContainerToTypeMap(buildContainer(node, children, isMissing));
-      }
+      // Add dependency references instead of recursing into dep subtrees
+      const depRefs = buildDependencyRefs(node);
+      const allChildren = [...ownResources, ...depRefs];
 
-      // Walk non-embedded children independently (they may be containers themselves)
-      for (const child of node.children) {
-        if (!child.report.isEmbedded) {
-          visitNodeFlat(child);
-        }
+      if (allChildren.length > 0 || isMissing) {
+        addContainerToTypeMap(buildContainer(node, allChildren, isMissing));
       }
     } else {
       collectFlatFromNode(node);
@@ -448,10 +449,22 @@ export function mergeTrackedAndUntrackedResources(
     }
   }
 
+  function buildDependencyRefs(node: ListTreeNode): EnhancedResourceInfo[] {
+    const nonEmbeddedDeps = node.children.filter(c => !c.report.isEmbedded);
+    if (nonEmbeddedDeps.length === 0) return [];
+    return nonEmbeddedDeps.map(child => ({
+      name: child.report.name,
+      resourceType: PACKAGES_GROUP_TYPE,
+      files: [] as EnhancedFileMapping[],
+      status: (child.report.state === 'missing' ? 'missing' : 'tracked') as const,
+      scopes: new Set([scope]),
+      isDependencyRef: true,
+    }));
+  }
+
   /**
-   * Tree mode: recursively process nodes, nesting child containers inside
-   * parent containers rather than placing them all at root level.
-   * Returns any containers found among the given nodes so parent can nest them.
+   * Tree mode: process nodes, collecting containers for the parent to nest.
+   * Dependencies are shown as flat reference entries, not expanded subtrees.
    */
   function processNodes(nodes: ListTreeNode[]): EnhancedResourceInfo[] {
     const containers: EnhancedResourceInfo[] = [];
@@ -462,12 +475,10 @@ export function mergeTrackedAndUntrackedResources(
         const ownResources = collectChildResources(node);
         const isMissing = node.report.state === 'missing';
 
-        // Recurse into non-embedded children to find nested containers
-        const nonEmbeddedChildren = node.children.filter(c => !c.report.isEmbedded);
-        const nestedContainers = processNodes(nonEmbeddedChildren);
-
-        // Combine own resources with nested containers as children
-        const allChildren = [...ownResources, ...nestedContainers];
+        // Dependencies shown as flat reference lines, not nested subtrees.
+        // Each dependency package appears at its own top level — no duplication.
+        const depRefs = buildDependencyRefs(node);
+        const allChildren = [...ownResources, ...depRefs];
 
         if (allChildren.length > 0 || isMissing) {
           containers.push(buildContainer(node, allChildren, isMissing));
