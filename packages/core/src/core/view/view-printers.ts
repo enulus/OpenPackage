@@ -100,7 +100,7 @@ function printDependenciesSection(
   const o = out ?? resolveOutput();
   if (dependencies.length === 0) return;
 
-  o.info(sectionHeader('Declared Dependencies', dependencies.length));
+  o.info(sectionHeader('Dependencies', dependencies.length));
   dependencies.forEach((dep, index) => {
     const isLast = index === dependencies.length - 1;
     const connector = isLast ? '└── ' : '├── ';
