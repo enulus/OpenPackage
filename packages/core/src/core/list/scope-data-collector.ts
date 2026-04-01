@@ -456,7 +456,7 @@ export function mergeTrackedAndUntrackedResources(
       name: child.report.name,
       resourceType: PACKAGES_GROUP_TYPE,
       files: [] as EnhancedFileMapping[],
-      status: (child.report.state === 'missing' ? 'missing' : 'tracked') as const,
+      status: child.report.state === 'missing' ? 'missing' as const : 'tracked' as const,
       scopes: new Set([scope]),
       isDependencyRef: true,
     }));
@@ -466,23 +466,40 @@ export function mergeTrackedAndUntrackedResources(
    * Tree mode: process nodes, collecting containers for the parent to nest.
    * Dependencies are shown as flat reference entries, not expanded subtrees.
    */
-  function processNodes(nodes: ListTreeNode[]): EnhancedResourceInfo[] {
+  function processNodes(nodes: ListTreeNode[], seen?: Set<string>): EnhancedResourceInfo[] {
     const containers: EnhancedResourceInfo[] = [];
+    const visited = seen ?? new Set<string>();
 
     for (const node of nodes) {
       if (isPackageContainer(node, workspaceRootNames)) {
+        // Skip if already processed (diamond dependencies)
+        if (visited.has(node.report.name)) continue;
+        visited.add(node.report.name);
+
         // Collect own resources + embedded children's resources
         const ownResources = collectChildResources(node);
         const isMissing = node.report.state === 'missing';
+        const nonEmbeddedDeps = node.children.filter(c => !c.report.isEmbedded);
 
-        // Dependencies shown as flat reference lines, not nested subtrees.
-        // Each dependency package appears at its own top level — no duplication.
-        const depRefs = buildDependencyRefs(node);
+        // Dependencies shown as ↳ reference lines under this container.
+        const depRefs = nonEmbeddedDeps.map(child => ({
+          name: child.report.name,
+          resourceType: PACKAGES_GROUP_TYPE,
+          files: [] as EnhancedFileMapping[],
+          status: child.report.state === 'missing' ? 'missing' as const : 'tracked' as const,
+          scopes: new Set([scope]),
+          isDependencyRef: true,
+        }));
         const allChildren = [...ownResources, ...depRefs];
 
         if (allChildren.length > 0 || isMissing) {
           containers.push(buildContainer(node, allChildren, isMissing));
         }
+
+        // Recurse so dependency packages also appear as their own top-level
+        // containers. Embedded children are already folded via collectChildResources.
+        const nested = processNodes(nonEmbeddedDeps, visited);
+        for (const c of nested) containers.push(c);
       } else {
         // Non-container: collect resources flat into typeMap, recurse children
         collectFlatFromNode(node);

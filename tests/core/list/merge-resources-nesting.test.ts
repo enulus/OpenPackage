@@ -95,20 +95,24 @@ describe('mergeTrackedAndUntrackedResources nesting', () => {
       const result = mergeTrackedAndUntrackedResources([pkgA], undefined, 'project', undefined, false);
       const pkgGroup = getPackagesGroup(result);
       assert.ok(pkgGroup, 'Should have a packages group');
-      assert.equal(pkgGroup!.resources.length, 1, 'Only pkg-a at root level');
+      assert.equal(pkgGroup!.resources.length, 2, 'pkg-a and pkg-b both at root level');
 
-      const containerA = pkgGroup!.resources[0];
-      assert.ok(containerA.name.includes('pkg-a'), 'Root container should be pkg-a');
-      assert.ok(containerA.children, 'pkg-a should have children');
+      const containerA = pkgGroup!.resources.find(r => r.name.includes('pkg-a'));
+      assert.ok(containerA, 'Root container should include pkg-a');
+      assert.ok(containerA!.children, 'pkg-a should have children');
 
-      // pkg-b should be a dependency reference, not a nested container
-      const depRef = containerA.children!.find(c => c.name === 'pkg-b');
-      assert.ok(depRef, 'pkg-b should appear as a dependency reference');
+      // pkg-b should be a dependency reference under pkg-a
+      const depRef = containerA!.children!.find(c => c.name === 'pkg-b');
+      assert.ok(depRef, 'pkg-b should appear as a dependency reference under pkg-a');
       assert.equal(depRef!.isDependencyRef, true, 'Should be marked as dependency reference');
-      assert.equal(depRef!.children, undefined, 'Dependency ref should not have children');
+
+      // pkg-b should ALSO appear as its own top-level container
+      const containerB = pkgGroup!.resources.find(r => r.name.includes('pkg-b'));
+      assert.ok(containerB, 'pkg-b should also appear as its own top-level entry');
+      assert.equal(containerB!.isDependencyRef, undefined, 'Top-level pkg-b is not a dep ref');
 
       // own resource should still be present
-      const ruleA = containerA.children!.find(c => c.name === 'rule-a');
+      const ruleA = containerA!.children!.find(c => c.name === 'rule-a');
       assert.ok(ruleA, 'rule-a should be a direct child of pkg-a');
     });
 
@@ -129,18 +133,25 @@ describe('mergeTrackedAndUntrackedResources nesting', () => {
       const result = mergeTrackedAndUntrackedResources([pkgA], undefined, 'project', undefined, false);
       const pkgGroup = getPackagesGroup(result);
       assert.ok(pkgGroup);
-      assert.equal(pkgGroup!.resources.length, 1, 'Only pkg-a at root');
+      assert.equal(pkgGroup!.resources.length, 3, 'pkg-a, pkg-b, pkg-c all at root');
 
-      const containerA = pkgGroup!.resources[0];
+      const containerA = pkgGroup!.resources.find(r => r.name.includes('pkg-a'));
+      assert.ok(containerA);
 
-      // pkg-b should be a dep ref of pkg-a, not a nested container
-      const depRefB = containerA.children!.find(c => c.name === 'pkg-b');
-      assert.ok(depRefB, 'pkg-b should be a dep ref');
+      // pkg-b should be a dep ref under pkg-a
+      const depRefB = containerA!.children!.find(c => c.name === 'pkg-b');
+      assert.ok(depRefB, 'pkg-b should be a dep ref under pkg-a');
       assert.equal(depRefB!.isDependencyRef, true);
 
-      // pkg-c should NOT appear inside pkg-a (it's a transitive dep)
-      const depRefC = containerA.children!.find(c => c.name === 'pkg-c');
+      // pkg-c should NOT appear inside pkg-a (it's a transitive dep of pkg-b, not pkg-a)
+      const depRefC = containerA!.children!.find(c => c.name === 'pkg-c');
       assert.equal(depRefC, undefined, 'pkg-c should NOT appear in pkg-a (transitive)');
+
+      // But pkg-b and pkg-c should appear as their own top-level entries
+      const containerB = pkgGroup!.resources.find(r => r.name.includes('pkg-b'));
+      assert.ok(containerB, 'pkg-b should be its own top-level entry');
+      const containerC = pkgGroup!.resources.find(r => r.name.includes('pkg-c'));
+      assert.ok(containerC, 'pkg-c should be its own top-level entry');
     });
 
     it('marks missing package dependency as reference', () => {
@@ -182,19 +193,27 @@ describe('mergeTrackedAndUntrackedResources nesting', () => {
       const result = mergeTrackedAndUntrackedResources([pkgA], undefined, 'project', undefined, false);
       const pkgGroup = getPackagesGroup(result);
       assert.ok(pkgGroup);
-      assert.equal(pkgGroup!.resources.length, 1, 'Only pkg-a at root');
+      assert.equal(pkgGroup!.resources.length, 2, 'pkg-a and pkg-b at root (embedded pkg-d folded)');
 
-      const containerA = pkgGroup!.resources[0];
+      const containerA = pkgGroup!.resources.find(r => r.name.includes('pkg-a'));
+      assert.ok(containerA);
 
       // skill-d from embedded pkg-d should be folded into pkg-a's own children
-      const skillD = containerA.children!.find(c => c.name === 'skill-d');
+      const skillD = containerA!.children!.find(c => c.name === 'skill-d');
       assert.ok(skillD, 'Embedded skill-d should be folded into pkg-a');
 
-      // pkg-b should be a dep ref, not a nested container
-      const depRef = containerA.children!.find(c => c.name === 'pkg-b');
+      // pkg-b should be a dep ref under pkg-a
+      const depRef = containerA!.children!.find(c => c.name === 'pkg-b');
       assert.ok(depRef, 'Non-embedded pkg-b should be a dep ref');
       assert.equal(depRef!.isDependencyRef, true);
-      assert.equal(depRef!.children, undefined, 'Dep ref should not have children');
+
+      // pkg-b should ALSO appear as its own top-level entry
+      const containerB = pkgGroup!.resources.find(r => r.name.includes('pkg-b'));
+      assert.ok(containerB, 'pkg-b should also be its own top-level entry');
+
+      // embedded pkg-d should NOT appear at root (it's folded into pkg-a)
+      const containerD = pkgGroup!.resources.find(r => r.name.includes('pkg-d'));
+      assert.equal(containerD, undefined, 'Embedded pkg-d should not appear at root');
     });
   });
 
