@@ -34,6 +34,7 @@ import {
 } from './helpers/temp-directory.js';
 import { createContextFromFormat } from '../../conversion-context/index.js';
 import { FlowBasedInstallStrategy } from './flow-based-strategy.js';
+import { normalizeConvertedMatchedPattern } from '../resource-pattern-normalization.js';
 
 /**
  * Format Conversion Installation Strategy
@@ -193,7 +194,8 @@ export class ConversionInstallStrategy extends BaseStrategy {
         // Updated package format after conversion
         packageFormat: convertedPackage._format,
         // Pass updated conversion context
-        conversionContext
+        conversionContext,
+        matchedPattern: normalizeConvertedMatchedPattern(context.matchedPattern)
       };
       
       const installResult = await flowStrategy.install(convertedContext, options, forceOverwrite);

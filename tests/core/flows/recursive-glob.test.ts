@@ -236,6 +236,32 @@ describe('Recursive Glob Patterns (**)', () => {
       assert.strictEqual(await fileExists('.claude/skills/testing/docs/README.md'), true);
       assert.strictEqual(await fileExists('.claude/skills/skills/testing/docs/README.md'), false);
     });
+
+    it('should anchor nested source paths to the destination resource dir for recursive globs', async () => {
+      await cleanupBetweenTests();
+
+      await createPackageFile('config/skills/langsmith-dataset/SKILL.md', '# Dataset');
+
+      const flow: Flow = {
+        from: '**/skills/**/*',
+        to: '.cursor/skills/**/*',
+      };
+
+      const context: FlowContext = {
+        packageRoot,
+        workspaceRoot,
+        platform: 'cursor',
+        packageName: '@test/nested-skill',
+        direction: 'install',
+        variables: {},
+      };
+
+      const result = await executor.executeFlow(flow, context);
+
+      assert.strictEqual(result.success, true, `Expected success but got error: ${result.error?.message}`);
+      assert.strictEqual(await fileExists('.cursor/skills/langsmith-dataset/SKILL.md'), true);
+      assert.strictEqual(await fileExists('.cursor/skills/config/skills/langsmith-dataset/SKILL.md'), false);
+    });
   });
   
   describe('Directory Mapping', () => {

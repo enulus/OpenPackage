@@ -16,6 +16,7 @@ import { defaultTransformRegistry } from '../flows/flow-transforms.js';
 import { splitFrontmatter, dumpYaml } from '../markdown-frontmatter.js';
 import { basename, dirname, extname } from 'path';
 import { stripPlatformSuffixFromFilename } from '../flows/platform-suffix-handler.js';
+import { resolveRecursiveGlobTargetRelativePath } from '../glob-target-mapping.js';
 import { scoreAgainstSchema } from './file-format-detector.js';
 import type { Flow } from '../../types/flows.js';
 import type { 
@@ -436,42 +437,26 @@ function transformPath(filePath: string, flow: Flow): string {
   if (!fromPattern || !toPattern) {
     return filePath;
   }
-  
-  // Simple pattern transformation: replace glob prefix
-  // Example: ".claude/agents/**/*.md" → "agents/**/*.md"
-  //          ".claude/agents/foo.md" → "agents/foo.md"
-  
-  // Extract non-glob prefix from patterns
-  const fromPrefix = extractGlobPrefix(fromPattern);
-  const toPrefix = extractGlobPrefix(toPattern);
-  
-  // If file path starts with from prefix, replace with to prefix
-  if (filePath.startsWith(fromPrefix)) {
-    const relativePath = filePath.substring(fromPrefix.length);
-    return toPrefix + relativePath;
-  }
-  
-  return filePath;
-}
 
-/**
- * Extract non-glob prefix from a glob pattern
- * 
- * Example: "agents/**\/*.md" → "agents/"
- *          ".claude/agents/**\/*.md" → ".claude/agents/"
- */
-function extractGlobPrefix(pattern: string): string {
-  const parts = pattern.split('/');
-  const prefix: string[] = [];
-  
-  for (const part of parts) {
-    if (part.includes('*') || part.includes('?') || part.includes('[')) {
-      break;
-    }
-    prefix.push(part);
+  if (!matchGlob(filePath, fromPattern)) {
+    return filePath;
   }
-  
-  return prefix.length > 0 ? prefix.join('/') + '/' : '';
+
+  if (toPattern.includes('**')) {
+    return resolveRecursiveGlobTargetRelativePath(filePath, fromPattern, toPattern);
+  }
+
+  if (toPattern.includes('*')) {
+    const sourceExt = extname(filePath);
+    const sourceBase = basename(filePath, sourceExt);
+    const toParts = toPattern.split('*');
+    const toPrefix = toParts[0];
+    const toSuffix = toParts[1] || '';
+    const targetExt = toSuffix.startsWith('.') ? toSuffix : (sourceExt + toSuffix);
+    return toPrefix + sourceBase + targetExt;
+  }
+
+  return toPattern;
 }
 
 /**

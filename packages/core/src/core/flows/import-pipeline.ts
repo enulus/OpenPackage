@@ -20,6 +20,7 @@ import { executeFlowsForSources } from './flow-execution-coordinator.js';
 import { filterSourcesByPlatform } from '../install/strategies/helpers/platform-filtering.js';
 import { minimatch } from 'minimatch';
 import { relative } from 'path';
+import { deriveResourceLeafFromPackageName } from '../../utils/plugin-naming.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -62,6 +63,7 @@ export function buildImportFlowContext(
   direction: 'install' | 'save' = 'install',
 ): FlowContext {
   const platformDef = getPlatformDefinition(ctx.platform, ctx.workspaceRoot);
+  const resourceLeaf = deriveResourceLeafFromPackageName(ctx.packageName);
 
   // Use conversion context as single source of truth for original format
   const originalSource = ctx.conversionContext.originalFormat.platform || 'openpackage';
@@ -83,6 +85,7 @@ export function buildImportFlowContext(
       source: originalSource,
       sourcePlatform: originalSource,
       targetRoot: ctx.workspaceRoot,
+      resourceLeaf,
     },
     dryRun: ctx.dryRun,
   };

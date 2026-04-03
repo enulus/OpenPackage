@@ -21,6 +21,7 @@ import { logger } from '../../utils/logger.js';
 import { stripPlatformSuffixFromFilename } from './platform-suffix-handler.js';
 import { resolveSwitchExpression, isSwitchExpression } from './switch-resolver.js';
 import { normalizePathForProcessing } from '../../utils/path-normalization.js';
+import { deriveResourceLeafFromPackageName } from '../../utils/plugin-naming.js';
 import { deduplicateTargets } from '../../utils/workspace-index-helpers.js';
 
 /**
@@ -411,6 +412,8 @@ export function buildFlowContext(
     rootDir?: string;
   }
 ): FlowContext {
+  const resourceLeaf = deriveResourceLeafFromPackageName(baseContext.packageName);
+
   return {
     workspaceRoot: baseContext.workspaceRoot,
     packageRoot: baseContext.packageRoot,
@@ -422,7 +425,8 @@ export function buildFlowContext(
       version: baseContext.packageVersion,
       priority: baseContext.priority,
       rootFile: platformDef.rootFile,
-      rootDir: platformDef.rootDir
+      rootDir: platformDef.rootDir,
+      resourceLeaf
     },
     dryRun: baseContext.dryRun
   };

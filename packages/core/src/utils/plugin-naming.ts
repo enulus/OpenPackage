@@ -243,6 +243,35 @@ export function splitPackageNameForTelemetry(packageName: string): {
 }
 
 /**
+ * Derive the leaf name for a package/resource path.
+ *
+ * Examples:
+ * - "gh@user/repo/decomplect" -> "decomplect"
+ * - "gh@user/repo/skills/my-skill" -> "my-skill"
+ * - "gh@user/repo" -> "repo"
+ * - "@scope/pkg/path/to/resource" -> "resource"
+ * - "plain-package" -> "plain-package"
+ */
+export function deriveResourceLeafFromPackageName(packageName: string): string {
+  const { baseName, resourcePath } = splitPackageNameForTelemetry(packageName);
+
+  if (resourcePath) {
+    const segments = resourcePath.split('/').filter(Boolean);
+    if (segments.length > 0) {
+      return stripExtension(segments[segments.length - 1]);
+    }
+  }
+
+  const parsed = parseScopedPluginName(baseName);
+  if (parsed) {
+    return stripExtension(parsed.repo);
+  }
+
+  const segments = baseName.split('/').filter(Boolean);
+  return stripExtension(segments[segments.length - 1] ?? baseName);
+}
+
+/**
  * Strip a file extension from a path segment (e.g. "code-reviewer.md" → "code-reviewer").
  */
 function stripExtension(segment: string): string {

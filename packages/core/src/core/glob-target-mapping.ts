@@ -45,6 +45,20 @@ function extractTargetExtensionFromRecursiveSuffix(toSuffix: string): string | n
   return match?.[1] ?? null;
 }
 
+function trimSourceToAnchorSegment(
+  sourceRelFromPackage: string,
+  anchorSegment: string
+): string {
+  const sourceSegments = splitSegments(sourceRelFromPackage);
+  const anchorIndex = sourceSegments.lastIndexOf(anchorSegment);
+
+  if (anchorIndex === -1) {
+    return normalizeSlashPath(sourceRelFromPackage);
+  }
+
+  return sourceSegments.slice(anchorIndex + 1).join('/');
+}
+
 /**
  * Resolve the workspace-relative target path for patterns containing `**`.
  *
@@ -74,6 +88,13 @@ export function resolveRecursiveGlobTargetRelativePath(
       relativeSubpath = normalizedSource.startsWith(fromBase + '/')
         ? normalizedSource.slice(fromBase.length + 1)
         : normalizedSource;
+    } else if (toBase) {
+      const toBaseSegments = splitSegments(toBase);
+      const anchorSegment = toBaseSegments[toBaseSegments.length - 1];
+
+      if (anchorSegment) {
+        relativeSubpath = trimSourceToAnchorSegment(sourceRelFromPackage, anchorSegment);
+      }
     }
 
     // Handle extension mapping if suffixes specify extensions: /**/*.md -> /**/*.mdc

@@ -6,7 +6,8 @@ import {
   parseScopedPluginName,
   isScopedPluginName,
   detectOldGitHubNaming,
-  deriveNamespaceSlug
+  deriveNamespaceSlug,
+  deriveResourceLeafFromPackageName
 } from '../../../packages/core/src/utils/plugin-naming.js';
 
 describe('Plugin Naming', () => {
@@ -221,6 +222,36 @@ describe('Plugin Naming', () => {
     it('should return false for non-scoped names', () => {
       assert.strictEqual(isScopedPluginName('plain-name'), false);
       assert.strictEqual(isScopedPluginName('@username'), false);
+    });
+  });
+
+  describe('deriveResourceLeafFromPackageName', () => {
+    it('uses the resource path leaf for GitHub subpaths', () => {
+      assert.strictEqual(
+        deriveResourceLeafFromPackageName('gh@shanev/skills/decomplect'),
+        'decomplect'
+      );
+    });
+
+    it('uses the final resource segment for nested paths', () => {
+      assert.strictEqual(
+        deriveResourceLeafFromPackageName('gh@owner/repo/skills/my-skill'),
+        'my-skill'
+      );
+    });
+
+    it('falls back to the repo name for repo-level packages', () => {
+      assert.strictEqual(
+        deriveResourceLeafFromPackageName('gh@langchain-ai/langsmith-skills'),
+        'langsmith-skills'
+      );
+    });
+
+    it('strips file extensions from the leaf segment', () => {
+      assert.strictEqual(
+        deriveResourceLeafFromPackageName('gh@owner/repo/commands/decomplect.md'),
+        'decomplect'
+      );
     });
   });
   

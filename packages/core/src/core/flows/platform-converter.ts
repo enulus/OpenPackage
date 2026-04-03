@@ -6,7 +6,7 @@
  * - Direct installation when source = target platform
  */
 
-import { join, relative } from 'path';
+import { basename, dirname, join, relative } from 'path';
 import { promises as fs } from 'fs';
 import type { Package, PackageFile } from '../../types/index.js';
 import type { PackageConversionContext } from '../../types/conversion-context.js';
@@ -20,8 +20,16 @@ import {
 } from '../install/format-detector.js';
 import { getPlatformDefinition, getGlobalImportFlows } from '../platforms.js';
 import { createFlowExecutor } from './flow-executor.js';
+import {
+  extractCapturedName,
+  getFirstFromPattern,
+  resolvePattern
+} from './flow-source-discovery.js';
+import { isSwitchExpression, resolveSwitchExpression } from './switch-resolver.js';
+import { resolveTargetFromGlob } from './flow-execution-coordinator.js';
 import { logger } from '../../utils/logger.js';
 import { ensureDir, writeTextFile, readTextFile } from '../../utils/fs.js';
+import { deriveResourceLeafFromPackageName } from '../../utils/plugin-naming.js';
 import { tmpdir } from 'os';
 import { mkdtemp, rm } from 'fs/promises';
 import { minimatch } from 'minimatch';
@@ -407,6 +415,7 @@ export class PlatformConverter {
       // During conversion, we set:
       // - $$platform = target platform (for conditionals like "$eq": ["$$platform", "claude"])
       // - $$source = original source format (for conditionals like "$eq": ["$$source", "claude-plugin"])
+      const resourceLeaf = deriveResourceLeafFromPackageName(pkg.metadata.name);
       const flowContext: FlowContext = {
         workspaceRoot: outputRoot,  // Write outputs away from inputs
         packageRoot,
@@ -419,7 +428,8 @@ export class PlatformConverter {
           platform: targetPlatform,  // For conditional: "$eq": ["$$platform", "claude"]
           source: context.originalFormat.platform || 'openpackage',  // Use context for $$source
           sourcePlatform: context.originalFormat.platform || 'openpackage',  // Use context for sourcePlatform
-          targetPlatform: targetPlatform
+          targetPlatform: targetPlatform,
+          resourceLeaf
         },
         dryRun
       };
@@ -450,14 +460,49 @@ export class PlatformConverter {
         for (const sourceFile of matchingFiles) {
           const sourceRelative = relative(packageRoot, sourceFile);
           matchedSources.add(sourceRelative);
-          
-          // Create concrete flow with specific file path
-          const concreteFlow: Flow = {
+
+          // Preserve the original source pattern when deriving the target path.
+          // Converting the flow to a literal `from` too early breaks generic
+          // mappings like `**/skills/**/* -> skills/**/*` by producing
+          // `skills/config/skills/...` instead of anchoring at the `skills/` dir.
+          const firstFromPattern = getFirstFromPattern(flow.from);
+          const capturedName = extractCapturedName(sourceRelative, firstFromPattern);
+          const sourceContext: FlowContext = {
+            ...flowContext,
+            variables: {
+              ...flowContext.variables,
+              sourcePath: sourceRelative,
+              sourceDir: dirname(sourceRelative),
+              sourceFile: basename(sourceRelative),
+              ...(capturedName ? { capturedName } : {})
+            }
+          };
+
+          let concreteFlow: Flow = {
             ...flow,
             from: sourceRelative
           };
-          
-          const flowResult = await executor.executeFlow(concreteFlow, flowContext);
+
+          if (typeof flow.to === 'string' || isSwitchExpression(flow.to)) {
+            const rawToPattern = typeof flow.to === 'string'
+              ? flow.to
+              : resolveSwitchExpression(flow.to, sourceContext);
+            const resolvedToPattern = resolvePattern(rawToPattern, sourceContext, capturedName);
+            const targetAbs = resolveTargetFromGlob(
+              sourceFile,
+              firstFromPattern,
+              resolvedToPattern,
+              sourceContext
+            );
+            const targetRel = relative(outputRoot, targetAbs);
+
+            concreteFlow = {
+              ...concreteFlow,
+              to: targetRel
+            };
+          }
+
+          const flowResult = await executor.executeFlow(concreteFlow, sourceContext);
           
           if (!flowResult.success) {
             return {

@@ -14,6 +14,7 @@ import type { OutputPort } from '../ports/output.js';
 import { resolveOutput } from '../ports/resolve.js';
 import { isMarkerFile, getMarkerFilename } from '../resources/resource-registry.js';
 import type { ResourceType } from './resource-types.js';
+import { findMarkerResourceFiles } from './resource-search.js';
 
 /**
  * Result of a resource match
@@ -349,20 +350,7 @@ async function matchSkills(
   requestedNames: string[]
 ): Promise<ResourceMatchResult[]> {
   const results: ResourceMatchResult[] = [];
-  
-  // Find all marker files (skills/**/SKILL.md)
-  const skillsDir = join(basePath, 'skills');
-  const skillFiles: string[] = [];
-
-  // Check if skills directory exists
-  if (await exists(skillsDir)) {
-    // Walk the skills directory and collect marker files
-    for await (const file of walkFiles(skillsDir)) {
-      if (isMarkerFile(basename(file), 'skill')) {
-        skillFiles.push(file);
-      }
-    }
-  }
+  const skillFiles = await findMarkerResourceFiles(basePath, 'skill');
 
   for (const name of requestedNames) {
     const match = await findSkillByName(skillFiles, name);

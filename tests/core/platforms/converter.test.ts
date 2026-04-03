@@ -232,6 +232,61 @@ describe('Platform Converter', () => {
       // .claude-plugin files are passed through and openpackage.yml is not generated
       assert.ok(result.stages.length > 0, 'Should have at least one conversion stage');
     });
+
+    it('should anchor nested skills directories during claude-plugin conversion', async () => {
+      const converter = createPlatformConverter(workspaceRoot);
+
+      const pkg: Package = {
+        metadata: {
+          name: 'langsmith-plugin',
+          version: '0.1.0'
+        },
+        files: [
+          {
+            path: '.claude-plugin/plugin.json',
+            content: '{"name":"langsmith-plugin","version":"0.1.0"}',
+            encoding: 'utf8'
+          },
+          {
+            path: 'config/skills/langsmith-dataset/SKILL.md',
+            content: '---\nname: langsmith-dataset\n---\n# Dataset Skill\n',
+            encoding: 'utf8'
+          },
+          {
+            path: 'config/skills/langsmith-dataset/helper.ts',
+            content: 'export const helper = true;\n',
+            encoding: 'utf8'
+          }
+        ],
+        _format: {
+          type: 'platform-specific',
+          platform: 'claude-plugin',
+          confidence: 1.0,
+          analysis: {
+            universalFiles: 0,
+            platformSpecificFiles: 3,
+            detectedPlatforms: new Map([['claude-plugin', 3]]),
+            totalFiles: 3,
+            samplePaths: {
+              universal: [],
+              platformSpecific: ['.claude-plugin/plugin.json']
+            }
+          }
+        }
+      };
+
+      const result = await converter.convert(pkg, createContextFromPackage(pkg), 'cursor', { dryRun: false });
+
+      assert.strictEqual(result.success, true);
+      assert.ok(result.convertedPackage);
+
+      const convertedPaths = new Set(result.convertedPackage.files.map(file => file.path));
+      assert.ok(convertedPaths.has('skills/langsmith-dataset/SKILL.md'));
+      assert.ok(convertedPaths.has('skills/langsmith-dataset/helper.ts'));
+      assert.ok(!convertedPaths.has('skills/config/skills/langsmith-dataset/SKILL.md'));
+      assert.ok(!convertedPaths.has('skills/config/skills/langsmith-dataset/helper.ts'));
+    });
+
   });
 
   describe('Integration', () => {

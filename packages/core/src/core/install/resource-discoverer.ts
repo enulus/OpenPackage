@@ -16,10 +16,11 @@ import { exists, readTextFile } from '../../utils/fs.js';
 import { logger } from '../../utils/logger.js';
 import { extractMarkdownResourceMetadata } from '../resources/markdown-metadata.js';
 import { defaultNameFromPath, defaultNameFromSkillDir, preferFrontmatterName } from '../resources/resource-naming.js';
-import { getMarkerFilename, isMarkerFile } from '../resources/resource-registry.js';
+import { isMarkerFile } from '../resources/resource-registry.js';
 import { loadMarketplaceManifest } from './plugin-detector.js';
 import type { MarketplaceManifest } from './marketplace-handler.js';
 import { DIR_PATTERNS, FILE_PATTERNS } from '../../constants/index.js';
+import { findMarkerResourceFiles } from './resource-search.js';
 import type {
   DiscoveredResource,
   ResourceDiscoveryResult,
@@ -130,17 +131,13 @@ async function discoverSkills(
   repoRoot: string
 ): Promise<DiscoveredResource[]> {
   const resources: DiscoveredResource[] = [];
-  const skillsDir = join(basePath, 'skills');
+  const skillFiles = await findMarkerResourceFiles(basePath, 'skill');
 
-  if (!(await exists(skillsDir))) {
-    return resources;
-  }
-
-  for await (const file of walkFiles(skillsDir)) {
+  for (const file of skillFiles) {
     if (!isMarkerFile(basename(file), 'skill')) {
       continue;
     }
-    
+
     const skillDir = dirname(file);
     const content = await readTextFile(file);
     const metadata = extractMarkdownResourceMetadata(content);
