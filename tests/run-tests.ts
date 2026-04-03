@@ -36,6 +36,7 @@ const testFiles: string[] = [
   'tests/core/install/phase3-integration.test.ts',
   'tests/core/install/phase4-integration.test.ts',
   'tests/core/install/plugin-naming.test.ts',
+  'tests/core/install/plugin-transformer-format.test.ts',
   'tests/core/install/stale-file-cleanup.test.ts',
 
   // Core - Flows

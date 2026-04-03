@@ -121,7 +121,13 @@ export async function transformPluginToPackage(
     metadata,
     files,
     // Store format metadata for installation pipeline
-    _format: format
+    // Force platform to 'claude-plugin' since detectPackageFormat sees 'universal'
+    // (.claude-plugin/ is stripped from files), but we know the true source format.
+    _format: {
+      ...format,
+      type: 'platform-specific' as const,
+      platform: 'claude-plugin',
+    }
   };
   
   // Create conversion context for claude-plugin
