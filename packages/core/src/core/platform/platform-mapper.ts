@@ -402,7 +402,6 @@ function extractPlatformSuffix(absolutePath: string): string | null {
   const allFromPatterns = getNonFallbackFromPatterns();
   if (allFromPatterns.length === 0) return null;
 
-  // Try suffixes from shortest (just filename) to longer, looking for a match.
   // Prefer suffixes whose first component is a known platform root directory
   // (e.g. .claude/, .cursor/). Shorter suffixes may match permissive patterns
   // like **/skills/**/* or skills/**/* that lose platform directory context,
@@ -415,10 +414,7 @@ function extractPlatformSuffix(absolutePath: string): string | null {
     for (const pattern of allFromPatterns) {
       if (matchesFlowPattern(suffix, pattern)) {
         if (!firstMatch) firstMatch = suffix;
-        // If this suffix starts with a known platform root dir, it's the
-        // most specific match — return immediately.
-        const firstComponent = suffix.split('/')[0];
-        if (dirLookup[firstComponent]) {
+        if (dirLookup[segments[i]]) {
           return suffix;
         }
       }
