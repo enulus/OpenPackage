@@ -48,12 +48,9 @@ export function validateDependencyContainment(
   ];
 
   for (const dep of allDeps) {
-    // Only check local path deps (no url/git).
-    // base is the modern field (post-migration), path is legacy (pre-migration).
-    // Either indicates a local source that must be validated for containment.
+    // Only check local path deps (no url/git)
     if ((!dep.base && !dep.path) || dep.url || dep.git) continue;
 
-    // Prefer base (modern) over path (legacy fallback for old manifests)
     const pathToValidate = dep.base ?? dep.path!;
     const { absolute: resolvedAbs } = resolveDeclaredPath(pathToValidate, packageRoot);
     const relative = path.relative(packageRoot, resolvedAbs);

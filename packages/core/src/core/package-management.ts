@@ -370,9 +370,7 @@ function doesDependencyMatchPackageName(
     
     const { username, repo } = githubInfo;
 
-    // Get the actual path from dependency. For git sources, base is the path within the repo.
-    // (Note: path field for git sources specifies resource selection, not the repo subdirectory)
-    // Fall back to deprecated subdirectory field for backward compatibility.
+    // For git sources, path is resource selection, not repo subdirectory
     const actualPath = dep.base || (dep.subdirectory?.startsWith('./')
       ? dep.subdirectory.substring(2)
       : dep.subdirectory);

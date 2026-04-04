@@ -10,16 +10,7 @@ import { cloneGitToRegistry } from '../git-clone-registry.js';
 import { resolveNamedDependency } from './resolve-named-dependency.js';
 import { resolvePackageSource } from './resolve-package-source.js';
 import type { DependencyGraphNode, ResolvedPackageSource } from './types.js';
-
-interface PackageDependency {
-  name: string;
-  version?: string;
-  base?: string;
-  path?: string;
-  git?: string;
-  url?: string;
-  ref?: string;
-}
+import type { PackageDependency } from '../../types/index.js';
 
 async function resolveFromManifest(
   manifestDir: string,
@@ -27,10 +18,7 @@ async function resolveFromManifest(
 ): Promise<ResolvedPackageSource> {
   const normalizedName = normalizePackageName(dep.name);
 
-  // Check for local path dependency: base is the modern field (post-migration),
-  // path is the legacy field (pre-migration). Either indicates a local source.
   if (dep.base || dep.path) {
-    // Prefer base (modern) over path (legacy fallback for old manifests)
     const pathToResolve = dep.base ?? dep.path!;
     const resolved = resolveDeclaredPath(pathToResolve, manifestDir);
     const absolutePath = path.join(resolved.absolute, path.sep);
