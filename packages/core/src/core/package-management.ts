@@ -369,10 +369,10 @@ function doesDependencyMatchPackageName(
     }
     
     const { username, repo } = githubInfo;
-    
-    // Get the actual path from dependency (prefer path over subdirectory)
-    const actualPath = dep.path || (dep.subdirectory?.startsWith('./') 
-      ? dep.subdirectory.substring(2) 
+
+    // For git sources, path is resource selection, not repo subdirectory
+    const actualPath = dep.base || (dep.subdirectory?.startsWith('./')
+      ? dep.subdirectory.substring(2)
       : dep.subdirectory);
     
     // Build all possible name variations that could match

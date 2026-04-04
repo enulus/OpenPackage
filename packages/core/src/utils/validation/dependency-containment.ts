@@ -30,8 +30,8 @@ export interface ContainmentResult {
 /**
  * Validate that all local path dependencies resolve within the package root.
  *
- * Only checks dependencies with a `path` field and no `url`/`git` field
- * (those are subdirectories within a remote repo, not local filesystem paths).
+ * Checks dependencies with a `base` or `path` field (base is modern post-migration, path is legacy)
+ * and no `url`/`git` field (those are subdirectories within a remote repo, not local filesystem paths).
  *
  * @param manifest - Parsed openpackage.yml
  * @param packageRoot - Absolute path to the package root directory
@@ -49,16 +49,17 @@ export function validateDependencyContainment(
 
   for (const dep of allDeps) {
     // Only check local path deps (no url/git)
-    if (!dep.path || dep.url || dep.git) continue;
+    if ((!dep.base && !dep.path) || dep.url || dep.git) continue;
 
-    const { absolute: resolvedAbs } = resolveDeclaredPath(dep.path, packageRoot);
+    const pathToValidate = dep.base ?? dep.path!;
+    const { absolute: resolvedAbs } = resolveDeclaredPath(pathToValidate, packageRoot);
     const relative = path.relative(packageRoot, resolvedAbs);
 
     // Violation: path escapes the package root (starts with '..')
     if (relative.startsWith('..') || path.isAbsolute(relative)) {
       violations.push({
         name: dep.name,
-        declaredPath: dep.path,
+        declaredPath: pathToValidate,
         resolvedPath: resolvedAbs,
         reason: relative.startsWith('..') ? 'escapes-root' : 'absolute-external',
       });

@@ -10,15 +10,7 @@ import { cloneGitToRegistry } from '../git-clone-registry.js';
 import { resolveNamedDependency } from './resolve-named-dependency.js';
 import { resolvePackageSource } from './resolve-package-source.js';
 import type { DependencyGraphNode, ResolvedPackageSource } from './types.js';
-
-interface PackageDependency {
-  name: string;
-  version?: string;
-  path?: string;
-  git?: string;
-  url?: string;
-  ref?: string;
-}
+import type { PackageDependency } from '../../types/index.js';
 
 async function resolveFromManifest(
   manifestDir: string,
@@ -26,8 +18,9 @@ async function resolveFromManifest(
 ): Promise<ResolvedPackageSource> {
   const normalizedName = normalizePackageName(dep.name);
 
-  if (dep.path) {
-    const resolved = resolveDeclaredPath(dep.path, manifestDir);
+  if (dep.base || dep.path) {
+    const pathToResolve = dep.base ?? dep.path!;
+    const resolved = resolveDeclaredPath(pathToResolve, manifestDir);
     const absolutePath = path.join(resolved.absolute, path.sep);
     const mutability = isRegistryPath(absolutePath) ? MUTABILITY.IMMUTABLE : MUTABILITY.MUTABLE;
     const sourceType = isRegistryPath(absolutePath) ? SOURCE_TYPES.REGISTRY : SOURCE_TYPES.PATH;
