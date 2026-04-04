@@ -33,7 +33,7 @@ name: root
 packages:
   - name: foo
     version: ^1.0.0
-    path: ../foo
+    base: ../foo
 `
   );
   await assert.rejects(
