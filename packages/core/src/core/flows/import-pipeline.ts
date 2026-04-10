@@ -18,9 +18,9 @@ import { getApplicableFlows } from '../install/strategies/helpers/flow-helpers.j
 import { discoverFlowSources } from './flow-source-discovery.js';
 import { executeFlowsForSources } from './flow-execution-coordinator.js';
 import { filterSourcesByPlatform } from '../install/strategies/helpers/platform-filtering.js';
-import { minimatch } from 'minimatch';
 import { relative } from 'path';
 import { deriveResourceLeafFromPackageName } from '../../utils/plugin-naming.js';
+import { matchPackagePath } from '../../utils/match-path.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -224,7 +224,7 @@ export function applyResourceFiltering(
         isAbs ? relative(packageRoot, sourcePath) : normalizedSource
       ).replace(/\\/g, '/');
 
-      return minimatch(relativePath, normalizedPattern);
+      return matchPackagePath(relativePath, normalizedPattern);
     });
 
     if (filtered.length > 0) {

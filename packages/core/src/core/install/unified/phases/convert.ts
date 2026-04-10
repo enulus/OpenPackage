@@ -15,9 +15,9 @@ import { readdir } from 'fs/promises';
 import { join } from 'path';
 import { readFile } from 'fs/promises';
 import type { PackageFile as DetectionPackageFile } from '../../detection-types.js';
-import { minimatch } from 'minimatch';
 import { getPlatformDefinitions, matchesUniversalPattern } from '../../../platforms.js';
 import { getPatternFromFlow } from '../../schema-registry.js';
+import { matchPackagePath } from '../../../../utils/match-path.js';
 import { getRelativePathFromBase } from '../../../../utils/path-normalization.js';
 import { 
   createTempPackageDirectory, 
@@ -226,7 +226,7 @@ async function loadPackageFiles(
   
   function isRelevantPath(relPath: string, targetDir: string, matchedPattern?: string): boolean {
     const normalized = relPath.replace(/\\/g, '/').replace(/^\.\/?/, '');
-    const matchesMatchedPattern = matchedPattern ? minimatch(normalized, matchedPattern) : true;
+    const matchesMatchedPattern = matchedPattern ? matchPackagePath(normalized, matchedPattern) : true;
     if (!matchesMatchedPattern) {
       return false;
     }
@@ -241,7 +241,7 @@ async function loadPackageFiles(
         const importFlows = def.import || [];
         for (const flow of importFlows) {
           const pattern = getPatternFromFlow(flow as any, 'from');
-          if (pattern && minimatch(normalized, pattern)) {
+          if (pattern && matchPackagePath(normalized, pattern)) {
             importMatch = { platformId, pattern };
             break;
           }

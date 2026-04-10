@@ -4,10 +4,10 @@ import type { PackageFile } from '../../../types/index.js';
 import type { Platform } from '../../platforms.js';
 import { isManifestPath, normalizePackagePath } from '../../../utils/manifest-paths.js';
 import { getPlatformRootFileNames } from '../../platform/platform-root-files.js';
-import { minimatch } from 'minimatch';
 import { join } from 'path';
 import { exists } from '../../../utils/fs.js';
 import { hasPluginContent } from '../plugin-detector.js';
+import { matchPackagePath } from '../../../utils/match-path.js';
 
 export interface CategorizedInstallFiles {
   pathBasedFiles: PackageFile[];
@@ -45,7 +45,7 @@ export async function discoverAndCategorizeFiles(
   // Phase 4: Build include filter that considers matchedPattern
   const shouldInclude = (path: string): boolean => {
     // Check matched pattern (from base detection or resource scoping)
-    if (matchedPattern && !minimatch(path, matchedPattern)) {
+    if (matchedPattern && !matchPackagePath(path, matchedPattern)) {
       return false;
     }
     
