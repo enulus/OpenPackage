@@ -13,6 +13,8 @@ import { discoverFiles } from './file-discovery.js';
 import { normalizePathForProcessing } from '../../utils/path-normalization.js';
 import { WORKSPACE_DISCOVERY_EXCLUDES } from '../../constants/workspace.js';
 import { DIR_PATTERNS } from '../../constants/index.js';
+import { extractToPatternString } from '../../core/flows/to-pattern-extractor.js';
+import { extractDefaultPattern } from '../../core/flows/switch-resolver.js';
 
 /**
  * Process platform subdirectories (rules/commands/agents) within a base directory
@@ -35,7 +37,7 @@ async function discoverPlatformFiles(
     const platformDirs = new Set<string>();
     
     for (const flow of definition.export) {
-      const toPattern = typeof flow.to === 'string' ? flow.to : Object.keys(flow.to)[0];
+      const toPattern = extractToPatternString(flow.to, extractDefaultPattern);
       if (toPattern) {
         // Extract directory from pattern (e.g., ".cursor/rules/{name}.mdc" -> "rules")
         const parts = toPattern.split('/');

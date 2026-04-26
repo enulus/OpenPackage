@@ -14,6 +14,8 @@ import {
 import { DIR_PATTERNS, FILE_PATTERNS, type UniversalSubdir } from '../../constants/index.js';
 import { getFirstPathComponent, parsePathWithPrefix, normalizePathForProcessing } from '../../utils/path-normalization.js';
 import { mapUniversalToPlatform } from './platform-mapper.js';
+import { extractToPatternString } from '../flows/to-pattern-extractor.js';
+import { extractDefaultPattern } from '../flows/switch-resolver.js';
 
 /**
  * Parse a registry or universal path to extract subdir and relative path info
@@ -110,7 +112,7 @@ export function getPlatformSpecificFilename(universalPath: string, platform: Pla
       // For array patterns, use the first pattern
       const fromPattern = Array.isArray(flow.from) ? flow.from[0] : flow.from;
       if (fromPattern.includes(universalSubdir)) {
-        const toPattern = typeof flow.to === 'string' ? flow.to : Object.keys(flow.to)[0];
+        const toPattern = extractToPatternString(flow.to, extractDefaultPattern);
         if (toPattern) {
           // Extract extension from 'to' pattern
           const toExtMatch = toPattern.match(/\.[^./]+$/);

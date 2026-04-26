@@ -52,6 +52,7 @@ const testFiles: string[] = [
   'tests/core/flows/transforms/toml-transforms.test.ts',
   'tests/core/flows/unified-platform-model.test.ts',
   'tests/core/flows/unit/switch-resolution.test.ts',
+  'tests/core/flows/unit/to-pattern-extractor.test.ts',
 
   // Core - Platforms
   'tests/core/platforms/platform-extension-filter.test.ts',

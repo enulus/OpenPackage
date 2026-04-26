@@ -23,7 +23,8 @@ import {
   extractCapturedName,
   getFirstFromPattern,
 } from '../../flows/flow-source-discovery.js';
-import { resolveSwitchExpression, isSwitchExpression } from '../../flows/switch-resolver.js';
+import { resolveSwitchExpression } from '../../flows/switch-resolver.js';
+import { extractToPatternString } from '../../flows/to-pattern-extractor.js';
 import {
   buildImportFlowContext,
   discoverAndFilterSources,
@@ -277,17 +278,10 @@ export class FlowBasedInstallStrategy extends BaseStrategy {
             }
           };
 
-          let rawToPattern: string;
-          if (typeof flow.to === 'string') {
-            rawToPattern = flow.to;
-          } else if (isSwitchExpression(flow.to)) {
-            rawToPattern = resolveSwitchExpression(flow.to, sourceContext);
-          } else if (typeof flow.to === 'object' && flow.to !== null && 'pattern' in flow.to) {
-            rawToPattern = (flow.to as { pattern: string }).pattern;
-          } else {
-            rawToPattern = Object.keys(flow.to as object)[0] ?? '';
-          }
-
+          const rawToPattern = extractToPatternString(
+            flow.to,
+            (sw) => resolveSwitchExpression(sw, sourceContext)
+          ) ?? '';
           const resolvedToPattern = resolvePattern(rawToPattern, sourceContext, capturedName);
           const targetAbs = resolveTargetFromGlob(
             sourceAbs,

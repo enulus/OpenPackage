@@ -247,6 +247,19 @@ export function isSwitchExpression(value: unknown): value is SwitchExpression {
   );
 }
 
+/**
+ * Extract the default branch's pattern string from a SwitchExpression.
+ * Used by call sites that lack a runtime FlowContext (e.g. workspace-add,
+ * uninstall, listing) and must fall back to the default branch.
+ *
+ * Returns undefined when the expression has no default.
+ */
+export function extractDefaultPattern(expr: SwitchExpression): string | undefined {
+  const d = expr.$switch.default;
+  if (d === undefined) return undefined;
+  return extractPattern(d);
+}
+
 function isValidSwitchCaseValue(value: unknown): boolean {
   if (typeof value === 'string') {
     return true;

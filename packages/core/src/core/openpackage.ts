@@ -9,6 +9,8 @@ import { getLocalPackageYmlPath, getLocalPackagesDir } from '../utils/paths.js';
 import { findFilesByExtension, findDirectoriesContainingFile } from '../utils/file-processing.js';
 import { getDetectedPlatforms, getPlatformDefinition, type Platform } from './platforms.js';
 import { arePackageNamesEquivalent } from '../utils/package-name.js';
+import { extractToPatternString } from './flows/to-pattern-extractor.js';
+import { extractDefaultPattern } from './flows/switch-resolver.js';
 
 /**
  * Package metadata from openpackage directory
@@ -308,7 +310,7 @@ export async function checkExistingPackageInMarkdownFiles(
         const platformDirs = new Set<string>();
         
         for (const flow of def.export) {
-          const toPattern = typeof flow.to === 'string' ? flow.to : Object.keys(flow.to)[0];
+          const toPattern = extractToPatternString(flow.to, extractDefaultPattern);
           if (toPattern) {
             // Extract directory from pattern
             const parts = toPattern.split('/');
