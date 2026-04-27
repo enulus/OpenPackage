@@ -50,6 +50,8 @@ const testFiles: string[] = [
   'tests/core/flows/source-resolver.test.ts',
   'tests/core/flows/tool-mapping.test.ts',
   'tests/core/flows/transforms/toml-transforms.test.ts',
+  'tests/core/flows/transforms/markdown-transforms.test.ts',
+  'tests/core/flows/transforms/yaml-aliases.test.ts',
   'tests/core/flows/unified-platform-model.test.ts',
   'tests/core/flows/unit/switch-resolution.test.ts',
   'tests/core/flows/unit/to-pattern-extractor.test.ts',
