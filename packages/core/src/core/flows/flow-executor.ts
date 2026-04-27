@@ -762,6 +762,16 @@ export class DefaultFlowExecutor implements FlowExecutor {
 
         await fsUtils.ensureDir(path.dirname(targetPath));
         await fs.writeFile(targetPath, content);
+
+        // Preserve executable permission from source file
+        try {
+          const sourceStat = await fs.stat(sourcePath);
+          if (sourceStat.mode & 0o111) {
+            await fs.chmod(targetPath, sourceStat.mode);
+          }
+        } catch {
+          // Ignore permission preservation failures
+        }
       }
 
       return {
