@@ -383,12 +383,15 @@ function parseHashFragment(
  * - Ends with .git extension
  */
 export function isGitUrl(input: string): boolean {
+  // Strip hash fragment for .git extension check (e.g., repo.git#ref)
+  const baseUrl = input.split('#', 1)[0];
   return (
     input.startsWith('https://') ||
     input.startsWith('http://') ||
     input.startsWith('git://') ||
+    input.startsWith('ssh://') ||
     input.startsWith('git@') ||
-    input.endsWith('.git')
+    baseUrl.endsWith('.git')
   );
 }
 
