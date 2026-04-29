@@ -660,26 +660,6 @@
         "to": ".agents/skills/**/*"
       },
       {
-        "from": "SKILL.md",
-        "to": ".agents/skills/{resourceLeaf}/SKILL.md"
-      },
-      {
-        "from": "references/**/*",
-        "to": ".agents/skills/{resourceLeaf}/references/**/*"
-      },
-      {
-        "from": "reference/**/*",
-        "to": ".agents/skills/{resourceLeaf}/references/**/*"
-      },
-      {
-        "from": "scripts/**/*",
-        "to": ".agents/skills/{resourceLeaf}/scripts/**/*"
-      },
-      {
-        "from": "assets/**/*",
-        "to": ".agents/skills/{resourceLeaf}/assets/**/*"
-      },
-      {
         "from": "agents/**/*.md",
         "to": ".codex/agents/**/*.toml",
         "map": [
@@ -708,10 +688,6 @@
           { "$pipe": ["json-to-toml"] }
         ],
         "description": "Universal agents → Codex subagents (.codex/agents/*.toml; targetDir routes project vs ~/)"
-      },
-      {
-        "from": ["README.md", "EXAMPLES.md"],
-        "to": ".agents/skills/{resourceLeaf}/references/*"
       },
       {
         "from": ["mcp.jsonc", "mcp.json"],
