@@ -164,6 +164,7 @@ const testFiles: string[] = [
   // Integration
   'tests/integration/cwd-global.test.ts',
   'tests/integration/codex-skill-bundle.test.ts',
+  'tests/integration/codex-agents.test.ts',
   'tests/integration/nested-deps.test.ts',
   'tests/integration/nested-plugin-skills.test.ts',
   'tests/integration/install-flags.test.ts',

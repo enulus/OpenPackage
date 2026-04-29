@@ -56,10 +56,6 @@ describe('codex skill bundle integration', () => {
         '# Decomplect Command\n'
       );
       await writeFile(
-        path.join(skillDir, 'agents', 'coupling-analyzer.md'),
-        '# Coupling Analyzer\n'
-      );
-      await writeFile(
         path.join(skillDir, 'reference', 'coupling.md'),
         '# Coupling Reference\n'
       );
@@ -86,7 +82,6 @@ describe('codex skill bundle integration', () => {
 
       await fs.access(path.join(workspace, '.agents', 'skills', 'decomplect', 'SKILL.md'));
       await fs.access(path.join(workspace, '.agents', 'skills', 'decomplect', 'commands', 'decomplect.md'));
-      await fs.access(path.join(workspace, '.agents', 'skills', 'decomplect', 'agents', 'coupling-analyzer.md'));
       await fs.access(path.join(workspace, '.agents', 'skills', 'decomplect', 'references', 'coupling.md'));
       await fs.access(path.join(workspace, '.agents', 'skills', 'decomplect', 'references', 'README.md'));
       await fs.access(path.join(workspace, '.agents', 'skills', 'decomplect', 'references', 'EXAMPLES.md'));

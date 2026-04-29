@@ -526,20 +526,23 @@ export class DefaultFlowExecutor implements FlowExecutor {
             path: path.relative(context.packageRoot, sourcePath),
             ext: path.extname(sourcePath),
           });
-          
-          // For markdown files, apply to frontmatter
-          if (data && typeof data === 'object' && 'frontmatter' in data) {
+
+          // Auto-split frontmatter only for .md → .md flows. For .md → structured
+          // (toml/json/yaml/etc.), the user's pipeline must reshape both halves
+          // into a single flat object, so pass the whole document.
+          const targetFormat = this.detectFormat(targetPath, '');
+          const isMarkdownTarget = targetFormat === 'markdown' || targetFormat === 'md';
+          if (data && typeof data === 'object' && 'frontmatter' in data && isMarkdownTarget) {
             data.frontmatter = applyMapPipeline(
-              data.frontmatter, 
-              schemaOps, 
+              data.frontmatter,
+              schemaOps,
               mapContext,
               this.transformRegistry
             );
           } else {
-            // Apply to entire document
             data = applyMapPipeline(
-              data, 
-              schemaOps, 
+              data,
+              schemaOps,
               mapContext,
               this.transformRegistry
             );
@@ -607,20 +610,21 @@ export class DefaultFlowExecutor implements FlowExecutor {
           path: path.relative(context.packageRoot, sourcePath),
           ext: path.extname(sourcePath),
         });
-        
-        // For markdown files, apply to frontmatter
-        if (data && typeof data === 'object' && 'frontmatter' in data) {
+
+        // Auto-split frontmatter only for .md → .md flows (see Step 4 comment).
+        const targetFormat = this.detectFormat(targetPath, '');
+        const isMarkdownTarget = targetFormat === 'markdown' || targetFormat === 'md';
+        if (data && typeof data === 'object' && 'frontmatter' in data && isMarkdownTarget) {
           data.frontmatter = applyMapPipeline(
-            data.frontmatter, 
-            pipeOps, 
+            data.frontmatter,
+            pipeOps,
             mapContext,
             this.transformRegistry
           );
         } else {
-          // Apply to entire document
           data = applyMapPipeline(
-            data, 
-            pipeOps, 
+            data,
+            pipeOps,
             mapContext,
             this.transformRegistry
           );

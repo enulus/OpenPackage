@@ -680,8 +680,34 @@
         "to": ".agents/skills/{resourceLeaf}/assets/**/*"
       },
       {
-        "from": "agents/**/*",
-        "to": ".agents/skills/{resourceLeaf}/agents/**/*"
+        "from": "agents/**/*.md",
+        "to": ".codex/agents/**/*.toml",
+        "map": [
+          { "$pipe": ["markdown-to-json"] },
+          // Default `name` from filename (universal agent format has no `name`
+          // in frontmatter); frontmatter.name overrides via the rename below.
+          { "$set": { "name": "$$filename" } },
+          { "$pipeline": {
+            "field": "name",
+            "operations": [
+              { "$replace": { "pattern": "\\.md$", "with": "" } }
+            ]
+          }},
+          // Lift body to developer_instructions; lift any frontmatter fields
+          // to top level. $rename is no-op on missing source.
+          { "$rename": {
+            "body": "developer_instructions",
+            "frontmatter.name": "name",
+            "frontmatter.description": "description",
+            "frontmatter.model": "model",
+            "frontmatter.model_reasoning_effort": "model_reasoning_effort",
+            "frontmatter.sandbox_mode": "sandbox_mode",
+            "frontmatter.mcp_servers": "mcp_servers"
+          }},
+          { "$unset": "frontmatter" },
+          { "$pipe": ["json-to-toml"] }
+        ],
+        "description": "Universal agents → Codex subagents (.codex/agents/*.toml; targetDir routes project vs ~/)"
       },
       {
         "from": "commands/**/*",
@@ -769,6 +795,24 @@
       {
         "from": ".agents/skills/**/*",
         "to": "skills/**/*"
+      },
+      {
+        "from": ".codex/agents/**/*.toml",
+        "to": "agents/**/*.md",
+        "map": [
+          { "$pipe": ["toml-to-json"] },
+          { "$rename": {
+            "developer_instructions": "body",
+            "name": "frontmatter.name",
+            "description": "frontmatter.description",
+            "model": "frontmatter.model",
+            "model_reasoning_effort": "frontmatter.model_reasoning_effort",
+            "sandbox_mode": "frontmatter.sandbox_mode",
+            "mcp_servers": "frontmatter.mcp_servers"
+          }},
+          { "$pipe": ["json-to-markdown"] }
+        ],
+        "description": "Codex subagents (.codex/agents/*.toml) → universal agents/*.md"
       },
       {
         "from": ".codex/config.toml",
