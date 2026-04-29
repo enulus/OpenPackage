@@ -710,10 +710,6 @@
         "description": "Universal agents → Codex subagents (.codex/agents/*.toml; targetDir routes project vs ~/)"
       },
       {
-        "from": "commands/**/*",
-        "to": ".agents/skills/{resourceLeaf}/commands/**/*"
-      },
-      {
         "from": ["README.md", "EXAMPLES.md"],
         "to": ".agents/skills/{resourceLeaf}/references/*"
       },
