@@ -377,18 +377,21 @@ function parseHashFragment(
 
 /**
  * Check if input looks like a git URL.
- * 
+ *
  * Detection criteria:
- * - Starts with git protocol: https://, http://, git://, git@
- * - Ends with .git extension
+ * - Starts with a git protocol: https://, http://, git://, ssh://, git@
+ * - Ends with .git extension (hash fragment is stripped first, so repo.git#ref matches)
  */
 export function isGitUrl(input: string): boolean {
+  // Strip hash fragment for .git extension check (e.g., repo.git#ref)
+  const baseUrl = input.split('#', 1)[0];
   return (
     input.startsWith('https://') ||
     input.startsWith('http://') ||
     input.startsWith('git://') ||
+    input.startsWith('ssh://') ||
     input.startsWith('git@') ||
-    input.endsWith('.git')
+    baseUrl.endsWith('.git')
   );
 }
 
