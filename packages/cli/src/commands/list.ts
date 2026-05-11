@@ -32,7 +32,7 @@ interface ListOptions {
 // JSON serialization helpers
 // ---------------------------------------------------------------------------
 
-function serializeResource(r: EnhancedResourceInfo) {
+function serializeResource(r: EnhancedResourceInfo): Record<string, unknown> {
   return {
     name: r.name,
     status: r.status,

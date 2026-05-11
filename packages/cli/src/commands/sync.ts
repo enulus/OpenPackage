@@ -88,7 +88,7 @@ export async function setupSyncCommand(args: any[]): Promise<void> {
     outputMode: 'plain',
   });
 
-  const result = await runDirectSyncFlow(effectiveNameArg, normalized, traverseOpts, ctx);
+  const result = await runDirectSyncFlow(effectiveNameArg!, normalized, traverseOpts, ctx);
 
   // JSON output path
   if (options.json) {
