@@ -470,9 +470,22 @@ console.log('Testing helper functions...');
   assert.equal(isGitUrl('git@github.com:user/repo.git'), true);
 }
 
+// isGitUrl: ssh://
+{
+  assert.equal(isGitUrl('ssh://user@host/repo.git'), true);
+  assert.equal(isGitUrl('ssh://git@github.com/owner/repo.git'), true);
+}
+
 // isGitUrl: .git extension
 {
   assert.equal(isGitUrl('path/to/repo.git'), true);
+}
+
+// isGitUrl: .git with hash fragment
+{
+  assert.equal(isGitUrl('https://example.com/repo.git#main'), true);
+  assert.equal(isGitUrl('ssh://user@host/repo.git#v1.0.0'), true);
+  assert.equal(isGitUrl('repo.git#main'), true);
 }
 
 // isGitUrl: not a git URL
