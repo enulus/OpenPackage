@@ -1,6 +1,7 @@
 {
-  "name": "opkg",
+  "name": "@opkg/cli",
   "version": "0.11.2",
+  "private": true,
   "description": "OpenPackage CLI - the package manager for AI coding.",
   "license": "Apache-2.0",
   "author": "Eric Lee",
@@ -9,9 +10,6 @@
     "type": "git",
     "url": "https://github.com/enulus/openpackage.git",
     "directory": "packages/cli"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "type": "module",
   "main": "dist/index.js",
