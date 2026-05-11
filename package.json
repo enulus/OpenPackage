@@ -4,6 +4,17 @@
   "workspaces": [
     "packages/*"
   ],
+  "files": [
+    "bin",
+    "packages/cli/dist/**/*.js",
+    "packages/cli/dist/**/*.js.map",
+    "packages/core/dist/**/*.js",
+    "packages/core/dist/**/*.js.map",
+    "platforms.jsonc",
+    "schemas",
+    "assets",
+    "examples"
+  ],
   "publishConfig": {
     "access": "public"
   },
