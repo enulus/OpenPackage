@@ -1,6 +1,9 @@
 {
   "name": "opkg",
   "version": "0.11.1",
+  "workspaces": [
+    "packages/*"
+  ],
   "publishConfig": {
     "access": "public"
   },
