@@ -19,7 +19,8 @@ import {
 import { resolveRecursiveGlobTargetRelativePath } from '../glob-target-mapping.js';
 import { logger } from '../../utils/logger.js';
 import { stripPlatformSuffixFromFilename } from './platform-suffix-handler.js';
-import { resolveSwitchExpression, isSwitchExpression } from './switch-resolver.js';
+import { resolveSwitchExpression } from './switch-resolver.js';
+import { extractToPatternString } from './to-pattern-extractor.js';
 import { normalizePathForProcessing } from '../../utils/path-normalization.js';
 import { deriveResourceLeafFromPackageName } from '../../utils/plugin-naming.js';
 import { deduplicateTargets } from '../../utils/workspace-index-helpers.js';
@@ -201,20 +202,10 @@ async function processSourceFile(
     }
   };
   
-  // Resolve target path - handle switch expressions and FlowPattern
-  let rawToPattern: string;
-  if (typeof flow.to === 'string') {
-    rawToPattern = flow.to;
-  } else if (isSwitchExpression(flow.to)) {
-    // Resolve switch expression to concrete target path
-    rawToPattern = resolveSwitchExpression(flow.to, sourceContext);
-  } else if (typeof flow.to === 'object' && flow.to !== null && 'pattern' in flow.to) {
-    // FlowPattern { pattern: "...", schema?: "..." } - use pattern, not Object.keys
-    rawToPattern = (flow.to as { pattern: string }).pattern;
-  } else {
-    // Multi-target flows - use first target path key
-    rawToPattern = Object.keys(flow.to as object)[0] ?? '';
-  }
+  const rawToPattern = extractToPatternString(
+    flow.to,
+    (sw) => resolveSwitchExpression(sw, sourceContext)
+  ) ?? '';
   const resolvedToPattern = resolvePattern(rawToPattern, sourceContext, capturedName);
   const targetAbs = resolveTargetFromGlob(
     sourceAbs,

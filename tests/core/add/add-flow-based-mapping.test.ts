@@ -73,6 +73,37 @@ describe('add flow-based mapping', { concurrency: 1 }, () => {
     }
   });
 
+  // Regression: GH #54 — FlowPattern.to was extracted as the literal "pattern".
+  test('.claude/agents/*.md → agents/*.md (FlowPattern to)', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-add-flow-test-'));
+    const originalCwd = process.cwd();
+
+    try {
+      process.chdir(tmp);
+      writeWorkspacePackageManifest(tmp);
+      ensureDir(path.join(tmp, '.claude'));
+
+      const workspaceFile = path.join(tmp, '.claude', 'agents', 'monorepo-navigator.md');
+      writeFile(workspaceFile, '# Monorepo Navigator\n\nAgent body.');
+
+      const result = await runAddToSourcePipeline(undefined, workspaceFile, {});
+
+      assert.ok(result.success, result.error);
+      assert.equal(result.data?.filesAdded, 1);
+
+      const expectedPath = path.join(tmp, '.openpackage', 'agents', 'monorepo-navigator.md');
+      assert.ok(fileExists(expectedPath), `Expected file not found at: ${expectedPath}`);
+
+      const wrongPath = path.join(tmp, '.openpackage', 'pattern');
+      assert.ok(!fileExists(wrongPath), `File should not be saved as literal "pattern": ${wrongPath}`);
+      const wrongPathNested = path.join(tmp, '.openpackage', 'pattern', 'monorepo-navigator.md');
+      assert.ok(!fileExists(wrongPathNested), `File should not be saved under "pattern/": ${wrongPathNested}`);
+    } finally {
+      process.chdir(originalCwd);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   test('.cursor/agents/*.md → agents/*.md', async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'opkg-add-flow-test-'));
     const originalCwd = process.cwd();

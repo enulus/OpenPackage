@@ -10,6 +10,8 @@ import type { FlowContext } from '../../../types/flows.js';
 import type { FlowConflictReport } from '../strategies/types.js';
 import { discoverFlowSources } from '../../flows/flow-source-discovery.js';
 import { resolvePattern } from '../../flows/flow-source-discovery.js';
+import { extractToPatternString } from '../../flows/to-pattern-extractor.js';
+import { resolveSwitchExpression } from '../../flows/switch-resolver.js';
 
 /**
  * Represents a package that writes to a target file
@@ -41,15 +43,15 @@ export async function trackTargetFiles(
   flowContext: FlowContext
 ): Promise<void> {
   const flowSources = await discoverFlowSources(flows, packageRoot, flowContext);
-  
+  const resolveSwitch = (sw: Parameters<typeof resolveSwitchExpression>[0]) =>
+    resolveSwitchExpression(sw, flowContext);
+
   for (const [flow, sources] of flowSources) {
     if (sources.length > 0) {
-      // Determine target path from flow
-      const targetPath = typeof flow.to === 'string' 
-        ? resolvePattern(flow.to, flowContext)
-        : Object.keys(flow.to)[0];
-      
-      // Track this package writing to this target
+      const rawPattern = extractToPatternString(flow.to, resolveSwitch);
+      if (!rawPattern) continue;
+      const targetPath = resolvePattern(rawPattern, flowContext);
+
       if (!fileTargets.has(targetPath)) {
         fileTargets.set(targetPath, []);
       }

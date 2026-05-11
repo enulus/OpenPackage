@@ -8,19 +8,19 @@
 import { promises as fs } from 'fs';
 import { join, dirname, basename, relative } from 'path';
 import { minimatch } from 'minimatch';
-import type { Flow, FlowContext, SwitchExpression } from '../../types/flows.js';
+import type { Flow, FlowContext, FlowPatternValue, SwitchExpression } from '../../types/flows.js';
 import { exists } from '../../utils/fs.js';
 import { getAllPlatforms } from '../platforms.js';
 import type { Platform } from '../platforms.js';
 import { logger } from '../../utils/logger.js';
 import { normalizePathForProcessing } from '../../utils/path-normalization.js';
 
-function isFlowPatternValue(value: any): value is { pattern: string; schema?: string } {
+export function isFlowPatternValue(value: unknown): value is FlowPatternValue {
   return (
     typeof value === 'object' &&
     value !== null &&
     'pattern' in value &&
-    typeof (value as any).pattern === 'string'
+    typeof (value as { pattern: unknown }).pattern === 'string'
   );
 }
 

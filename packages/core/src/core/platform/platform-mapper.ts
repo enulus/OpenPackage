@@ -13,6 +13,8 @@ import { logger } from '../../utils/logger.js';
 import { type UniversalSubdir } from '../../constants/index.js';
 import { normalizePathForProcessing, findSubpathIndex } from '../../utils/path-normalization.js';
 import { extractFirstComponent } from '../universal-patterns.js';
+import { extractToPatternString } from '../flows/to-pattern-extractor.js';
+import { extractDefaultPattern } from '../flows/switch-resolver.js';
 
 /**
  * Extract pattern string from a flow pattern value
@@ -337,18 +339,7 @@ export function mapWorkspaceFileToUniversal(
         }
         if (!matchedFromPattern) continue;
 
-        // Extract universal subdir from 'to' pattern (handle $switch in to)
-        let toPattern: string | undefined;
-        if (typeof flow.to === 'string') {
-          toPattern = flow.to;
-        } else if (typeof flow.to === 'object' && flow.to !== null && '$switch' in flow.to) {
-          const sw = (flow.to as { $switch: { cases?: Array<{ pattern: string; value: unknown }>; default?: unknown } }).$switch;
-          // For workspace add, use default (workspace paths like .opencode/... not ~/.config/...)
-          const d = sw.default;
-          toPattern = typeof d === 'string' ? d : (typeof d === 'object' && d !== null && 'pattern' in d) ? (d as { pattern: string }).pattern : undefined;
-        } else if (typeof flow.to === 'object' && flow.to !== null) {
-          toPattern = Object.keys(flow.to)[0];
-        }
+        const toPattern = extractToPatternString(flow.to, extractDefaultPattern);
         if (!toPattern) continue;
 
         const toParts = toPattern.split('/');
