@@ -57,6 +57,9 @@ opkg install https://github.com/anthropics/claude-code/tree/v1.0.0/plugins/commi
 # Generic git URL with ref
 opkg install https://gitlab.com/user/repo.git#main
 
+# SSH git URL (with optional ref and path)
+opkg install ssh://git@gitlab.com/user/repo.git#main
+
 # Generic git URL with ref and subdirectory
 opkg install https://gitlab.com/user/repo.git#main&path=packages/plugin-a
 

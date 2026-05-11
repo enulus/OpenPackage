@@ -86,8 +86,10 @@ opkg install https://github.com/<owner>/<repo>/<path-to-resource>
 # Local path to package or Claude Plugin
 opkg install <path-to-dir>
 
-# Git URLs
-opkg install git@<host>:<repo>.git
+# Git URLs (HTTPS, SSH, .git#ref)
+opkg install https://gitlab.com/<org>/<repo>.git
+opkg install git@<host>:<org>/<repo>.git
+opkg install ssh://git@<host>/<org>/<repo>.git#<ref>
 
 # Examples
 opkg install essentials
