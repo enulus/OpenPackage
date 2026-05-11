@@ -1460,6 +1460,18 @@
     "detection": [".opencode"],
     "export": [
       {
+        "from": "rules/**/*.md",
+        "to": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/opencode/rules/**/*.md" }
+            ],
+            "default": ".opencode/rules/**/*.md"
+          }
+        }
+      },
+      {
         "from": "commands/**/*.md",
         "to": {
           "$switch": {
@@ -1541,6 +1553,18 @@
       { "from": "root/**/*", "to": "**/*", "fallback": true, "comment": "Catch-all: install root-stored files to workspace root" }
     ],
     "import": [
+      {
+        "from": {
+          "$switch": {
+            "field": "$$targetRoot",
+            "cases": [
+              { "pattern": "~/", "value": ".config/opencode/rules/**/*.md" }
+            ],
+            "default": ".opencode/rules/**/*.md"
+          }
+        },
+        "to": "rules/**/*.md"
+      },
       {
         "from": {
           "$switch": {
