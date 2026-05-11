@@ -39,41 +39,22 @@ async function writeFile(filePath: string, content: string): Promise<void> {
 }
 
 describe('codex skill bundle integration', () => {
-  it('installs a root skill package into the official Codex .agents/skills layout', async () => {
+  it('installs a skills/<name>/ package into the official Codex .agents/skills layout', async () => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'opkg-codex-workspace-'));
     const sourceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'opkg-codex-source-'));
-    const skillDir = path.join(sourceRoot, 'decomplect');
+    const pkgDir = path.join(sourceRoot, 'decomplect-pkg');
+    const skillDir = path.join(pkgDir, 'skills', 'decomplect');
 
     try {
       await fs.mkdir(path.join(workspace, '.agents'), { recursive: true });
 
-      await writeFile(
-        path.join(skillDir, 'SKILL.md'),
-        '# Decomplect\n'
-      );
-      await writeFile(
-        path.join(skillDir, 'commands', 'decomplect.md'),
-        '# Decomplect Command\n'
-      );
-      await writeFile(
-        path.join(skillDir, 'agents', 'coupling-analyzer.md'),
-        '# Coupling Analyzer\n'
-      );
-      await writeFile(
-        path.join(skillDir, 'reference', 'coupling.md'),
-        '# Coupling Reference\n'
-      );
-      await writeFile(
-        path.join(skillDir, 'README.md'),
-        '# Decomplect Readme\n'
-      );
-      await writeFile(
-        path.join(skillDir, 'EXAMPLES.md'),
-        '# Decomplect Examples\n'
-      );
+      await writeFile(path.join(skillDir, 'SKILL.md'), '# Decomplect\n');
+      await writeFile(path.join(skillDir, 'references', 'coupling.md'), '# Coupling Reference\n');
+      await writeFile(path.join(skillDir, 'scripts', 'analyze.sh'), '#!/bin/sh\necho ok\n');
+      await writeFile(path.join(pkgDir, 'commands', 'decomplect.md'), '# Decomplect Command\n');
 
       const result = runCli(
-        ['install', skillDir, '--platforms', 'codex', '--force', '--conflicts', 'overwrite'],
+        ['install', pkgDir, '--platforms', 'codex', '--force', '--conflicts', 'overwrite'],
         workspace,
         { CI: 'true' }
       );
@@ -85,11 +66,8 @@ describe('codex skill bundle integration', () => {
       );
 
       await fs.access(path.join(workspace, '.agents', 'skills', 'decomplect', 'SKILL.md'));
-      await fs.access(path.join(workspace, '.agents', 'skills', 'decomplect', 'commands', 'decomplect.md'));
-      await fs.access(path.join(workspace, '.agents', 'skills', 'decomplect', 'agents', 'coupling-analyzer.md'));
       await fs.access(path.join(workspace, '.agents', 'skills', 'decomplect', 'references', 'coupling.md'));
-      await fs.access(path.join(workspace, '.agents', 'skills', 'decomplect', 'references', 'README.md'));
-      await fs.access(path.join(workspace, '.agents', 'skills', 'decomplect', 'references', 'EXAMPLES.md'));
+      await fs.access(path.join(workspace, '.agents', 'skills', 'decomplect', 'scripts', 'analyze.sh'));
       await fs.access(path.join(workspace, '.codex', 'prompts', 'decomplect.md'));
 
       await assert.rejects(

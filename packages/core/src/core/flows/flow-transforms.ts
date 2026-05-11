@@ -1,15 +1,25 @@
 /**
  * Flow Transforms
- * 
+ *
  * Transform implementations for the flow execution pipeline.
- * Organized by category: Format Converters, Merge Strategies, Content Filters, 
+ * Organized by category: Format Converters, Merge Strategies, Content Filters,
  * Markdown Processors, Value Transforms, Validation.
+ *
+ * ## Naming convention
+ *
+ * - **Bidirectional primitive** (`yaml`, `toml`, `markdown`): one registration
+ *   taking a `{ direction: 'parse' | 'stringify' }` option (default `'parse'`).
+ * - **Explicit-pair aliases** (`yaml-to-json`, `json-to-yaml`): thin wrappers
+ *   that pre-set the direction.
+ *
+ * `$pipe` arrays accept bare names only (`pipe.ts` doesn't pass options), so
+ * flow authors should always use the explicit-pair name in `platforms.jsonc`.
  */
 
 import yaml from 'js-yaml';
 import * as TOML from 'smol-toml';
 import { logger } from '../../utils/logger.js';
-import { serializeMarkdownDocument } from './markdown.js';
+import { parseMarkdownDocument, serializeMarkdownDocument } from './markdown.js';
 
 /**
  * Transform function interface
@@ -100,7 +110,13 @@ export const jsoncTransform: Transform = {
 };
 
 /**
- * Convert between YAML and object
+ * Convert between YAML and object.
+ *
+ * Bidirectional primitive — flow authors should prefer the explicit-pair
+ * aliases at `$pipe` call sites.
+ *
+ * @see jsonToYamlTransform
+ * @see yamlToJsonTransform
  */
 export const yamlTransform: Transform = {
   name: 'yaml',
@@ -125,9 +141,15 @@ export const yamlTransform: Transform = {
 };
 
 /**
- * Convert between TOML and object
- * 
+ * Convert between TOML and object.
+ *
  * Uses smol-toml for TOML v1.0.0 compliant serialization and parsing.
+ *
+ * Bidirectional primitive — flow authors should prefer the explicit-pair
+ * aliases at `$pipe` call sites.
+ *
+ * @see jsonToTomlTransform
+ * @see tomlToJsonTransform
  */
 export const tomlTransform: Transform = {
   name: 'toml',
@@ -171,6 +193,26 @@ export const tomlToJsonTransform: Transform = {
   name: 'toml-to-json',
   execute(input: string): any {
     return tomlTransform.execute(input, { direction: 'parse' });
+  },
+};
+
+/**
+ * Convert JSON object to YAML string.
+ */
+export const jsonToYamlTransform: Transform = {
+  name: 'json-to-yaml',
+  execute(input: any): string {
+    return yamlTransform.execute(input, { direction: 'stringify' });
+  },
+};
+
+/**
+ * Convert YAML string to JSON object.
+ */
+export const yamlToJsonTransform: Transform = {
+  name: 'yaml-to-json',
+  execute(input: string): any {
+    return yamlTransform.execute(input, { direction: 'parse' });
   },
 };
 
@@ -305,6 +347,55 @@ export const sectionsTransform: Transform = {
     }
 
     return sections;
+  },
+};
+
+/**
+ * Convert between Markdown (with optional YAML frontmatter) and a structured
+ * `{ frontmatter?, body }` object.
+ *
+ * Bidirectional primitive — flow authors should prefer the explicit-pair
+ * aliases at `$pipe` call sites.
+ *
+ * Strict-by-default on invalid YAML frontmatter (parse direction throws).
+ * This differs from {@link frontmatterTransform}, which silently returns
+ * `{}` on parse failure — that helper is for inline extraction in
+ * sub-pipelines, not for full document round-trips.
+ *
+ * @see jsonToMarkdownTransform
+ * @see markdownToJsonTransform
+ */
+export const markdownTransform: Transform = {
+  name: 'markdown',
+  execute(input: any, options?: { direction?: 'parse' | 'stringify' }): any {
+    const direction = options?.direction || 'parse';
+    if (direction === 'parse') {
+      if (typeof input !== 'string') {
+        return input;
+      }
+      return parseMarkdownDocument(input);
+    }
+    return serializeMarkdownDocument(input);
+  },
+};
+
+/**
+ * Parse Markdown to a `{ frontmatter?, body }` object.
+ */
+export const markdownToJsonTransform: Transform = {
+  name: 'markdown-to-json',
+  execute(input: string): any {
+    return markdownTransform.execute(input, { direction: 'parse' });
+  },
+};
+
+/**
+ * Serialize a `{ frontmatter?, body }` object back to Markdown.
+ */
+export const jsonToMarkdownTransform: Transform = {
+  name: 'json-to-markdown',
+  execute(input: any): string {
+    return markdownTransform.execute(input, { direction: 'stringify' });
   },
 };
 
@@ -662,6 +753,8 @@ export function createDefaultTransformRegistry(): TransformRegistry {
   registry.register(tomlTransform);
   registry.register(jsonToTomlTransform);
   registry.register(tomlToJsonTransform);
+  registry.register(jsonToYamlTransform);
+  registry.register(yamlToJsonTransform);
 
   // Content filters
   registry.register(filterCommentsTransform);
@@ -670,6 +763,9 @@ export function createDefaultTransformRegistry(): TransformRegistry {
 
   // Markdown transforms
   registry.register(sectionsTransform);
+  registry.register(markdownTransform);
+  registry.register(markdownToJsonTransform);
+  registry.register(jsonToMarkdownTransform);
   registry.register(frontmatterTransform);
   registry.register(bodyTransform);
 

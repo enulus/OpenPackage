@@ -1,6 +1,7 @@
 import { basename, dirname, extname, join, relative as pathRelative } from 'path';
 
 import yaml from 'js-yaml';
+import * as TOML from 'smol-toml';
 import { parse as parseJsonc } from 'jsonc-parser';
 
 import type { PackageFile } from '../../types/index.js';
@@ -71,6 +72,8 @@ function parseStructuredContent(raw: string, ext: string): any | null {
       case '.yaml':
       case '.yml':
         return yaml.load(raw) ?? null;
+      case '.toml':
+        return TOML.parse(raw);
       default:
         return null;
     }
@@ -91,6 +94,12 @@ function serializeStructuredContent(data: any, ext: string): string {
     case '.yaml':
     case '.yml':
       return yaml.dump(data, { indent: 2, flowLevel: -1, lineWidth: -1, noRefs: true });
+    case '.toml':
+      return TOML.stringify(data);
+    case '.md':
+    case '.mdc':
+    case '.markdown':
+      return serializeMarkdownDocument(data);
     default:
       return JSON.stringify(data, null, 2) + '\n';
   }

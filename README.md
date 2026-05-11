@@ -226,7 +226,7 @@ OpenPackage performs installation and platform sync of files for supported AI co
 | Claude Code Plugin | .claude-plugin/ | | rules/ | commands/ | agents/ | skills/ | .mcp.json (root) |
 | Cline | .cline/ | | | | | skills/ | cline_mcp_settings.json |
 | CodeBuddy | .codebuddy/ | | rules/ | | | skills/ | |
-| Codex CLI | .codex/ | | | prompts/ | | skills/ | config.toml |
+| Codex CLI | .codex/ | | | prompts/ | agents/ | skills/ | config.toml |
 | Command Code | .commandcode/ | | | commands/ | agents/ | skills/ | |
 | Continue | .continue/ | | rules/ | prompts/ | | skills/ | |
 | Crush | .config/crush/ | | | | | skills/ | crush.json (root) |
